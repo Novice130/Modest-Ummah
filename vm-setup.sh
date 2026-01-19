@@ -15,6 +15,14 @@ if ! command -v docker &> /dev/null; then
         echo "Waiting for other apt process to finish..."
         sleep 5
     done
+    
+    # Clean up any bad previous attempts
+    if [ -f /etc/apt/sources.list.d/docker.list ]; then
+        echo "Removing potential bad docker.list..."
+        sudo rm /etc/apt/sources.list.d/docker.list
+    fi
+
+    echo "Installing Docker using official convenience script..."
 
     curl -fsSL https://get.docker.com -o get-docker.sh
     sudo sh get-docker.sh
