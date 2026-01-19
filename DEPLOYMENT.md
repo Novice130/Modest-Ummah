@@ -8,6 +8,20 @@ This guide covers deploying Modest Ummah to a Google Cloud Compute Engine VM usi
 - **Domain**: `modestummah.com` pointing to your VM's External IP.
 - **SSH Access**: You should be able to terminal into your VM.
 
+## Quick Start (Automated Script)
+
+If you don't want to run commands manually, you can create a setup script on your VM:
+
+1.  SSH into your VM.
+2.  Create the file: `nano setup.sh`
+3.  Paste the contents of `vm-setup.sh` (found in this repo).
+4.  Make it executable: `chmod +x setup.sh`
+5.  Run it: `./setup.sh`
+
+---
+
+## Manual Installation Steps
+
 ## Step 1: Install Docker on VM
 
 Run these commands on your VM to install Docker and Docker Compose:
