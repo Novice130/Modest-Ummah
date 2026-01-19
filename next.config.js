@@ -21,7 +21,7 @@ const nextConfig = {
     formats: ['image/avif', 'image/webp'],
   },
   experimental: {
-    optimizeCss: true,
+    // optimizeCss: true, // Disabled to fix missing 'critters' error
   },
   compress: true,
   poweredByHeader: false,
