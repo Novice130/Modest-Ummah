@@ -11,21 +11,18 @@ const collections = [
     description: 'Thobes, Kurtas, Kufis & More',
     href: '/shop/men',
     image: '/images/collections/men.jpg',
-    color: 'from-navy-900/70',
   },
   {
     name: 'Women',
     description: 'Abayas, Hijabs, Jilbabs & More',
     href: '/shop/women',
     image: '/images/collections/women.jpg',
-    color: 'from-rose-300/70',
   },
   {
     name: 'Accessories',
     description: 'Miswak, Attar, Prayer Items & More',
     href: '/shop/accessories',
     image: '/images/collections/accessories.jpg',
-    color: 'from-mocha-700/70',
   },
 ];
 
@@ -46,7 +43,7 @@ const itemVariants = {
 
 export default function FeaturedCollections() {
   return (
-    <section className="py-16 md:py-24">
+    <section className="py-12 md:py-24">
       <div className="container-custom">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -67,7 +64,7 @@ export default function FeaturedCollections() {
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true }}
-          className="grid md:grid-cols-3 gap-6"
+          className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6"
         >
           {collections.map((collection) => (
             <motion.div
@@ -76,7 +73,7 @@ export default function FeaturedCollections() {
               className="group"
             >
               <Link href={collection.href} className="block">
-                <div className="relative aspect-[3/4] rounded-xl overflow-hidden">
+                <div className="relative aspect-[4/3] sm:aspect-[3/4] rounded-xl overflow-hidden">
                   <Image
                     src={collection.image}
                     alt={collection.name}
@@ -85,14 +82,14 @@ export default function FeaturedCollections() {
                     sizes="(max-width: 768px) 100vw, 33vw"
                   />
                   <div
-                    className={`absolute inset-0 bg-gradient-to-t ${collection.color} to-transparent`}
+                    className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"
                   />
-                  <div className="absolute inset-0 flex flex-col justify-end p-6 text-white">
-                    <h3 className="font-heading text-2xl md:text-3xl mb-2">
+                  <div className="absolute inset-0 flex flex-col justify-end p-4 md:p-6 text-white">
+                    <h3 className="font-heading text-xl md:text-3xl mb-1 md:mb-2 drop-shadow-lg">
                       {collection.name}
                     </h3>
-                    <p className="text-white/80 mb-4">{collection.description}</p>
-                    <span className="inline-flex items-center text-sm font-medium group-hover:gap-3 transition-all">
+                    <p className="text-white text-sm md:text-base mb-3 md:mb-4 drop-shadow-md">{collection.description}</p>
+                    <span className="inline-flex items-center text-xs md:text-sm font-semibold group-hover:gap-3 transition-all bg-yellow-600 hover:bg-yellow-700 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-md w-fit shadow-lg">
                       Shop Now <ArrowRight className="ml-2 h-4 w-4" />
                     </span>
                   </div>

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 
 export default function Hero() {
   return (
-    <section className="relative min-h-[80vh] flex items-center overflow-hidden">
+    <section className="relative min-h-[60vh] md:min-h-[80vh] flex items-center overflow-hidden py-12 md:py-0">
       {/* Background Image */}
       <div className="absolute inset-0 z-0">
         <Image
@@ -39,7 +39,7 @@ export default function Hero() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.1 }}
-            className="font-heading text-4xl md:text-5xl lg:text-6xl text-white mb-6 leading-tight"
+            className="font-heading text-3xl md:text-5xl lg:text-6xl text-white mb-4 md:mb-6 leading-tight"
           >
             Elevate Your Style,{' '}
             <span className="text-sage-300">Honor Your Values</span>
@@ -49,25 +49,23 @@ export default function Hero() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.2 }}
-            className="text-white/80 text-lg md:text-xl mb-8 max-w-lg"
+            className="text-white text-base md:text-xl mb-6 md:mb-8 max-w-lg drop-shadow-sm"
           >
-            Discover premium modest clothing and essential accessories crafted for the
-            modern Muslim. From elegant abayas to quality miswak—everything you need to
-            express your faith with style.
+            Premium modest fashion for the modern Muslim. Shop abayas, thobes, hijabs & more.
           </motion.p>
 
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.3 }}
-            className="flex flex-wrap gap-4"
+            className="flex flex-col sm:flex-row gap-3 md:gap-4"
           >
-            <Button size="xl" asChild>
+            <Button size="lg" asChild className="font-semibold shadow-lg w-full sm:w-auto">
               <Link href="/shop">
                 Shop Now <ArrowRight className="ml-2 h-5 w-5" />
               </Link>
             </Button>
-            <Button size="xl" variant="outline" asChild className="bg-white/10 border-white/30 text-white hover:bg-white/20">
+            <Button size="lg" variant="outline" asChild className="bg-white/10 border-white/30 text-white hover:bg-white/20 w-full sm:w-auto">
               <Link href="/shop/women">Women&apos;s Collection</Link>
             </Button>
           </motion.div>
@@ -77,18 +75,18 @@ export default function Hero() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.4 }}
-            className="flex gap-8 md:gap-12 mt-12 pt-8 border-t border-white/20"
+            className="flex gap-6 md:gap-12 mt-8 md:mt-12 pt-6 md:pt-8 border-t border-white/20"
           >
             <div>
-              <p className="text-3xl md:text-4xl font-heading font-bold text-white">500+</p>
+              <p className="text-2xl md:text-4xl font-heading font-bold text-white">500+</p>
               <p className="text-white/60 text-sm">Products</p>
             </div>
             <div>
-              <p className="text-3xl md:text-4xl font-heading font-bold text-white">10K+</p>
+              <p className="text-2xl md:text-4xl font-heading font-bold text-white">10K+</p>
               <p className="text-white/60 text-sm">Happy Customers</p>
             </div>
             <div>
-              <p className="text-3xl md:text-4xl font-heading font-bold text-white">4.9</p>
+              <p className="text-2xl md:text-4xl font-heading font-bold text-white">4.9</p>
               <p className="text-white/60 text-sm">Average Rating</p>
             </div>
           </motion.div>

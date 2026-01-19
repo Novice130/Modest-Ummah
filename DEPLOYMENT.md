@@ -118,3 +118,34 @@ Nginx is currently configured on port 80. For HTTPS:
 2.  Generate certs: `sudo certbot certonly --standalone -d modestummah.com -d www.modestummah.com`
 3.  Uncomment the SSL sections in `nginx/nginx.conf`.
 4.  Restart Nginx: `sudo docker compose restart modest-ummah-nginx`
+
+---
+
+## verification
+
+To confirm your deployment is working correctly on the VM:
+
+1.  **Check Running Containers**:
+    ```bash
+    sudo docker compose ps
+    ```
+    *You should see 3 containers (`modest-ummah-app`, `modest-ummah-pocketbase`, `modest-ummah-nginx`) with "Up" status.*
+
+2.  **View Logs**:
+    ```bash
+    sudo docker compose logs -f modest-ummah-app
+    ```
+    *Look for "Ready in XXXms" and no error messages.*
+
+3.  **Local Curl Test**:
+    From inside the VM, check if the app is responding locally:
+    ```bash
+    curl http://localhost:3000
+    ```
+    *You should see HTML output starting with `<!DOCTYPE html>`.*
+
+4.  **Public Access**:
+    Visit `https://modestummah.com` in your browser.
+    *   Verify the title says "Modest Ummah".
+    *   Check that images load correctly.
+    *   Test the "Login" page.
