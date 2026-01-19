@@ -1,0 +1,119 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 215 45% 20%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 45% 20%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 45% 20%;
+    --primary: 85 25% 69%;
+    --primary-foreground: 215 45% 40%;
+    --secondary: 0 33% 74%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 85 15% 95%;
+    --muted-foreground: 215 20% 45%;
+    --accent: 43 62% 82%;
+    --accent-foreground: 20 25% 35%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 85 15% 85%;
+    --input: 85 15% 85%;
+    --ring: 85 25% 69%;
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 215 45% 15%;
+    --foreground: 0 0% 95%;
+    --card: 215 45% 18%;
+    --card-foreground: 0 0% 95%;
+    --popover: 215 45% 18%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 85 25% 69%;
+    --primary-foreground: 215 45% 20%;
+    --secondary: 0 33% 74%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 215 40% 25%;
+    --muted-foreground: 0 0% 70%;
+    --accent: 43 62% 82%;
+    --accent-foreground: 20 25% 25%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 215 35% 30%;
+    --input: 215 35% 30%;
+    --ring: 85 25% 69%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-heading font-bold;
+  }
+}
+
+@layer components {
+  .container-custom {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+  
+  .btn-primary {
+    @apply bg-sage-300 text-navy-900 hover:bg-sage-400 transition-colors duration-200 px-6 py-3 rounded-md font-medium;
+  }
+  
+  .btn-secondary {
+    @apply bg-rose-300 text-white hover:bg-rose-400 transition-colors duration-200 px-6 py-3 rounded-md font-medium;
+  }
+  
+  .link-hover {
+    @apply hover:text-sage-400 transition-colors duration-200;
+  }
+
+  .card-hover {
+    @apply hover:shadow-lg transition-shadow duration-300;
+  }
+
+  .skeleton {
+    @apply relative overflow-hidden bg-muted before:absolute before:inset-0 before:-translate-x-full before:animate-shimmer before:bg-gradient-to-r before:from-transparent before:via-white/20 before:to-transparent;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Custom animations */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fade-in-up 0.5s ease-out;
+}
