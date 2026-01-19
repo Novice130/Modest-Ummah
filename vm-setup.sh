@@ -9,6 +9,13 @@ echo "============================================"
 echo "[1/4] Checking/Installing Docker..."
 if ! command -v docker &> /dev/null; then
     echo "Installing Docker using official convenience script..."
+    
+    # Wait for any existing apt process to finish
+    while sudo fuser /var/lib/apt/lists/lock >/dev/null 2>&1 || sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do
+        echo "Waiting for other apt process to finish..."
+        sleep 5
+    done
+
     curl -fsSL https://get.docker.com -o get-docker.sh
     sudo sh get-docker.sh
 else
