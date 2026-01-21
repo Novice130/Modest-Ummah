@@ -1,6 +1,6 @@
 # Modest Ummah - Project Notes
 
-**Last Updated:** January 19, 2026  
+**Last Updated:** January 21, 2026  
 **Project Completion:** ~85-90%
 
 ---
@@ -31,7 +31,7 @@
 | Wishlist | Done | LocalStorage with sync |
 | Saved Addresses | Done | Add/edit/delete addresses |
 | Account Settings | Done | Profile, password, notifications |
-| Admin Panel | Done | Dashboard, products, orders |
+| Admin Panel | In Progress | Using NocoDB for admin dashboard |
 | Dark/Light Mode | Done | Theme toggle |
 | SEO | Done | Metadata, sitemap, schema.org |
 | PWA | Done | Manifest, service worker |
@@ -149,6 +149,9 @@ Backend (PocketBase)
     ├── Users collection (auth)
     ├── Carts collection
     └── Admins collection (auth)
+
+Admin Panel (NocoDB)
+    └── Spreadsheet-style admin interface for managing data
 
 External APIs
     ├── Stripe (payments)

@@ -1,6 +1,9 @@
 # Build stage
 FROM node:20-alpine AS builder
 
+# Increase Node memory for build
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+
 WORKDIR /app
 
 # Build-time arguments for Next.js public environment variables
@@ -11,7 +14,7 @@ ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 
 # Set as environment variables for the build
 ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
-ENV NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
+ENV NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME:-"Modest Ummah"}
 ENV NEXT_PUBLIC_POCKETBASE_URL=${NEXT_PUBLIC_POCKETBASE_URL}
 ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
 
@@ -19,13 +22,13 @@ ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
 COPY package.json package-lock.json* ./
 
 # Install ALL dependencies (including dev)
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 # Copy source files
 COPY . .
 
-# Build the application with verbose output
-RUN npm run build || (cat .next/build-error.log 2>/dev/null; exit 1)
+# Build the application
+RUN npm run build
 
 # Production stage
 FROM node:20-alpine AS runner
