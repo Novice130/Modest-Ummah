@@ -3,17 +3,29 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# Build-time arguments for Next.js public environment variables
+ARG NEXT_PUBLIC_APP_URL
+ARG NEXT_PUBLIC_APP_NAME
+ARG NEXT_PUBLIC_POCKETBASE_URL
+ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+
+# Set as environment variables for the build
+ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
+ENV NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
+ENV NEXT_PUBLIC_POCKETBASE_URL=${NEXT_PUBLIC_POCKETBASE_URL}
+ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
+
 # Copy package files
 COPY package.json package-lock.json* ./
 
-# Install dependencies
-RUN npm install
+# Install ALL dependencies (including dev)
+RUN npm ci
 
 # Copy source files
 COPY . .
 
-# Build the application
-RUN npm run build
+# Build the application with verbose output
+RUN npm run build || (cat .next/build-error.log 2>/dev/null; exit 1)
 
 # Production stage
 FROM node:20-alpine AS runner
