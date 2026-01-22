@@ -8,6 +8,8 @@ services:
       dockerfile: Dockerfile
     container_name: modest-ummah-app
     restart: unless-stopped
+    expose:
+      - "3000"
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
@@ -25,6 +27,8 @@ services:
     image: ghcr.io/muchobien/pocketbase:latest
     container_name: modest-ummah-pocketbase
     restart: unless-stopped
+    expose:
+      - "8090"
     volumes:
       - pocketbase_data:/pb_data
       - ./pocketbase/pb_migrations:/pb_migrations
