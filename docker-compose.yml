@@ -30,7 +30,7 @@ services:
     expose:
       - "8090"
     volumes:
-      - pocketbase_data:/pb_data
+      - pocketbase_data_v2:/pb_data
       - ./pocketbase/pb_migrations:/pb_migrations
       - ./pocketbase/pb_hooks:/pb_hooks
     command: serve --http=0.0.0.0:8090 --origins=${ALLOWED_ORIGINS:-*}
@@ -43,7 +43,7 @@ services:
       - modest-ummah-network
 
 volumes:
-  pocketbase_data:
+  pocketbase_data_v2:
 
 networks:
   modest-ummah-network:
