@@ -32,7 +32,7 @@ services:
     volumes:
       - pocketbase_data_v4:/pb_data
       - ./pocketbase/pb_migrations:/pb_migrations
-      - ./pocketbase/pb_hooks:/pb_hooks
+      # - ./pocketbase/pb_hooks:/pb_hooks
     environment:
       - PB_ADMIN_EMAIL=${POCKETBASE_ADMIN_EMAIL}
       - PB_ADMIN_PASSWORD=${POCKETBASE_ADMIN_PASSWORD}
