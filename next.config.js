@@ -17,6 +17,10 @@ const nextConfig = {
         protocol: 'http',
         hostname: 'localhost',
       },
+      {
+        protocol: 'http',
+        hostname: 'pocketbase-ak48ow80wcc0o0008ogcsg8s.35.196.155.128.sslip.io',
+      },
     ],
     formats: ['image/avif', 'image/webp'],
   },

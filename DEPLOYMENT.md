@@ -63,7 +63,7 @@ nano .env
 **Critical `.env` values to check:**
 ```env
 NEXT_PUBLIC_APP_URL=https://modestummah.com
-NEXT_PUBLIC_POCKETBASE_URL=https://modestummah.com/api
+NEXT_PUBLIC_POCKETBASE_URL=http://pocketbase-ak48ow80wcc0o0008ogcsg8s.35.196.155.128.sslip.io
 # Add your Stripe & Shipping keys here
 ```
 
@@ -76,8 +76,7 @@ sudo docker compose up -d --build
 
 Access your site:
 - **Store**: `https://modestummah.com`
-- **Admin**: `https://modestummah.com/_/`
-- **API**: `https://modestummah.com/api/`
+- **PocketBase Admin**: Use your Coolify Service URL (e.g., http://pocketbase-....sslip.io/_/)
 
 ## Step 4: Making Changes (Two Methods)
 
@@ -129,7 +128,7 @@ To confirm your deployment is working correctly on the VM:
     ```bash
     sudo docker compose ps
     ```
-    *You should see 3 containers (`modest-ummah-app`, `modest-ummah-pocketbase`, `modest-ummah-nginx`) with "Up" status.*
+    *You should see 1 container (`modest-ummah-app`) with "Up" status.*
 
 2.  **View Logs**:
     ```bash
