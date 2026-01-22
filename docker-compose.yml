@@ -30,9 +30,12 @@ services:
     expose:
       - "8090"
     volumes:
-      - pocketbase_data_v2:/pb_data
+      - pocketbase_data_v3:/pb_data
       - ./pocketbase/pb_migrations:/pb_migrations
       - ./pocketbase/pb_hooks:/pb_hooks
+    environment:
+      - POCKETBASE_ADMIN_EMAIL=${POCKETBASE_ADMIN_EMAIL}
+      - POCKETBASE_ADMIN_PASSWORD=${POCKETBASE_ADMIN_PASSWORD}
     command: serve --http=0.0.0.0:8090 --origins=${ALLOWED_ORIGINS:-*}
     healthcheck:
       test: wget --no-verbose --tries=1 --spider http://localhost:8090/api/health || exit 1
@@ -43,7 +46,7 @@ services:
       - modest-ummah-network
 
 volumes:
-  pocketbase_data_v2:
+  pocketbase_data_v3:
 
 networks:
   modest-ummah-network:
