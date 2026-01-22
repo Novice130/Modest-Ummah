@@ -1,5 +1,5 @@
 # Build stage
-FROM node:20-alpine AS builder
+FROM node:20-slim AS builder
 
 # Increase Node memory for build
 ENV NODE_OPTIONS="--max-old-space-size=4096"
@@ -18,35 +18,32 @@ ENV NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
 ENV NEXT_PUBLIC_POCKETBASE_URL=${NEXT_PUBLIC_POCKETBASE_URL}
 ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
 
-# Install libc6-compat for Alpine (sometimes needed for npm packages)
-RUN apk add --no-cache libc6-compat
+# Install dependencies required for some node modules (optional but safer)
+# RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
 COPY package.json package-lock.json* ./
 
 # Install ALL dependencies (including dev)
-RUN npm ci --legacy-peer-deps 2>&1 || (echo "=== NPM INSTALL FAILED ===" && cat npm-debug.log 2>/dev/null; exit 1)
+RUN npm ci --legacy-peer-deps
 
 # Copy source files
 COPY . .
 
-# Build the application - capture and display error
-RUN npm run build 2>&1 || (echo "========================================" && \
-    echo "=== BUILD FAILED - SHOWING ERROR ===" && \
-    echo "========================================" && \
-    cat .next/trace 2>/dev/null || true && \
-    exit 1)
+# Build the application
+# echoing logs if it fails
+RUN npm run build || (echo "=== BUILD FAILED ===" && cat .next/build-error.log 2>/dev/null; exit 1)
 
 # Production stage
-FROM node:20-alpine AS runner
+FROM node:20-slim AS runner
 
 WORKDIR /app
 
 ENV NODE_ENV=production
 
 # Create non-root user
-RUN addgroup --system --gid 1001 nodejs
-RUN adduser --system --uid 1001 nextjs
+RUN groupadd --system --gid 1001 nodejs
+RUN useradd --system --uid 1001 nextjs
 
 # Copy built files
 COPY --from=builder /app/public ./public
