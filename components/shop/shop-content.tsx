@@ -72,71 +72,17 @@ export default async function ShopContent({ searchParams }: ShopContentProps) {
       break;
   }
 
-  // Mock products for demo - properly categorized
-  const allMockProducts: Product[] = [
-    // Men's products
-    { id: '1', collectionId: 'products', collectionName: 'products', created: new Date().toISOString(), updated: new Date().toISOString(),
-      name: 'Premium White Thobe', slug: 'premium-white-thobe', description: 'Elegant white thobe', shortDescription: 'Classic white thobe',
-      price: 89.99, compareAtPrice: 119.99, category: 'men', subcategory: 'Thobes', images: ['/images/products/thobe-1.jpg'],
-      colors: [{ name: 'White', value: '#FFFFFF' }], sizes: ['S', 'M', 'L', 'XL'], tags: ['thobe', 'men'], featured: true, inStock: true, stockQuantity: 50, sku: 'THB-001', similarProducts: [] },
-    { id: '2', collectionId: 'products', collectionName: 'products', created: new Date().toISOString(), updated: new Date().toISOString(),
-      name: 'Navy Moroccan Kurta', slug: 'navy-moroccan-kurta', description: 'Stylish kurta', shortDescription: 'Modern kurta',
-      price: 79.99, category: 'men', subcategory: 'Kurtas', images: ['/images/products/kurta-1.jpg'],
-      colors: [{ name: 'Navy', value: '#345995' }], sizes: ['M', 'L', 'XL'], tags: ['kurta', 'men'], featured: true, inStock: true, stockQuantity: 30, sku: 'KRT-001', similarProducts: [] },
-    { id: '3', collectionId: 'products', collectionName: 'products', created: new Date().toISOString(), updated: new Date().toISOString(),
-      name: 'Embroidered Kufi Cap', slug: 'embroidered-kufi-cap', description: 'Handcrafted kufi', shortDescription: 'Traditional kufi',
-      price: 19.99, category: 'men', subcategory: 'Caps/Kufis', images: ['/images/products/kufi-1.jpg'],
-      colors: [{ name: 'White', value: '#FFFFFF' }, { name: 'Black', value: '#000000' }], sizes: ['S', 'M', 'L'], tags: ['kufi', 'men'], featured: true, inStock: true, stockQuantity: 75, sku: 'KUF-001', similarProducts: [] },
-    { id: '4', collectionId: 'products', collectionName: 'products', created: new Date().toISOString(), updated: new Date().toISOString(),
-      name: 'Classic Beige Thobe', slug: 'classic-beige-thobe', description: 'Elegant beige thobe', shortDescription: 'Daily wear thobe',
-      price: 79.99, category: 'men', subcategory: 'Thobes', images: ['/images/products/thobe-1.jpg'],
-      colors: [{ name: 'Beige', value: '#F5F5DC' }], sizes: ['S', 'M', 'L', 'XL'], tags: ['thobe', 'men'], featured: false, inStock: true, stockQuantity: 40, sku: 'THB-002', similarProducts: [] },
-    // Women's products
-    { id: '5', collectionId: 'products', collectionName: 'products', created: new Date().toISOString(), updated: new Date().toISOString(),
-      name: 'Elegant Black Abaya', slug: 'elegant-black-abaya', description: 'Flowing black abaya', shortDescription: 'Timeless abaya',
-      price: 129.99, category: 'women', subcategory: 'Abayas', images: ['/images/products/abaya-1.jpg'],
-      colors: [{ name: 'Black', value: '#000000' }], sizes: ['S', 'M', 'L', 'XL'], tags: ['abaya', 'women'], featured: true, inStock: true, stockQuantity: 35, sku: 'ABY-001', similarProducts: [] },
-    { id: '6', collectionId: 'products', collectionName: 'products', created: new Date().toISOString(), updated: new Date().toISOString(),
-      name: 'Premium Hijab Set', slug: 'premium-hijab-set', description: 'Soft jersey hijab', shortDescription: 'Comfortable hijab',
-      price: 24.99, category: 'women', subcategory: 'Hijabs', images: ['/images/products/hijab-1.jpg'],
-      colors: [{ name: 'Sage', value: '#b5c1a0' }, { name: 'Rose', value: '#d4a3a3' }], sizes: ['One Size'], tags: ['hijab', 'women'], featured: true, inStock: true, stockQuantity: 100, sku: 'HJB-001', similarProducts: [] },
-    { id: '7', collectionId: 'products', collectionName: 'products', created: new Date().toISOString(), updated: new Date().toISOString(),
-      name: 'Sage Khimar Set', slug: 'sage-khimar-set', description: 'Full coverage khimar', shortDescription: 'Modest khimar',
-      price: 59.99, category: 'women', subcategory: 'Khimars', images: ['/images/products/khimar-1.jpg'],
-      colors: [{ name: 'Sage', value: '#b5c1a0' }], sizes: ['One Size'], tags: ['khimar', 'women'], featured: true, inStock: true, stockQuantity: 40, sku: 'KHM-001', similarProducts: [] },
-    { id: '8', collectionId: 'products', collectionName: 'products', created: new Date().toISOString(), updated: new Date().toISOString(),
-      name: 'Rose Jilbab', slug: 'rose-jilbab', description: 'Beautiful rose jilbab', shortDescription: 'Elegant jilbab',
-      price: 89.99, category: 'women', subcategory: 'Jilbabs', images: ['/images/products/abaya-1.jpg'],
-      colors: [{ name: 'Rose', value: '#d4a3a3' }], sizes: ['S', 'M', 'L'], tags: ['jilbab', 'women'], featured: false, inStock: true, stockQuantity: 25, sku: 'JLB-001', similarProducts: [] },
-    { id: '9', collectionId: 'products', collectionName: 'products', created: new Date().toISOString(), updated: new Date().toISOString(),
-      name: 'Navy Hijab Premium', slug: 'navy-hijab-premium', description: 'Premium navy hijab', shortDescription: 'Luxury hijab',
-      price: 34.99, category: 'women', subcategory: 'Hijabs', images: ['/images/products/hijab-1.jpg'],
-      colors: [{ name: 'Navy', value: '#345995' }], sizes: ['One Size'], tags: ['hijab', 'women'], featured: false, inStock: true, stockQuantity: 60, sku: 'HJB-002', similarProducts: [] },
-    // Accessories
-    { id: '10', collectionId: 'products', collectionName: 'products', created: new Date().toISOString(), updated: new Date().toISOString(),
-      name: 'Natural Miswak Pack', slug: 'natural-miswak-pack', description: 'Authentic miswak', shortDescription: 'Natural tooth-cleaning',
-      price: 12.99, compareAtPrice: 18.99, category: 'accessories', subcategory: 'Miswak', images: ['/images/products/miswak-1.jpg'],
-      colors: [], sizes: ['5 Pack'], tags: ['miswak', 'sunnah'], featured: true, inStock: true, stockQuantity: 200, sku: 'MSK-001', similarProducts: [] },
-    { id: '11', collectionId: 'products', collectionName: 'products', created: new Date().toISOString(), updated: new Date().toISOString(),
-      name: 'Arabian Oud Attar', slug: 'arabian-oud-attar', description: 'Luxurious oud fragrance', shortDescription: 'Natural perfume',
-      price: 49.99, category: 'accessories', subcategory: 'Attar/Perfumes', images: ['/images/products/attar-1.jpg'],
-      colors: [], sizes: ['12ml', '24ml'], tags: ['attar', 'perfume'], featured: true, inStock: true, stockQuantity: 45, sku: 'ATR-001', similarProducts: [] },
-    { id: '12', collectionId: 'products', collectionName: 'products', created: new Date().toISOString(), updated: new Date().toISOString(),
-      name: 'Prayer Beads Tasbih', slug: 'prayer-beads-tasbih', description: 'Wooden prayer beads', shortDescription: 'Traditional tasbih',
-      price: 14.99, category: 'accessories', subcategory: 'Prayer Items', images: ['/images/products/attar-1.jpg'],
-      colors: [], sizes: ['33 beads', '99 beads'], tags: ['tasbih', 'prayer'], featured: false, inStock: true, stockQuantity: 80, sku: 'TSB-001', similarProducts: [] },
-  ];
+  // Fetch products from PocketBase
+  const result = await getProducts({
+    page,
+    perPage,
+    filter,
+    sort,
+  });
 
-  // Filter products by category if specified
-  let filteredProducts = allMockProducts;
-  if (searchParams.category) {
-    filteredProducts = allMockProducts.filter(p => p.category === searchParams.category);
-  }
-
-  // In production, use: const result = await getProducts({ page, perPage, filter, sort });
-  const totalItems = filteredProducts.length;
-  const totalPages = Math.ceil(totalItems / perPage);
-  const products = filteredProducts.slice((page - 1) * perPage, page * perPage);
+  const products = result.items;
+  const totalItems = result.totalItems;
+  const totalPages = result.totalPages;
 
   return (
     <div>

@@ -1,29 +1,70 @@
-import PocketBase from 'pocketbase';
+import PocketBase, { type RecordSubscription } from 'pocketbase';
+import type { TypedPocketBase, CartsResponse } from '@/types/pocketbase-types';
 import type { Product, User, Order, Cart, CartItem, Admin } from '@/types';
 
 // Singleton PocketBase instance
-let pb: PocketBase | null = null;
+let pb: TypedPocketBase | null = null;
 
-export function getPocketBase(): PocketBase {
+export function getPocketBase(): TypedPocketBase {
   if (typeof window === 'undefined') {
     // Server-side: create new instance each time
-    return new PocketBase(process.env.NEXT_PUBLIC_POCKETBASE_URL || 'http://localhost:8090');
+    return new PocketBase(process.env.NEXT_PUBLIC_POCKETBASE_URL || 'http://localhost:8090') as TypedPocketBase;
   }
 
-  // Client-side: use singleton
+    // Client-side: use singleton
   if (!pb) {
-    pb = new PocketBase(process.env.NEXT_PUBLIC_POCKETBASE_URL || 'http://localhost:8090');
+    pb = new PocketBase(process.env.NEXT_PUBLIC_POCKETBASE_URL || 'http://localhost:8090') as TypedPocketBase;
     
-    // Load auth from localStorage
-    pb.authStore.loadFromCookie(document.cookie);
+    // Allow default localStorage persistence (more reliable for client-side)
+    // We only sync to cookie for potential future SSR, but don't force load from it on client init
+    // to avoid overwriting valid localStorage data with empty cookies.
     
-    // Save auth changes to cookie
+    // Save auth changes to cookie (optional, keeps them in sync)
     pb.authStore.onChange(() => {
       document.cookie = pb!.authStore.exportToCookie({ httpOnly: false });
     });
   }
 
   return pb;
+}
+
+// Singleton PocketBase instance for Admin Panel (Separate Store)
+let pbAdmin: TypedPocketBase | null = null;
+export function getAdminPocketBase(): TypedPocketBase {
+  if (typeof window === 'undefined') {
+    return new PocketBase(process.env.NEXT_PUBLIC_POCKETBASE_URL || 'http://localhost:8090') as TypedPocketBase;
+  }
+
+  if (!pbAdmin) {
+    const adminUrl = process.env.NEXT_PUBLIC_POCKETBASE_URL || 'http://localhost:8090';
+    pbAdmin = new PocketBase(adminUrl) as TypedPocketBase;
+    try {
+       // @ts-ignore
+       if (pbAdmin.authStore && typeof window !== 'undefined') {
+          const originalSave = pbAdmin.authStore.save.bind(pbAdmin.authStore);
+          const originalClear = pbAdmin.authStore.clear.bind(pbAdmin.authStore);
+          const KEY = 'pocketbase_admin_auth';
+          
+          pbAdmin.authStore.save = (token, model) => {
+             originalSave(token, model);
+             localStorage.setItem(KEY, JSON.stringify({ token, model }));
+          };
+          
+          pbAdmin.authStore.clear = () => {
+             originalClear();
+             localStorage.removeItem(KEY);
+          };
+          
+          const stored = localStorage.getItem(KEY);
+          if (stored) {
+             const { token, model } = JSON.parse(stored);
+             pbAdmin.authStore.save(token, model);
+          }
+       }
+    } catch (e) { console.error('Admin Auth init error', e); }
+  }
+
+  return pbAdmin;
 }
 
 // Products
@@ -197,43 +238,101 @@ export async function getOrder(orderId: string) {
 }
 
 export async function updateOrder(orderId: string, data: Partial<Order>) {
-  const client = getPocketBase();
+  const client = getAdminPocketBase();
+  // Fallback to user client if admin not auth? No, explicit is better.
+  // If admin client is not auth, it will fail, which is correct for admin panel.
+  // If we need user update later, we'll create userUpdateOrder.
   return await client.collection('orders').update<Order>(orderId, data);
+}
+
+// Admin-only: Fetch all products (including non-public if needed)
+export async function getAllProducts(page = 1, perPage = 50, filter = '') {
+  const client = getAdminPocketBase();
+  console.log('📦 [getAllProducts] PocketBase URL:', process.env.NEXT_PUBLIC_POCKETBASE_URL);
+  console.log('📦 [getAllProducts] Auth valid:', client.authStore.isValid);
+  try {
+    const options: any = {
+      requestKey: null, // Disable auto-cancellation
+    };
+    // Only add filter if it's non-empty
+    if (filter && filter.trim()) {
+      options.filter = filter;
+    }
+    const result = await client.collection('products').getList<Product>(page, perPage, options);
+    console.log('📦 [getAllProducts] Success:', result.totalItems, 'items');
+    return result;
+  } catch (e: any) {
+    console.error('📦 [getAllProducts] Error:', e);
+    console.error('📦 [getAllProducts] Error status:', e?.status);
+    console.error('📦 [getAllProducts] Error message:', e?.message);
+    console.error('📦 [getAllProducts] Error data:', e?.data);
+    throw e;
+  }
+}
+
+// Admin-only: Fetch all orders
+export async function getAllOrders(page = 1, perPage = 50, filter = '') {
+  const client = getAdminPocketBase();
+  return await client.collection('orders').getList<Order>(page, perPage, {
+    filter,
+    sort: '-created',
+  });
 }
 
 // Admin
 export async function adminSignIn(email: string, password: string) {
-  const client = getPocketBase();
-  return await client.collection('admins').authWithPassword(email, password);
+  const client = getAdminPocketBase();
+  return await client.admins.authWithPassword(email, password);
 }
 
 export function isAdmin(): boolean {
-  const client = getPocketBase();
-  if (!client.authStore.isValid) return false;
-  return client.authStore.model?.collectionName === 'admins';
+  const client = getAdminPocketBase();
+  // Check if the current auth store has a valid admin model
+  return client.authStore.isValid;
 }
 
 export async function createProduct(data: FormData) {
-  const client = getPocketBase();
-  return await client.collection('products').create<Product>(data);
+  const client = getAdminPocketBase();
+  
+  // Log the data being sent
+  console.log('📦 [createProduct] Creating product...');
+  console.log('📦 [createProduct] Auth valid:', client.authStore.isValid);
+  
+  // Log FormData contents for debugging
+  const formDataObj: Record<string, any> = {};
+  data.forEach((value, key) => {
+    formDataObj[key] = value instanceof File ? `File: ${value.name}` : value;
+  });
+  console.log('📦 [createProduct] Data:', formDataObj);
+  
+  try {
+    const result = await client.collection('products').create<Product>(data);
+    console.log('📦 [createProduct] Success:', result.id);
+    return result;
+  } catch (e: any) {
+    console.error('📦 [createProduct] Error:', e);
+    console.error('📦 [createProduct] Error data:', e?.data);
+    console.error('📦 [createProduct] Error response:', e?.response);
+    throw e;
+  }
 }
 
 export async function updateProduct(id: string, data: FormData) {
-  const client = getPocketBase();
+  const client = getAdminPocketBase();
   return await client.collection('products').update<Product>(id, data);
 }
 
 export async function deleteProduct(id: string) {
-  const client = getPocketBase();
+  const client = getAdminPocketBase();
   return await client.collection('products').delete(id);
 }
 
 // Realtime subscriptions
 export function subscribeToCart(userId: string, callback: (data: Cart) => void) {
   const client = getPocketBase();
-  return client.collection('carts').subscribe<Cart>('*', (e) => {
+  return client.collection('carts').subscribe('*', (e: RecordSubscription<CartsResponse>) => {
     if (e.record.user === userId) {
-      callback(e.record);
+      callback(e.record as unknown as Cart);
     }
   });
 }

@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { motion, AnimatePresence } from 'framer-motion';
 import useEmblaCarousel from 'embla-carousel-react';
 import { ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -16,9 +15,22 @@ import { cn } from '@/lib/utils';
 interface ProductGalleryProps {
   images: string[];
   name: string;
+  productId?: string;
+  collectionId?: string;
 }
 
-export default function ProductGallery({ images, name }: ProductGalleryProps) {
+// Helper to construct PocketBase file URL
+function getPocketBaseImageUrl(collectionId: string, productId: string, filename: string): string {
+  const baseUrl = process.env.NEXT_PUBLIC_POCKETBASE_URL || 'http://localhost:8090';
+  return `${baseUrl}/api/files/${collectionId}/${productId}/${filename}`;
+}
+
+// Check if URL is a blob URL
+function isBlobUrl(url: string): boolean {
+  return url.startsWith('blob:');
+}
+
+export default function ProductGallery({ images, name, productId, collectionId }: ProductGalleryProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true });
 
@@ -40,7 +52,33 @@ export default function ProductGallery({ images, name }: ProductGalleryProps) {
   };
 
   // Fallback to placeholder if no images
-  const displayImages = images?.length > 0 ? images : ['/images/placeholder-product.jpg'];
+  const hasImages = images?.length > 0;
+  
+  // Transform images to full URLs if needed
+  const displayImages = hasImages 
+    ? images.map(img => {
+        // If it's already a full URL (starts with http, blob, or /), use as-is
+        if (img.startsWith('http') || img.startsWith('blob:') || img.startsWith('/')) {
+          return img;
+        }
+        // Otherwise, construct PocketBase URL
+        if (productId && collectionId) {
+          return getPocketBaseImageUrl(collectionId, productId, img);
+        }
+        return img;
+      })
+    : [];
+
+  // If no images, show placeholder
+  if (displayImages.length === 0) {
+    return (
+      <div className="space-y-4">
+        <div className="relative aspect-[3/4] bg-muted rounded-lg overflow-hidden flex items-center justify-center">
+          <span className="text-muted-foreground">No images available</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -50,14 +88,24 @@ export default function ProductGallery({ images, name }: ProductGalleryProps) {
           <div className="flex h-full">
             {displayImages.map((image, index) => (
               <div key={index} className="flex-[0_0_100%] min-w-0 relative h-full">
-                <Image
-                  src={image}
-                  alt={`${name} - Image ${index + 1}`}
-                  fill
-                  className="object-cover"
-                  priority={index === 0}
-                  sizes="(max-width: 1024px) 100vw, 50vw"
-                />
+                {isBlobUrl(image) ? (
+                  // Use regular img for blob URLs
+                  <img
+                    src={image}
+                    alt={`${name} - Image ${index + 1}`}
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                ) : (
+                  // Use Next.js Image for regular URLs
+                  <Image
+                    src={image}
+                    alt={`${name} - Image ${index + 1}`}
+                    fill
+                    className="object-cover"
+                    priority={index === 0}
+                    sizes="(max-width: 1024px) 100vw, 50vw"
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -98,12 +146,20 @@ export default function ProductGallery({ images, name }: ProductGalleryProps) {
           </DialogTrigger>
           <DialogContent className="max-w-4xl p-0">
             <div className="relative aspect-square">
-              <Image
-                src={displayImages[selectedIndex]}
-                alt={name}
-                fill
-                className="object-contain"
-              />
+              {isBlobUrl(displayImages[selectedIndex]) ? (
+                <img
+                  src={displayImages[selectedIndex]}
+                  alt={name}
+                  className="absolute inset-0 w-full h-full object-contain"
+                />
+              ) : (
+                <Image
+                  src={displayImages[selectedIndex]}
+                  alt={name}
+                  fill
+                  className="object-contain"
+                />
+              )}
             </div>
           </DialogContent>
         </Dialog>
@@ -123,13 +179,21 @@ export default function ProductGallery({ images, name }: ProductGalleryProps) {
                   : 'border-transparent hover:border-sage-300'
               )}
             >
-              <Image
-                src={image}
-                alt={`${name} thumbnail ${index + 1}`}
-                fill
-                className="object-cover"
-                sizes="80px"
-              />
+              {isBlobUrl(image) ? (
+                <img
+                  src={image}
+                  alt={`${name} thumbnail ${index + 1}`}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+              ) : (
+                <Image
+                  src={image}
+                  alt={`${name} thumbnail ${index + 1}`}
+                  fill
+                  className="object-cover"
+                  sizes="80px"
+                />
+              )}
             </button>
           ))}
         </div>

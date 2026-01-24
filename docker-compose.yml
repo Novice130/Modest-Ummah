@@ -19,7 +19,10 @@ services:
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
     networks:
       - modest-ummah-network
+      - coolify
 
 networks:
   modest-ummah-network:
     driver: bridge
+  coolify:
+    external: true

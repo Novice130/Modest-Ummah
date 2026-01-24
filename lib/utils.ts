@@ -12,6 +12,14 @@ export function formatPrice(price: number, currency: string = 'USD'): string {
   }).format(price);
 }
 
+export function formatDate(dateString: string): string {
+  return new Date(dateString).toLocaleDateString('en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export function slugify(text: string): string {
   return text
     .toLowerCase()
@@ -27,6 +35,9 @@ export function truncate(text: string, length: number): string {
 }
 
 export function getImageUrl(collectionId: string, recordId: string, fileName: string, thumb?: string): string {
+  if (!fileName) return '';
+  if (fileName.startsWith('http') || fileName.startsWith('/')) return fileName;
+  
   const baseUrl = process.env.NEXT_PUBLIC_POCKETBASE_URL || 'http://localhost:8090';
   const thumbParam = thumb ? `?thumb=${thumb}` : '';
   return `${baseUrl}/api/files/${collectionId}/${recordId}/${fileName}${thumbParam}`;

@@ -7,13 +7,31 @@ import { Heart, ShoppingCart, Eye } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useCartStore } from '@/lib/store';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, getImageUrl } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import type { Product } from '@/types';
 
 interface ProductCardProps {
   product: Product;
   index?: number;
+}
+
+// Helper to get the proper image src for display
+function getProductImageSrc(product: Product): string | null {
+  const firstImage = product.images?.[0];
+  if (!firstImage) return null;
+  
+  // If it's already a full URL (http/https/blob), use as-is
+  if (firstImage.startsWith('http') || firstImage.startsWith('blob:') || firstImage.startsWith('/')) {
+    return firstImage;
+  }
+  
+  // Otherwise construct PocketBase URL
+  if (product.collectionId && product.id) {
+    return getImageUrl(product.collectionId, product.id, firstImage);
+  }
+  
+  return null;
 }
 
 export default function ProductCard({ product, index = 0 }: ProductCardProps) {
@@ -24,6 +42,8 @@ export default function ProductCard({ product, index = 0 }: ProductCardProps) {
     e.preventDefault();
     e.stopPropagation();
 
+    const imageSrc = getProductImageSrc(product);
+    
     addItem({
       productId: product.id,
       name: product.name,
@@ -31,7 +51,7 @@ export default function ProductCard({ product, index = 0 }: ProductCardProps) {
       quantity: 1,
       color: product.colors?.[0]?.name,
       size: product.sizes?.[0],
-      image: product.images?.[0],
+      image: imageSrc || undefined,
     });
 
     toast({
@@ -46,6 +66,9 @@ export default function ProductCard({ product, index = 0 }: ProductCardProps) {
     ? Math.round(((product.compareAtPrice - product.price) / product.compareAtPrice) * 100)
     : null;
 
+  const imageSrc = getProductImageSrc(product);
+  const isBlobUrl = imageSrc?.startsWith('blob:');
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -54,20 +77,37 @@ export default function ProductCard({ product, index = 0 }: ProductCardProps) {
       transition={{ duration: 0.4, delay: index * 0.05 }}
       className="group"
     >
-      <Link href={`/product/${product.slug}`} className="block">
+      <Link href={`/product/${product.slug || product.id}`} className="block">
         <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-muted mb-3">
-          {/* Image */}
-          <Image
-            src={product.images?.[0] || '/images/placeholder-product.jpg'}
-            alt={product.name}
-            fill
-            className="object-cover transition-transform duration-500 group-hover:scale-105"
-            sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
-          />
+          {/* Image - use regular img for blob URLs, Next Image for others */}
+          {imageSrc ? (
+            isBlobUrl ? (
+              // Use regular img tag for blob URLs (preview mode)
+              <img
+                src={imageSrc}
+                alt={product.name}
+                className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+            ) : (
+              // Use Next.js Image for regular URLs
+              <Image
+                src={imageSrc}
+                alt={product.name}
+                fill
+                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+              />
+            )
+          ) : (
+            // Placeholder when no image
+            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground bg-muted">
+              <span className="text-sm">No Image</span>
+            </div>
+          )}
 
           {/* Badges */}
           <div className="absolute top-3 left-3 flex flex-col gap-2">
-            {discount && (
+            {discount && discount > 0 && (
               <Badge variant="destructive" className="text-xs">
                 -{discount}%
               </Badge>
@@ -123,7 +163,7 @@ export default function ProductCard({ product, index = 0 }: ProductCardProps) {
             <span className="font-semibold text-base">
               {formatPrice(product.price)}
             </span>
-            {product.compareAtPrice && (
+            {product.compareAtPrice && product.compareAtPrice > product.price && (
               <span className="text-sm text-muted-foreground line-through">
                 {formatPrice(product.compareAtPrice)}
               </span>

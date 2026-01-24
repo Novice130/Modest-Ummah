@@ -1,10 +1,5 @@
-import ProductForm from '@/components/admin/product-form';
+import ProductEditor from '@/components/admin/product-editor';
 
 export default function NewProductPage() {
-  return (
-    <div>
-      <h1 className="font-heading text-3xl mb-6">Add New Product</h1>
-      <ProductForm />
-    </div>
-  );
+  return <ProductEditor />;
 }

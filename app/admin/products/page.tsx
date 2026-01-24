@@ -1,211 +1,171 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { Plus, Search, Edit, Trash2, MoreHorizontal } from 'lucide-react';
+import { getAllProducts, deleteProduct } from '@/lib/pocketbase';
+import { getImageUrl } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Plus, Search, Trash2, Edit, Loader2, Eye } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
-
-// Mock products
-const products = [
-  {
-    id: '1',
-    name: 'Premium White Thobe',
-    sku: 'THB-001',
-    category: 'men',
-    price: 89.99,
-    stock: 50,
-    status: 'active',
-    image: '/images/products/thobe-1.jpg',
-  },
-  {
-    id: '2',
-    name: 'Elegant Black Abaya',
-    sku: 'ABY-001',
-    category: 'women',
-    price: 129.99,
-    stock: 35,
-    status: 'active',
-    image: '/images/products/abaya-1.jpg',
-  },
-  {
-    id: '3',
-    name: 'Premium Hijab Set',
-    sku: 'HJB-001',
-    category: 'women',
-    price: 24.99,
-    stock: 100,
-    status: 'active',
-    image: '/images/products/hijab-1.jpg',
-  },
-  {
-    id: '4',
-    name: 'Natural Miswak (5 Pack)',
-    sku: 'MSK-001',
-    category: 'accessories',
-    price: 12.99,
-    stock: 200,
-    status: 'active',
-    image: '/images/products/miswak-1.jpg',
-  },
-  {
-    id: '5',
-    name: 'Embroidered Kufi Cap',
-    sku: 'KUF-001',
-    category: 'men',
-    price: 19.99,
-    stock: 0,
-    status: 'out_of_stock',
-    image: '/images/products/kufi-1.jpg',
-  },
-  {
-    id: '6',
-    name: 'Arabian Oud Attar',
-    sku: 'ATR-001',
-    category: 'accessories',
-    price: 49.99,
-    stock: 45,
-    status: 'active',
-    image: '/images/products/attar-1.jpg',
-  },
-];
+import type { Product } from '@/types';
+import { useRouter } from 'next/navigation';
 
 export default function AdminProductsPage() {
+  console.log('🏠 [Products] Component RENDERING');
+  const router = useRouter();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  useEffect(() => {
+    loadProducts();
+  }, [search]);
+
+  async function loadProducts() {
+    console.log('🔄 [Products] Starting loadProducts...');
+    setLoading(true);
+    setError(null);
+    try {
+      console.log('🔄 [Products] Calling getAllProducts...');
+      const result = await getAllProducts(1, 50, search ? `name~"${search}"` : '');
+      console.log('✅ [Products] Result:', result);
+      console.log('✅ [Products] Total items:', result.totalItems);
+      console.log('✅ [Products] Items array:', result.items);
+      setProducts(result.items);
+    } catch (e: any) {
+      console.error('❌ [Products] Error:', e);
+      console.error('❌ [Products] Error message:', e?.message);
+      console.error('❌ [Products] Error response:', e?.response);
+      setError(e?.message || 'Failed to load products');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!confirm('Are you sure you want to delete this product?')) return;
+    
+    setDeleting(id);
+    try {
+      await deleteProduct(id);
+      setProducts(products.filter(p => p.id !== id));
+    } catch (e) {
+      alert('Failed to delete product');
+    } finally {
+      setDeleting(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="font-heading text-3xl">Products</h1>
-          <p className="text-muted-foreground">Manage your product inventory</p>
+          <h1 className="font-heading text-3xl mb-2">My Products</h1>
+          <p className="text-muted-foreground">{products.length} products found</p>
         </div>
         <Button asChild>
           <Link href="/admin/products/new">
-            <Plus className="h-4 w-4 mr-2" />
-            Add Product
+            <Plus className="mr-2 h-4 w-4" />
+            Add New Product
           </Link>
         </Button>
       </div>
 
-      {/* Filters */}
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input placeholder="Search products..." className="pl-10" />
-            </div>
-            <Select defaultValue="all">
-              <SelectTrigger className="w-full md:w-[180px]">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="men">Men</SelectItem>
-                <SelectItem value="women">Women</SelectItem>
-                <SelectItem value="accessories">Accessories</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select defaultValue="all">
-              <SelectTrigger className="w-full md:w-[180px]">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="active">Active</SelectItem>
-                <SelectItem value="draft">Draft</SelectItem>
-                <SelectItem value="out_of_stock">Out of Stock</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center space-x-2 bg-background border rounded-md px-3 py-2 w-full max-w-sm">
+        <Search className="h-4 w-4 text-muted-foreground" />
+        <input 
+          className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground"
+          placeholder="Search products..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
+      </div>
 
-      {/* Products Table */}
-      <Card>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b bg-muted/50">
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Product</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">SKU</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Category</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Price</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Stock</th>
-                  <th className="text-left py-4 px-6 text-sm font-medium text-muted-foreground">Status</th>
-                  <th className="text-right py-4 px-6 text-sm font-medium text-muted-foreground">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((product) => (
-                  <tr key={product.id} className="border-b last:border-0 hover:bg-muted/30">
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-muted rounded-md shrink-0 overflow-hidden">
-                          <div className="w-full h-full bg-sage-100" />
-                        </div>
-                        <span className="font-medium">{product.name}</span>
-                      </div>
-                    </td>
-                    <td className="py-4 px-6 text-sm text-muted-foreground">{product.sku}</td>
-                    <td className="py-4 px-6">
-                      <span className="capitalize">{product.category}</span>
-                    </td>
-                    <td className="py-4 px-6 font-medium">{formatPrice(product.price)}</td>
-                    <td className="py-4 px-6">
-                      <span className={product.stock === 0 ? 'text-red-500' : product.stock < 20 ? 'text-orange-500' : ''}>
-                        {product.stock}
-                      </span>
-                    </td>
-                    <td className="py-4 px-6">
-                      <Badge
-                        variant={
-                          product.status === 'active' ? 'success' :
-                          product.status === 'out_of_stock' ? 'destructive' : 'secondary'
-                        }
-                      >
-                        {product.status === 'out_of_stock' ? 'Out of Stock' : 
-                         product.status.charAt(0).toUpperCase() + product.status.slice(1)}
-                      </Badge>
-                    </td>
-                    <td className="py-4 px-6">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button variant="ghost" size="icon" asChild>
-                          <Link href={`/admin/products/${product.id}/edit`}>
-                            <Edit className="h-4 w-4" />
-                          </Link>
-                        </Button>
-                        <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Pagination */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">
-          Showing 1-{products.length} of {products.length} products
-        </p>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled>Previous</Button>
-          <Button variant="outline" size="sm" disabled>Next</Button>
-        </div>
+      <div className="border rounded-lg overflow-hidden bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[80px]">Image</TableHead>
+              <TableHead>Name</TableHead>
+              <TableHead>Category</TableHead>
+              <TableHead>Price</TableHead>
+              <TableHead>Stock</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
+                </TableCell>
+              </TableRow>
+            ) : error ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-destructive">
+                  Error: {error}
+                </TableCell>
+              </TableRow>
+            ) : products.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  No products found. Start by adding one!
+                </TableCell>
+              </TableRow>
+            ) : (
+              products.map((product) => (
+                <TableRow key={product.id}>
+                  <TableCell>
+                    <div className="relative w-10 h-10 rounded-md overflow-hidden bg-muted">
+                      {product.images?.[0] && (
+                        <Image
+                          src={getImageUrl(product.collectionId, product.id, product.images[0])}
+                          alt={product.name}
+                          fill
+                          className="object-cover"
+                        />
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="font-medium">{product.name}</TableCell>
+                  <TableCell className="capitalize">{product.category}</TableCell>
+                  <TableCell>{formatPrice(product.price)}</TableCell>
+                  <TableCell>{product.stockQuantity || 0}</TableCell>
+                  <TableCell className="text-right space-x-2">
+                    <Button variant="ghost" size="icon" asChild>
+                      <Link href={`/product/${product.slug}`} target="_blank">
+                        <Eye className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                    <Button variant="ghost" size="icon" asChild>
+                      <Link href={`/admin/products/${product.id}`}>
+                        <Edit className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                      disabled={deleting === product.id}
+                      onClick={() => handleDelete(product.id)}
+                    >
+                      {deleting === product.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
       </div>
     </div>
   );

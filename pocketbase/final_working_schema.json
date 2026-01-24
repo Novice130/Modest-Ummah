@@ -1,0 +1,144 @@
+[
+  {
+    "id": "products_abc123",
+    "name": "products",
+    "type": "base",
+    "system": false,
+    "listRule": "",
+    "viewRule": "",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id":"name_field_xyz", "name":"name", "type":"text", "required":true, "presentable":true, "min":2, "max":200 },
+      { "id":"slug_field_xyz", "name":"slug", "type":"text", "required":true, "presentable":false, "min":2, "max":200, "pattern":"^[a-z0-9-]+$" },
+      { "id":"desc_field_xyz", "name":"description", "type":"editor", "required":true, "presentable":true },
+      { "id":"shortdesc_field_xyz", "name":"shortDescription", "type":"text", "required":true, "presentable":true, "max":500 },
+      { "id":"price_field_xyz", "name":"price", "type":"number", "required":true, "presentable":true, "min":0 },
+      { "id":"compare_field_xyz", "name":"compareAtPrice", "type":"number", "required":false, "presentable":true, "min":0 },
+
+      { "id":"cat_field_xyz", "name":"category", "type":"select", "required":true, "presentable":true, "maxSelect":1, "values":["men","women","accessories"] },
+
+      { "id":"subcat_field_xyz", "name":"subcategory", "type":"text", "required":true, "presentable":true },
+
+      {
+        "id":"images_field_xyz",
+        "name":"images",
+        "type":"file",
+        "required":false,
+        "presentable":true,
+        "maxSelect":10,
+        "maxSize":5242880,
+        "mimeTypes":["image/jpeg","image/png","image/webp","image/avif"],
+        "thumbs":["100x100","300x300","600x600"]
+      },
+
+      { "id":"colors_field_xyz", "name":"colors", "type":"json", "required":false, "presentable":true },
+      { "id":"sizes_field_xyz", "name":"sizes", "type":"json", "required":false, "presentable":true },
+      { "id":"tags_field_xyz", "name":"tags", "type":"json", "required":false, "presentable":true },
+      { "id":"featured_field_xyz", "name":"featured", "type":"bool", "required":false, "presentable":true },
+      { "id":"instock_field_xyz", "name":"inStock", "type":"bool", "required":false, "presentable":true },
+      { "id":"stockqty_field_xyz", "name":"stockQuantity", "type":"number", "required":false, "presentable":true, "min":0 },
+      { "id":"sku_field_xyz", "name":"sku", "type":"text", "required":true, "presentable":true, "min":1, "max":50 },
+      { "id":"weight_field_xyz", "name":"weight", "type":"number", "required":false, "presentable":true },
+      { "id":"dims_field_xyz", "name":"dimensions", "type":"text", "required":false, "presentable":true },
+
+      {
+        "id":"similar_field_xyz",
+        "name":"similarProducts",
+        "type":"relation",
+        "required":false,
+        "presentable":true,
+        "maxSelect":10,
+        "collectionId":"products_abc123",
+        "cascadeDelete":false
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_products_slug` ON `products` (`slug`)",
+      "CREATE INDEX `idx_products_category` ON `products` (`category`)",
+      "CREATE INDEX `idx_products_featured` ON `products` (`featured`)"
+    ]
+  },
+  {
+    "id": "carts_abc123",
+    "name": "carts",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != '' && user = @request.auth.id",
+    "viewRule": "@request.auth.id != '' && user = @request.auth.id",
+    "createRule": "@request.auth.id != ''",
+    "updateRule": "@request.auth.id != '' && user = @request.auth.id",
+    "deleteRule": "@request.auth.id != '' && user = @request.auth.id",
+    "fields": [
+      {
+        "id": "user_field_cart_xyz",
+        "name": "user",
+        "type": "relation",
+        "required": true,
+        "presentable": false,
+        "maxSelect": 1,
+        "collectionId": "_pb_users_auth_",
+        "cascadeDelete": true
+      },
+      {
+        "id": "items_field_cart_xyz",
+        "name": "items",
+        "type": "json",
+        "required": true,
+        "presentable": true
+      }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_carts_user` ON `carts` (`user`)"
+    ]
+  },
+  {
+    "id": "orders_abc123",
+    "name": "orders",
+    "type": "base",
+    "system": false,
+    "listRule": "@request.auth.id != '' && user = @request.auth.id",
+    "viewRule": "@request.auth.id != '' && user = @request.auth.id",
+    "createRule": "",
+    "updateRule": "",
+    "deleteRule": "",
+    "fields": [
+      { "id":"orderid_field_xyz", "name":"orderId", "type":"text", "required":true, "presentable":true, "min":5, "max":50 },
+
+      {
+        "id":"user_field_orders_xyz",
+        "name":"user",
+        "type":"relation",
+        "required":false,
+        "presentable":false,
+        "maxSelect":1,
+        "collectionId":"_pb_users_auth_",
+        "cascadeDelete":false
+      },
+
+      { "id":"email_field_orders_xyz", "name":"email", "type":"email", "required":true, "presentable":true },
+      { "id":"items_orders_xyz", "name":"items", "type":"json", "required":true, "presentable":true },
+
+      { "id":"subtotal_xyz", "name":"subtotal", "type":"number", "required":true, "presentable":true, "min":0 },
+      { "id":"shipping_xyz", "name":"shipping", "type":"number", "required":true, "presentable":true, "min":0 },
+      { "id":"tax_xyz", "name":"tax", "type":"number", "required":true, "presentable":true, "min":0 },
+      { "id":"total_xyz", "name":"total", "type":"number", "required":true, "presentable":true, "min":0 },
+
+      { "id":"status_xyz", "name":"status", "type":"select", "required":true, "presentable":true, "maxSelect":1, "values":["pending","processing","shipped","delivered","cancelled"] },
+      { "id":"paystatus_xyz", "name":"paymentStatus", "type":"select", "required":true, "presentable":true, "maxSelect":1, "values":["pending","paid","failed","refunded","partial"] },
+
+      { "id":"payintent_xyz", "name":"paymentIntentId", "type":"text", "required":false, "presentable":false },
+
+      { "id":"shipaddr_xyz", "name":"shippingAddress", "type":"json", "required":true, "presentable":true },
+      { "id":"billaddr_xyz", "name":"billingAddress", "type":"json", "required":false, "presentable":true },
+
+      { "id":"notes_xyz", "name":"notes", "type":"text", "required":false, "presentable":true, "max":1000 }
+    ],
+    "indexes": [
+      "CREATE UNIQUE INDEX `idx_orders_orderId` ON `orders` (`orderId`)",
+      "CREATE INDEX `idx_orders_user` ON `orders` (`user`)",
+      "CREATE INDEX `idx_orders_status` ON `orders` (`status`)"
+    ]
+  }
+]

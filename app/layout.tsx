@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 import Header from '@/components/layout/header';
 import Footer from '@/components/layout/footer';
 import CartDrawer from '@/components/cart/cart-drawer';
+import AppShell from '@/components/layout/app-shell';
 import './globals.css';
 
 const poppins = Poppins({
@@ -102,10 +103,7 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <AuthProvider>
-            <Header />
-            <main className="flex-1">{children}</main>
-            <Footer />
-            <CartDrawer />
+            <AppShell>{children}</AppShell>
             <Toaster />
           </AuthProvider>
         </ThemeProvider>
