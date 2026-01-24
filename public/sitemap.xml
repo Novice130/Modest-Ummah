@@ -1,17 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:news="http://www.google.com/schemas/sitemap-news/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml" xmlns:mobile="http://www.google.com/schemas/sitemap-mobile/1.0" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1" xmlns:video="http://www.google.com/schemas/sitemap-video/1.1">
-<url><loc>http://localhost:3000/account</loc><lastmod>2026-01-21T22:11:38.209Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
-<url><loc>http://localhost:3000/account/wishlist</loc><lastmod>2026-01-21T22:11:38.210Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
-<url><loc>http://localhost:3000/admin</loc><lastmod>2026-01-21T22:11:38.210Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
-<url><loc>http://localhost:3000/auth/login</loc><lastmod>2026-01-21T22:11:38.210Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
-<url><loc>http://localhost:3000/auth/register</loc><lastmod>2026-01-21T22:11:38.210Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
-<url><loc>http://localhost:3000/cart</loc><lastmod>2026-01-21T22:11:38.210Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
-<url><loc>http://localhost:3000/checkout</loc><lastmod>2026-01-21T22:11:38.210Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
-<url><loc>http://localhost:3000/contact</loc><lastmod>2026-01-21T22:11:38.210Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
-<url><loc>http://localhost:3000/faq</loc><lastmod>2026-01-21T22:11:38.210Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
-<url><loc>http://localhost:3000/account/settings</loc><lastmod>2026-01-21T22:11:38.210Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
-<url><loc>http://localhost:3000</loc><lastmod>2026-01-21T22:11:38.210Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
-<url><loc>http://localhost:3000/about</loc><lastmod>2026-01-21T22:11:38.210Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
-<url><loc>http://localhost:3000/account/orders</loc><lastmod>2026-01-21T22:11:38.210Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
-<url><loc>http://localhost:3000/account/addresses</loc><lastmod>2026-01-21T22:11:38.210Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000/about</loc><lastmod>2026-01-24T23:51:45.395Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000/account/wishlist</loc><lastmod>2026-01-24T23:51:45.397Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000/auth/register</loc><lastmod>2026-01-24T23:51:45.397Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000/checkout</loc><lastmod>2026-01-24T23:51:45.398Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000</loc><lastmod>2026-01-24T23:51:45.398Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000/faq</loc><lastmod>2026-01-24T23:51:45.398Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000/account/orders</loc><lastmod>2026-01-24T23:51:45.398Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000/account/settings</loc><lastmod>2026-01-24T23:51:45.398Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000/auth/login</loc><lastmod>2026-01-24T23:51:45.398Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000/admin</loc><lastmod>2026-01-24T23:51:45.398Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000/contact</loc><lastmod>2026-01-24T23:51:45.398Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000/cart</loc><lastmod>2026-01-24T23:51:45.398Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000/account/addresses</loc><lastmod>2026-01-24T23:51:45.398Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
+<url><loc>http://localhost:3000/account</loc><lastmod>2026-01-24T23:51:45.398Z</lastmod><changefreq>daily</changefreq><priority>0.7</priority></url>
 </urlset>

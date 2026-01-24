@@ -14,7 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { createProduct, updateProduct } from '@/lib/pocketbase';
 import ProductCard from '@/components/product/product-card';
-import type { Product } from '@/types';
+import type { Product, ProductColor } from '@/types';
 import { getImageUrl } from '@/lib/utils';
 
 // Form data type with proper defaults
@@ -30,7 +30,7 @@ type ProductFormData = {
   inStock: boolean;
   featured: boolean;
   images: string[];
-  colors: string[];
+  colors: ProductColor[];
   sizes: string[];
   tags: string[];
   sku: string;

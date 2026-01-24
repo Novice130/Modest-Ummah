@@ -1,7 +1,32 @@
 # Modest Ummah - Project Notes
 
-**Last Updated:** January 21, 2026  
-**Project Completion:** ~85-90%
+**Last Updated:** January 25, 2026  
+**Project Completion:** ~95%
+
+---
+
+## Deployment Status (CURRENT)
+
+| Component | Status | URL/Details |
+|-----------|--------|-------------|
+| **PocketBase** | ✅ LIVE | `http://pocketbase-ak48ow80wcc0o0008ogcsg8s.35.196.155.128.sslip.io` |
+| **Next.js App** | ✅ Configured in Coolify | Pending deploy trigger |
+| **Coolify Dashboard** | ✅ Set up | `http://35.196.155.128:8000` |
+| **VM IP** | 35.196.155.128 | Google Cloud Ubuntu 22.04 |
+
+### External Services Registered
+| Service | Status | Purpose |
+|---------|--------|---------|
+| Stripe | ✅ Registered | Payments |
+| Pirate Ship | ✅ Registered | Shipping labels/rates |
+| Brevo | ✅ Registered | Email notifications |
+
+### Coolify Configuration (ALREADY DONE)
+- [x] Public repository connected: `https://github.com/Novice130/Modest-Ummah`
+- [x] Branch: `main`
+- [x] Build pack: Dockerfile
+- [x] Environment variables configured
+- [x] Domain: `modestummah.com`
 
 ---
 
@@ -19,7 +44,7 @@
 |---------|--------|-------|
 | Homepage | Done | Hero, collections, products, testimonials |
 | Product Listing | Done | Filters, search, pagination |
-| Product Detail | Done | Gallery, vaFor issues, please contact: support@modestummah.commendations |
+| Product Detail | Done | Gallery, variants, recommendations |
 | Shopping Cart | Done | Drawer + page, realtime sync |
 | Checkout | Done | 3-step: Info > Shipping > Payment |
 | Tax Calculation | Done | TaxCloud API with fallback |
@@ -31,7 +56,8 @@
 | Wishlist | Done | LocalStorage with sync |
 | Saved Addresses | Done | Add/edit/delete addresses |
 | Account Settings | Done | Profile, password, notifications |
-| Admin Panel | In Progress | Using NocoDB for admin dashboard |
+| **Admin Panel** | ✅ Done | Custom-built, no NocoDB needed |
+| **Product Editor** | ✅ Done | Create/edit products with live preview |
 | Dark/Light Mode | Done | Theme toggle |
 | SEO | Done | Metadata, sitemap, schema.org |
 | PWA | Done | Manifest, service worker |
@@ -40,29 +66,10 @@
 ### API Integrations
 | Service | Status | Purpose |
 |---------|--------|---------|
-| PocketBase | Done | Database, auth, realtime |
+| PocketBase | ✅ Live | Database, auth, realtime |
 | Stripe | Done | Payments, webhooks |
 | TaxCloud | Done | Tax calculation & filing |
 | Pirate Ship | Done | USPS shipping rates |
-
-### New Files Created
-- `lib/taxcloud.ts` - TaxCloud API integration
-- `lib/shipping.ts` - Pirate Ship API integration
-- `app/api/tax/calculate/route.ts` - Tax calculation endpoint
-- `app/api/shipping/rates/route.ts` - Shipping rates endpoint
-- `app/api/shipping/tracking/[trackingNumber]/route.ts` - Tracking endpoint
-- `app/account/wishlist/page.tsx` - Wishlist page
-- `app/account/addresses/page.tsx` - Addresses page
-- `app/account/settings/page.tsx` - Settings page
-- `SETUP_GUIDE.md` - Step-by-step setup instructions
-
-### Files Updated
-- `app/api/webhooks/stripe/route.ts` - Full order creation
-- `components/checkout/checkout-form.tsx` - Real tax/shipping
-- `components/home/featured-products.tsx` - PocketBase with fallback
-- `app/account/page.tsx` - Real user data
-- `lib/store.ts` - Realtime cart sync, wishlist store
-- `.env.example` - All API keys documented
 
 ---
 
