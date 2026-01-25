@@ -38,30 +38,38 @@ export function getAdminPocketBase(): TypedPocketBase {
   if (!pbAdmin) {
     const adminUrl = process.env.NEXT_PUBLIC_POCKETBASE_URL || 'http://localhost:8090';
     pbAdmin = new PocketBase(adminUrl) as TypedPocketBase;
-    try {
-       // @ts-ignore
-       if (pbAdmin.authStore && typeof window !== 'undefined') {
-          const originalSave = pbAdmin.authStore.save.bind(pbAdmin.authStore);
-          const originalClear = pbAdmin.authStore.clear.bind(pbAdmin.authStore);
-          const KEY = 'pocketbase_admin_auth';
-          
-          pbAdmin.authStore.save = (token, model) => {
-             originalSave(token, model);
-             localStorage.setItem(KEY, JSON.stringify({ token, model }));
-          };
-          
-          pbAdmin.authStore.clear = () => {
-             originalClear();
-             localStorage.removeItem(KEY);
-          };
-          
-          const stored = localStorage.getItem(KEY);
-          if (stored) {
-             const { token, model } = JSON.parse(stored);
-             pbAdmin.authStore.save(token, model);
-          }
-       }
-    } catch (e) { console.error('Admin Auth init error', e); }
+    
+    // CRITICAL: Prevent Admin instance from reading User's "pocketbase_auth" cookie/storage
+    // by default, new PocketBase() reads the default key. We must clear it to ensure
+    // we only use our segregated "pocketbase_admin_auth".
+    if (typeof window !== 'undefined') {
+       try {
+         // Clear the default store content (which might be the User's session)
+         // ensuring this instance starts clean.
+         pbAdmin.authStore.clear();
+
+         const KEY = 'pocketbase_admin_auth';
+         
+         const originalSave = pbAdmin.authStore.save.bind(pbAdmin.authStore);
+         const originalClear = pbAdmin.authStore.clear.bind(pbAdmin.authStore);
+         
+         pbAdmin.authStore.save = (token, model) => {
+            originalSave(token, model);
+            localStorage.setItem(KEY, JSON.stringify({ token, model }));
+         };
+         
+         pbAdmin.authStore.clear = () => {
+            originalClear();
+            localStorage.removeItem(KEY);
+         };
+         
+         const stored = localStorage.getItem(KEY);
+         if (stored) {
+            const { token, model } = JSON.parse(stored);
+            pbAdmin.authStore.save(token, model);
+         }
+       } catch (e) { console.error('Admin Auth init error', e); }
+    }
   }
 
   return pbAdmin;
