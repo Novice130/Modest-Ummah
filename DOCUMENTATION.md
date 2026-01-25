@@ -15,21 +15,21 @@
 ### Frontend
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| **Next.js** | 15.1.3 | React framework with App Router, SSR, and API routes |
-| **React** | 19 | UI component library |
-| **TypeScript** | 5.x | Type-safe JavaScript |
-| **Tailwind CSS** | 3.4 | Utility-first CSS framework |
-| **shadcn/ui** | Latest | Accessible, customizable UI components |
+| **Next.js** | 16.1.4 | React framework with App Router, SSR, Cache Components, and Turbopack |
+| **React** | 19.2.3 | UI component library with hooks and concurrent features |
+| **TypeScript** | 5.9.3 | Type-safe JavaScript |
+| **Tailwind CSS** | 4.1.16 | Utility-first CSS framework with CSS-first configuration |
+| **shadcn/ui** | Latest | Accessible, customizable UI components built on Radix |
 | **Lucide Icons** | Latest | Beautiful SVG icon library |
-| **Zustand** | 5.x | Lightweight state management |
-| **React Hook Form** | 7.x | Form handling with validation |
-| **Zod** | 3.x | Schema validation |
+| **Zustand** | 5.0.10 | Lightweight state management with hooks API |
+| **React Hook Form** | 7.71.1 | Form handling with validation |
+| **Zod** | 4.3.6 | Schema validation with improved performance |
 
 ### Backend & Database
-| Technology | Purpose |
-|------------|---------|
-| **PocketBase** | Backend-as-a-Service (BaaS) - Authentication, database, file storage |
-| **SQLite** | Embedded database (via PocketBase) |
+| Technology | Version | Purpose |
+|------------|---------|---------|
+| **PocketBase** | 0.36.1 | Backend-as-a-Service (BaaS) - Authentication, database, file storage |
+| **SQLite** | (embedded) | Embedded database (via PocketBase) |
 
 ### Payments & Commerce
 | Service | Purpose |
