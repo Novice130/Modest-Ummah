@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 // Protected routes that require authentication
-const protectedRoutes = ['/account', '/checkout'];
+const protectedRoutes = ['/account'];
 
 // Note: Admin routes are protected client-side in app/admin/layout.tsx
 // because admin auth uses localStorage, not cookies
@@ -34,7 +34,6 @@ export function proxy(request: NextRequest) {
 export const config = {
   matcher: [
     '/account/:path*',
-    '/checkout/:path*',
     '/auth/:path*',
   ],
 };
