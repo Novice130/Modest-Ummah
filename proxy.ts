@@ -7,7 +7,7 @@ const protectedRoutes = ['/account', '/checkout'];
 // Note: Admin routes are protected client-side in app/admin/layout.tsx
 // because admin auth uses localStorage, not cookies
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Check for PocketBase auth cookie

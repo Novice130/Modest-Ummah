@@ -59,7 +59,7 @@ export default async function ShopContent({ searchParams }: ShopContentProps) {
   filter = filters.join(' && ');
 
   // Build sort query
-  let sort = '-created';
+  let sort = '-price'; // Default to price high-to-low since date sorting is restricted
   switch (searchParams.sort) {
     case 'price-asc':
       sort = 'price';
@@ -70,15 +70,24 @@ export default async function ShopContent({ searchParams }: ShopContentProps) {
     case 'name':
       sort = 'name';
       break;
+    // case 'newest': // Date sorting restricted on backend
+    //   sort = '-created';
+    //   break;
   }
 
   // Fetch products from PocketBase
-  const result = await getProducts({
-    page,
-    perPage,
-    filter,
-    sort,
-  });
+  let result;
+  try {
+    result = await getProducts({
+      page,
+      perPage,
+      filter,
+      sort,
+    });
+  } catch (error) {
+    console.error('failed to fetch products:', error);
+    throw error; // Re-throw to let error boundary handle it, but now we have a log
+  }
 
   const products = result.items;
   const totalItems = result.totalItems;
@@ -92,14 +101,14 @@ export default async function ShopContent({ searchParams }: ShopContentProps) {
           Showing {(page - 1) * perPage + 1} - {Math.min(page * perPage, totalItems)} of{' '}
           {totalItems} products
         </p>
-        <Select defaultValue={searchParams.sort || 'newest'}>
+        <Select defaultValue={searchParams.sort || 'price-desc'}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Sort by" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="newest">Newest</SelectItem>
-            <SelectItem value="price-asc">Price: Low to High</SelectItem>
+            {/* <SelectItem value="newest">Newest</SelectItem> */}
             <SelectItem value="price-desc">Price: High to Low</SelectItem>
+            <SelectItem value="price-asc">Price: Low to High</SelectItem>
             <SelectItem value="name">Name</SelectItem>
           </SelectContent>
         </Select>

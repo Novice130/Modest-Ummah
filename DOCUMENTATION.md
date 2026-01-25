@@ -1,5 +1,11 @@
 # Modest Ummah - Complete Project Documentation
 
+
+## 📘 Documentation & Testing
+- **[DOCUMENTATION.md](./DOCUMENTATION.md)**: The central knowledge base for the project.
+- **[FUNCTIONALITY_TEST_PLAN.md](./FUNCTIONALITY_TEST_PLAN.md)**: Detailed checklist of expected behaviors and features to verify.
+- **[TEST_REPORT.md](./TEST_REPORT.md)**: Execution log of the test plan, recording pass/fail status and observations.
+
 ## 🎯 Project Overview
 
 **Modest Ummah** is a full-stack e-commerce platform for modest Islamic fashion. Built with modern technologies, it provides a premium shopping experience for men's and women's modest clothing, hijabs, thobes, and Islamic accessories.
@@ -18,7 +24,7 @@
 | **Next.js** | 16.1.4 | React framework with App Router, SSR, Cache Components, and Turbopack |
 | **React** | 19.2.3 | UI component library with hooks and concurrent features |
 | **TypeScript** | 5.9.3 | Type-safe JavaScript |
-| **Tailwind CSS** | 4.1.16 | Utility-first CSS framework with CSS-first configuration |
+| **Tailwind CSS** | 4.1.18 | Utility-first CSS framework with CSS-first configuration |
 | **shadcn/ui** | Latest | Accessible, customizable UI components built on Radix |
 | **Lucide Icons** | Latest | Beautiful SVG icon library |
 | **Zustand** | 5.0.10 | Lightweight state management with hooks API |
@@ -62,8 +68,15 @@
 | **Git/GitHub** | Version control |
 | **ESLint** | Code linting |
 | **Prettier** | Code formatting |
-| **next-pwa** | Progressive Web App support |
+| **next-pwa** | Disabled | PWA support (disabled for Next.js 16 Turbopack compatibility) |
 | **next-sitemap** | SEO sitemap generation |
+
+### DevTools Updates (2026)
+| Tool | Status | Note |
+|------|--------|------|
+| **Next.js 16** | ✅ Active | Migrated to Turbopack. `middleware.ts` renamed to `proxy.ts` |
+| **Tailwind CSS 4** | ✅ Active | CSS-first configuration via `@theme` in `globals.css` |
+| **PWA Support** | ⚠️ Disabled | Incompatible with Next.js 16 Turbopack currently |
 
 ---
 
@@ -231,10 +244,11 @@ NEXT_PUBLIC_APP_NAME=Modest Ummah
 # PocketBase
 NEXT_PUBLIC_POCKETBASE_URL=https://pb.modestummah.com
 
-# Stripe
-NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_xxx
-STRIPE_SECRET_KEY=sk_live_xxx
-STRIPE_WEBHOOK_SECRET=whsec_xxx
+# Stripe (Required for Checkout)
+# Get keys from: https://dashboard.stripe.com/test/apikeys
+NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 
 # Email
 BREVO_API_KEY=xkeysib-xxx
@@ -686,5 +700,5 @@ For questions or issues, contact the development team or open an issue on the Gi
 ---
 
 **Last Updated:** January 25, 2026  
-**Version:** 1.0.0
+**Version:** 1.1.0 (Tech Stack 2026 Update)
 

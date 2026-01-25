@@ -68,8 +68,15 @@ export default function Header() {
   const { user } = useAuthStore();
   const [isScrolled, setIsScrolled] = useState(false);
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
 
-  const itemCount = getItemCount();
+  // Prevent hydration mismatch by only showing cart count after mount
+  const itemCount = mounted ? getItemCount() : 0;
+
+  // Set mounted state after hydration
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {

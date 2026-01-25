@@ -43,6 +43,19 @@ export function getImageUrl(collectionId: string, recordId: string, fileName: st
   return `${baseUrl}/api/files/${collectionId}/${recordId}/${fileName}${thumbParam}`;
 }
 
+/**
+ * Validates if an image src is valid for next/image component.
+ * Returns the src if valid, or null if invalid.
+ * Valid sources must start with "/" or be an absolute URL (http:// or https://)
+ */
+export function getValidImageSrc(src: string | undefined | null): string | null {
+  if (!src) return null;
+  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('/')) {
+    return src;
+  }
+  return null;
+}
+
 export function debounce<T extends (...args: unknown[]) => unknown>(
   func: T,
   wait: number

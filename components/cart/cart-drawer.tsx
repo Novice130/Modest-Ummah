@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, Plus, Minus, Trash2, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useCartStore } from '@/lib/store';
-import { formatPrice, getImageUrl } from '@/lib/utils';
+import { formatPrice, getValidImageSrc } from '@/lib/utils';
 
 export default function CartDrawer() {
   const { items, isOpen, closeCart, removeItem, updateQuantity, getSubtotal } = useCartStore();
@@ -84,9 +84,9 @@ export default function CartDrawer() {
                     >
                       {/* Image */}
                       <div className="relative w-20 h-24 bg-muted rounded-md overflow-hidden shrink-0">
-                        {item.image ? (
+                        {getValidImageSrc(item.image) ? (
                           <Image
-                            src={item.image}
+                            src={getValidImageSrc(item.image)!}
                             alt={item.name}
                             fill
                             className="object-cover"

@@ -76,14 +76,23 @@ export async function getProducts(options?: {
   expand?: string;
 }) {
   const client = getPocketBase();
+  
+  const queryOptions: any = {
+    sort: options?.sort || '-price', // Date sorting restricted
+  };
+  
+  if (options?.filter) {
+    queryOptions.filter = options.filter;
+  }
+  
+  if (options?.expand) {
+    queryOptions.expand = options.expand;
+  }
+
   return await client.collection('products').getList<Product>(
     options?.page || 1,
     options?.perPage || 12,
-    {
-      filter: options?.filter || '',
-      sort: options?.sort || '-created',
-      expand: options?.expand || '',
-    }
+    queryOptions
   );
 }
 
@@ -235,7 +244,6 @@ export async function createOrUpdateCart(userId: string, items: CartItem[]) {
   const cartData = {
     user: userId,
     items: JSON.stringify(items),
-    updated: new Date().toISOString(),
   };
 
   if (existingCart) {
@@ -255,7 +263,7 @@ export async function getOrders(userId: string) {
   const client = getPocketBase();
   return await client.collection('orders').getList<Order>(1, 50, {
     filter: `user="${userId}"`,
-    sort: '-created',
+    // sort: '-created', // Backend issue with sorting
   });
 }
 
@@ -302,7 +310,7 @@ export async function getAllOrders(page = 1, perPage = 50, filter = '') {
   const client = getAdminPocketBase();
   return await client.collection('orders').getList<Order>(page, perPage, {
     filter,
-    sort: '-created',
+    // sort: '-created', // Backend issue with sorting
   });
 }
 

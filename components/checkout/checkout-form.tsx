@@ -28,7 +28,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCartStore, useAuthStore } from '@/lib/store';
-import { formatPrice, generateOrderId } from '@/lib/utils';
+import { formatPrice, generateOrderId, getValidImageSrc } from '@/lib/utils';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -43,7 +43,7 @@ const checkoutSchema = z.object({
   postalCode: z.string().min(3, 'Postal code is required'),
   country: z.string().min(2, 'Country is required'),
   phone: z.string().min(10, 'Phone number is required'),
-  saveInfo: z.boolean().optional(),
+  saveInfo: z.union([z.boolean(), z.string()]).optional().transform(val => val === true || val === 'on'),
 });
 
 type CheckoutFormData = z.infer<typeof checkoutSchema>;
@@ -70,22 +70,30 @@ function PaymentForm({ clientSecret, onSuccess }: { clientSecret: string; onSucc
     setIsProcessing(true);
     setError(null);
 
-    const { error: submitError } = await elements.submit();
-    if (submitError) {
-      setError(submitError.message || 'An error occurred');
-      setIsProcessing(false);
-      return;
-    }
+    try {
+      const { error: submitError } = await elements.submit();
+      if (submitError) {
+        console.error('Stripe submit error:', submitError);
+        setError(submitError.message || 'An error occurred');
+        setIsProcessing(false);
+        return;
+      }
 
-    const { error: confirmError } = await stripe.confirmPayment({
-      elements,
-      confirmParams: {
-        return_url: `${window.location.origin}/checkout/success`,
-      },
-    });
+      const { error: confirmError } = await stripe.confirmPayment({
+        elements,
+        confirmParams: {
+          return_url: `${window.location.origin}/checkout/success`,
+        },
+      });
 
-    if (confirmError) {
-      setError(confirmError.message || 'Payment failed');
+      if (confirmError) {
+        console.error('Stripe confirm error:', confirmError);
+        setError(confirmError.message || 'Payment failed');
+        setIsProcessing(false);
+      }
+    } catch (err: any) {
+      console.error('Unexpected payment error:', err);
+      setError(err.message || 'An unexpected error occurred during payment.');
       setIsProcessing(false);
     }
   };
@@ -126,6 +134,7 @@ export default function CheckoutForm() {
   const [clientSecret, setClientSecret] = useState<string | null>(null);
   const [orderId, setOrderId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [mounted, setMounted] = useState(false);
   
   // Shipping and tax state
   const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
@@ -148,15 +157,24 @@ export default function CheckoutForm() {
     },
   });
 
+  // API Error state
+  const [apiError, setApiError] = useState<string | null>(null);
+
   const subtotal = getSubtotal();
   const shipping = selectedShipping?.rate || 0;
   const total = subtotal + shipping + tax;
 
+  // Wait for hydration before checking cart
   useEffect(() => {
-    if (items.length === 0) {
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    // Only redirect if mounted (hydrated) and cart is truly empty
+    if (mounted && items.length === 0) {
       router.push('/cart');
     }
-  }, [items.length, router]);
+  }, [mounted, items.length, router]);
 
   // Calculate shipping and tax when address is submitted
   const onSubmitInfo = async (data: CheckoutFormData) => {
@@ -281,21 +299,42 @@ export default function CheckoutForm() {
             color: item.color,
             size: item.size,
           })),
+          userId: user?.id,
           shipping: selectedShipping.rate,
           tax: tax,
           shippingService: selectedShipping.service,
         }),
       });
 
-      const { clientSecret } = await response.json();
+      const { clientSecret, error } = await response.json();
+      
+      if (error) {
+        throw new Error(error);
+      }
+
+      if (!clientSecret) {
+         throw new Error('Failed to init payment: No client secret returned');
+      }
+
       setClientSecret(clientSecret);
       setStep('payment');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating payment intent:', error);
+      setApiError(error.message || 'Failed to initialize payment. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Show loading while waiting for hydration
+  if (!mounted) {
+    return (
+      <div className="text-center py-12">
+        <Loader2 className="h-8 w-8 mx-auto animate-spin text-muted-foreground" />
+        <p className="text-muted-foreground mt-4">Loading checkout...</p>
+      </div>
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -461,7 +500,7 @@ export default function CheckoutForm() {
                   Calculating...
                 </>
               ) : (
-                'Continue to Shipping'
+                'Proceed to Shipping Method'
               )}
             </Button>
           </form>
@@ -562,6 +601,11 @@ export default function CheckoutForm() {
               <CardTitle>Payment</CardTitle>
             </CardHeader>
             <CardContent>
+              {apiError && (
+                <div className="bg-red-50 text-red-600 p-3 rounded-md mb-4 text-sm">
+                  {apiError}
+                </div>
+              )}
               {clientSecret && (
                 <Elements
                   stripe={stripePromise}
@@ -609,9 +653,9 @@ export default function CheckoutForm() {
               {items.map((item) => (
                 <div key={`${item.productId}-${item.color}-${item.size}`} className="flex gap-3">
                   <div className="relative w-16 h-20 bg-muted rounded-md overflow-hidden shrink-0">
-                    {item.image && (
+                    {getValidImageSrc(item.image) && (
                       <Image
-                        src={item.image}
+                        src={getValidImageSrc(item.image)!}
                         alt={item.name}
                         fill
                         className="object-cover"

@@ -1,10 +1,12 @@
 /** @type {import('next').NextConfig} */
-const withPWA = require('next-pwa')({
-  dest: 'public',
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === 'development',
-});
+// NOTE: next-pwa is temporarily disabled for Next.js 16 compatibility
+// Next.js 16 has built-in PWA support - consider migrating
+// const withPWA = require('next-pwa')({
+//   dest: 'public',
+//   register: true,
+//   skipWaiting: true,
+//   disable: process.env.NODE_ENV === 'development',
+// });
 
 const nextConfig = {
   images: {
@@ -24,6 +26,7 @@ const nextConfig = {
     ],
     formats: ['image/avif', 'image/webp'],
   },
+  turbopack: {}, // Required for Next.js 16 middleware
   experimental: {
     // optimizeCss: true, // Disabled to fix missing 'critters' error
   },
@@ -66,4 +69,5 @@ const nextConfig = {
   },
 };
 
-module.exports = withPWA(nextConfig);
+module.exports = nextConfig;
+

@@ -6,7 +6,7 @@ import { Minus, Plus, Trash2, ArrowRight, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useCartStore } from '@/lib/store';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, getValidImageSrc } from '@/lib/utils';
 
 export default function CartPageContent() {
   const { items, removeItem, updateQuantity, getSubtotal } = useCartStore();
@@ -41,9 +41,9 @@ export default function CartPageContent() {
               <div className="flex gap-4">
                 {/* Image */}
                 <div className="relative w-24 h-32 bg-muted rounded-md overflow-hidden shrink-0">
-                  {item.image ? (
+                  {getValidImageSrc(item.image) ? (
                     <Image
-                      src={item.image}
+                      src={getValidImageSrc(item.image)!}
                       alt={item.name}
                       fill
                       className="object-cover"

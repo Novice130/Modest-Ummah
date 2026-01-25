@@ -44,21 +44,19 @@ export async function POST(request: NextRequest) {
       
       try {
         const orderId = paymentIntent.metadata.orderId;
-        const items = JSON.parse(paymentIntent.metadata.items || '[]');
-        const shippingAddress = JSON.parse(paymentIntent.metadata.shippingAddress || '{}');
-        const userId = paymentIntent.metadata.userId || null;
-        const subtotal = parseFloat(paymentIntent.metadata.subtotal || '0');
-        const shippingCost = parseFloat(paymentIntent.metadata.shipping || '0');
-        const tax = parseFloat(paymentIntent.metadata.tax || '0');
+        // Metadata no longer contains full items/address to avoid limits
+        // We MUST fetch the existing order from PB
         
-        // Check if order already exists
         let existingOrder = null;
         try {
           existingOrder = await pb.collection('orders').getFirstListItem(
             `orderId="${orderId}"`
           );
         } catch {
-          // Order doesn't exist, we'll create it
+          console.error(`Order not found for orderId: ${orderId}`);
+          // If order doesn't exist, we can't fulfill it because we don't have items in metadata anymore.
+          // This should not happen if create-payment-intent created it.
+          // Fallback: try to parse metadata just in case (backward compatibility?)
         }
 
         if (existingOrder) {
@@ -70,78 +68,65 @@ export async function POST(request: NextRequest) {
             updated: new Date().toISOString(),
           });
           console.log('Order updated:', orderId);
+
+          // Get items and address from the stored order
+          const items = JSON.parse(existingOrder.items || '[]');
+          const shippingAddress = JSON.parse(existingOrder.shippingAddress || '{}');
+          const email = existingOrder.email;
+
+          // Clear user's cart if they were logged in
+          if (existingOrder.user) {
+            try {
+              const cart = await pb.collection('carts').getFirstListItem(
+                `user="${existingOrder.user}"`
+              );
+              await pb.collection('carts').update(cart.id, {
+                items: '[]',
+              });
+            } catch {
+              // No cart to clear or error
+            }
+          }
+
+          // Send order confirmation email
+          const customerName = shippingAddress.name || shippingAddress.firstName || 'Valued Customer';
+          
+          if (email) {
+            try {
+              await sendOrderConfirmation({
+                orderId,
+                email: email,
+                customerName,
+                items: items.map((item: any) => ({
+                  name: item.name,
+                  quantity: item.quantity,
+                  price: item.price,
+                  image: item.image,
+                })),
+                subtotal: existingOrder.subtotal,
+                shipping: existingOrder.shipping,
+                tax: existingOrder.tax,
+                total: existingOrder.total,
+                shippingAddress: {
+                  street1: shippingAddress.street1 || shippingAddress.address1 || '',
+                  street2: shippingAddress.street2 || shippingAddress.address2 || '',
+                  city: shippingAddress.city || '',
+                  state: shippingAddress.state || '',
+                  zip: shippingAddress.postalCode || shippingAddress.zip || '',
+                  country: shippingAddress.country || 'US',
+                },
+              });
+              console.log('Order confirmation email sent to:', email);
+            } catch (emailError) {
+              console.error('Failed to send order confirmation email:', emailError);
+            }
+          }
         } else {
-          // Create new order
-          await pb.collection('orders').create({
-            orderId,
-            user: userId,
-            email: paymentIntent.receipt_email || shippingAddress.email || '',
-            items: JSON.stringify(items),
-            shippingAddress: JSON.stringify(shippingAddress),
-            billingAddress: JSON.stringify(shippingAddress), // Same as shipping by default
-            subtotal: subtotal,
-            shipping: shippingCost,
-            tax: tax,
-            total: paymentIntent.amount / 100,
-            status: 'processing',
-            paymentStatus: 'paid',
-            paymentIntentId: paymentIntent.id,
-          });
-          console.log('Order created:', orderId);
+           console.error('CRITICAL: Order not found in PB and full metadata missing. Cannot fulfill.');
         }
 
-        // Clear user's cart if they were logged in
-        if (userId) {
-          try {
-            const cart = await pb.collection('carts').getFirstListItem(
-              `user="${userId}"`
-            );
-            await pb.collection('carts').update(cart.id, {
-              items: '[]',
-            });
-          } catch {
-            // No cart to clear
-          }
-        }
-
-        // Send order confirmation email
-        const customerEmail = paymentIntent.receipt_email || shippingAddress.email || '';
-        const customerName = shippingAddress.name || 'Valued Customer';
-        
-        if (customerEmail) {
-          try {
-            await sendOrderConfirmation({
-              orderId,
-              email: customerEmail,
-              customerName,
-              items: items.map((item: any) => ({
-                name: item.name,
-                quantity: item.quantity,
-                price: item.price,
-                image: item.image,
-              })),
-              subtotal,
-              shipping: shippingCost,
-              tax,
-              total: paymentIntent.amount / 100,
-              shippingAddress: {
-                street1: shippingAddress.street1 || shippingAddress.line1 || '',
-                street2: shippingAddress.street2 || shippingAddress.line2 || '',
-                city: shippingAddress.city || '',
-                state: shippingAddress.state || '',
-                zip: shippingAddress.zip || shippingAddress.postal_code || '',
-                country: shippingAddress.country || 'US',
-              },
-            });
-            console.log('Order confirmation email sent to:', customerEmail);
-          } catch (emailError) {
-            console.error('Failed to send order confirmation email:', emailError);
-            // Don't fail the webhook for email errors
-          }
-        }
       } catch (error) {
         console.error('Error creating/updating order:', error);
-        // Still return 200 to acknowledge receipt
       }
       
       break;
