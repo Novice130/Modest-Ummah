@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import { verifyWebhookSignature } from '@/lib/stripe';
+import { sendOrderConfirmation } from '@/lib/email';
 import Stripe from 'stripe';
 import PocketBase from 'pocketbase';
 
@@ -100,6 +101,42 @@ export async function POST(request: NextRequest) {
             });
           } catch {
             // No cart to clear
+          }
+        }
+
+        // Send order confirmation email
+        const customerEmail = paymentIntent.receipt_email || shippingAddress.email || '';
+        const customerName = shippingAddress.name || 'Valued Customer';
+        
+        if (customerEmail) {
+          try {
+            await sendOrderConfirmation({
+              orderId,
+              email: customerEmail,
+              customerName,
+              items: items.map((item: any) => ({
+                name: item.name,
+                quantity: item.quantity,
+                price: item.price,
+                image: item.image,
+              })),
+              subtotal,
+              shipping: shippingCost,
+              tax,
+              total: paymentIntent.amount / 100,
+              shippingAddress: {
+                street1: shippingAddress.street1 || shippingAddress.line1 || '',
+                street2: shippingAddress.street2 || shippingAddress.line2 || '',
+                city: shippingAddress.city || '',
+                state: shippingAddress.state || '',
+                zip: shippingAddress.zip || shippingAddress.postal_code || '',
+                country: shippingAddress.country || 'US',
+              },
+            });
+            console.log('Order confirmation email sent to:', customerEmail);
+          } catch (emailError) {
+            console.error('Failed to send order confirmation email:', emailError);
+            // Don't fail the webhook for email errors
           }
         }
       } catch (error) {
