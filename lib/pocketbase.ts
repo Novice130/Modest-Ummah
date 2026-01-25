@@ -143,22 +143,49 @@ export async function searchProducts(query: string) {
 // Auth
 export async function signUp(email: string, password: string, name: string) {
   const client = getPocketBase();
-  const user = await client.collection('users').create<User>({
-    email,
-    password,
-    passwordConfirm: password,
-    name,
-  });
-  
-  // Auto login after signup
-  await client.collection('users').authWithPassword(email, password);
-  
-  return user;
+  try {
+    const user = await client.collection('users').create<User>({
+      email,
+      password,
+      passwordConfirm: password,
+      name,
+    });
+    
+    // Auto login after signup
+    await client.collection('users').authWithPassword(email, password);
+    
+    return user;
+  } catch (err: any) {
+    console.error('SignUp error:', err);
+    // Provide more specific error messages
+    if (err.status === 0) {
+      throw new Error('Cannot connect to server. Please check your internet connection.');
+    }
+    if (err.data?.email?.message) {
+      throw new Error(err.data.email.message);
+    }
+    if (err.data?.password?.message) {
+      throw new Error(err.data.password.message);
+    }
+    throw new Error(err.message || 'Failed to create account. Please try again.');
+  }
 }
 
 export async function signIn(email: string, password: string) {
   const client = getPocketBase();
-  return await client.collection('users').authWithPassword(email, password);
+  try {
+    return await client.collection('users').authWithPassword(email, password);
+  } catch (err: any) {
+    console.error('SignIn error:', err);
+    // Provide more specific error messages
+    if (err.status === 0) {
+      throw new Error('Cannot connect to server. Please check your internet connection.');
+    }
+    if (err.status === 400) {
+      throw new Error('Invalid email or password.');
+    }
+    throw new Error(err.message || 'Something went wrong. Please try again.');
+  }
 }
 
 export async function signInWithGoogle() {
