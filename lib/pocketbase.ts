@@ -21,7 +21,7 @@ export function getPocketBase(): TypedPocketBase {
     
     // Save auth changes to cookie (optional, keeps them in sync)
     pb.authStore.onChange(() => {
-      document.cookie = pb!.authStore.exportToCookie({ httpOnly: false });
+      document.cookie = pb!.authStore.exportToCookie({ httpOnly: false, path: '/' });
     });
   }
 
