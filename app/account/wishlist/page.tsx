@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import ProductCard from '@/components/product/product-card';
 import { useAuthStore, useCartStore } from '@/lib/store';
-import { getPocketBase } from '@/lib/pocketbase';
+import { getPocketBase } from '@/lib/api';
 import type { Product } from '@/types';
 
 export default function WishlistPage() {

@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useCartStore } from '@/lib/store';
-import { signIn, signInWithGoogle } from '@/lib/pocketbase';
+import { signIn, signInWithGoogle } from '@/lib/api';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),

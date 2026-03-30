@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { getAllProducts, deleteProduct } from '@/lib/pocketbase';
+import { getAllProducts, deleteProduct } from '@/lib/api';
 import { getImageUrl } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

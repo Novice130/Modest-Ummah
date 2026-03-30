@@ -7,7 +7,7 @@ import { User, Package, Heart, MapPin, CreditCard, Settings, LogOut, Loader2 } f
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuthStore } from '@/lib/store';
-import { signOut, getOrders, getPocketBase } from '@/lib/pocketbase';
+import { signOut, getOrders, getPocketBase } from '@/lib/api';
 
 const accountLinks = [
   {

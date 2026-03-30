@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getPocketBase } from '@/lib/pocketbase';
+import { getPocketBase } from '@/lib/api';
 import type { ShippingAddress } from '@/types';
 
 const addressSchema = z.object({

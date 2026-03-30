@@ -14,7 +14,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
-import { signUp, signInWithGoogle } from '@/lib/pocketbase';
+import { signUp, signInWithGoogle } from '@/lib/api';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),

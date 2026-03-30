@@ -2,7 +2,7 @@
 
 import { useEffect, ReactNode } from 'react';
 import { useAuthStore } from '@/lib/store';
-import { getPocketBase, getCurrentUser } from '@/lib/pocketbase';
+import { getPocketBase, getCurrentUser } from '@/lib/api';
 
 interface AuthProviderProps {
   children: ReactNode;

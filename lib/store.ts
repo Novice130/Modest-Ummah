@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { CartItem, User } from '@/types';
-import { createOrUpdateCart, getCart, subscribeToCart, unsubscribeFromCart, getPocketBase } from '@/lib/pocketbase';
+import { createOrUpdateCart, getCart, subscribeToCart, unsubscribeFromCart, getPocketBase } from '@/lib/api';
 
 interface CartState {
   items: CartItem[];

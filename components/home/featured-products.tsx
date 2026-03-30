@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ProductCard from '@/components/product/product-card';
-import { getFeaturedProducts } from '@/lib/pocketbase';
+import { getFeaturedProducts } from '@/lib/api';
 import type { Product } from '@/types';
 
 // Fallback data when database is empty

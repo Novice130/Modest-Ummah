@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { createProduct, updateProduct } from '@/lib/pocketbase';
+import { createProduct, updateProduct } from '@/lib/api';
 import ProductCard from '@/components/product/product-card';
 import type { Product, ProductColor } from '@/types';
 import { getImageUrl } from '@/lib/utils';

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getAllOrders } from '@/lib/pocketbase';
+import { getAllOrders } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import {
   Table,

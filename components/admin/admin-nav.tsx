@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { LayoutDashboard, ShoppingBag, Package, Users, Settings, LogOut, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { signOut } from '@/lib/pocketbase';
+import { signOut } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
 const navItems = [

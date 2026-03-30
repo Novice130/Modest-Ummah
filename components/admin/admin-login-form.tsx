@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { adminSignIn } from '@/lib/pocketbase';
+import { adminSignIn } from '@/lib/api';
 
 const adminLoginSchema = z.object({
   email: z.string().email('Invalid email address'),

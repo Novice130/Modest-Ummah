@@ -1,4 +1,4 @@
-import { getProduct } from '@/lib/pocketbase';
+import { getProduct } from '@/lib/api';
 import ProductEditor from '@/components/admin/product-editor';
 
 interface EditProductPageProps {

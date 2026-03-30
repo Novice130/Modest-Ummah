@@ -12,7 +12,7 @@ import {
 } from '@/components/ui/table';
 import { Loader2, Search, Users } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
-import { getAllOrders } from '@/lib/pocketbase';
+import { getAllOrders } from '@/lib/api';
 
 interface CustomerData {
   id: string;

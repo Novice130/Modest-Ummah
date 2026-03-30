@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import ProductGallery from '@/components/product/product-gallery';
 import ProductInfo from '@/components/product/product-info';
 import ProductRecommendations from '@/components/product/product-recommendations';
-import { getProduct } from '@/lib/pocketbase';
+import { getProduct } from '@/lib/api';
 import type { Product } from '@/types';
 
 interface ProductPageProps {

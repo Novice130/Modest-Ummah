@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { isAdmin } from '@/lib/pocketbase';
+import { isAdmin } from '@/lib/api';
 import AdminNav from '@/components/admin/admin-nav';
 import { Loader2 } from 'lucide-react';
 

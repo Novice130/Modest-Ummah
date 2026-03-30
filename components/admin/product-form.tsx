@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { createProduct, updateProduct } from '@/lib/pocketbase';
+import { createProduct, updateProduct } from '@/lib/api';
 import { CATEGORIES, COLORS, SIZES } from '@/lib/utils';
 import type { Product } from '@/types';
 

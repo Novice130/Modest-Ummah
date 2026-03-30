@@ -15,7 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
-import { getPocketBase } from '@/lib/pocketbase';
+import { getPocketBase } from '@/lib/api';
 
 const profileSchema = z.object({
   name: z.string().min(2, 'Name is required'),

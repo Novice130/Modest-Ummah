@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getProducts } from '@/lib/pocketbase';
+import { getProducts } from '@/lib/api';
 import type { Product } from '@/types';
 
 interface ShopContentProps {
