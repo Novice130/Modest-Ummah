@@ -14,7 +14,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
-import { signUp, signInWithGoogle } from '@/lib/api';
+import { signInWithGoogle } from '@/lib/api';
+import { signUpAction } from '@/lib/actions/auth.actions';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -57,14 +58,15 @@ export default function RegisterForm() {
   const onSubmit = async (data: RegisterFormData) => {
     setIsLoading(true);
     try {
-      const user = await signUp(data.email, data.password, data.name);
+      const user = await signUpAction(data.email, data.password, data.name);
       setUser(user as any);
 
       toast({
         title: 'Account created!',
         description: 'Welcome to Modest Ummah. Please check your email to verify your account.',
       });
-
+      
+      router.refresh();
       router.push('/account');
     } catch (error: any) {
       toast({

@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import ProductCard from '@/components/product/product-card';
-import { getFeaturedProducts } from '@/lib/api';
+import { fetchFeaturedProducts } from '@/lib/actions/product.actions';
 import type { Product } from '@/types';
 
 // Fallback data when database is empty
@@ -206,7 +206,7 @@ export default async function FeaturedProducts() {
 
   // Try to fetch from database
   try {
-    const result = await getFeaturedProducts();
+    const result = await fetchFeaturedProducts();
     if (result.items && result.items.length > 0) {
       products = result.items;
     }

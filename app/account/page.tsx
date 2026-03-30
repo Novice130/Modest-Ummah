@@ -7,7 +7,8 @@ import { User, Package, Heart, MapPin, CreditCard, Settings, LogOut, Loader2 } f
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuthStore } from '@/lib/store';
-import { signOut, getOrders, getPocketBase } from '@/lib/api';
+import { clearSession } from '@/lib/actions/auth.actions';
+import { fetchUserOrders } from '@/lib/actions/order.actions';
 
 const accountLinks = [
   {
@@ -54,36 +55,32 @@ export default function AccountPage() {
   });
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const pb = getPocketBase();
-      
-      if (!pb.authStore.isValid) {
-        router.push('/auth/login?redirect=/account');
-        return;
-      }
+    // If not logged in, user state is null securely via RootLayout injection
+    if (!user) {
+      router.push('/auth/login?redirect=/account');
+      return;
+    }
 
-      // Load user stats
+    const loadData = async () => {
       try {
-        if (pb.authStore.model?.id) {
-          const orders = await getOrders(pb.authStore.model.id);
-          setStats(prev => ({
-            ...prev,
-            totalOrders: orders.totalItems || 0,
-          }));
-        }
+        const orders = await fetchUserOrders();
+        setStats(prev => ({
+          ...prev,
+          totalOrders: orders.length || 0,
+        }));
       } catch (error) {
         console.error('Error loading account stats:', error);
       }
-
       setIsLoading(false);
     };
 
-    checkAuth();
-  }, [router]);
+    loadData();
+  }, [user, router]);
 
   const handleSignOut = async () => {
-    await signOut();
+    await clearSession();
     setUser(null);
+    router.refresh(); // Crucial for layout update
     router.push('/');
   };
 

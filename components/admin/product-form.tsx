@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { createProduct, updateProduct } from '@/lib/api';
+import { createProductAction, updateProductAction } from '@/lib/actions/product.actions';
 import { CATEGORIES, COLORS, SIZES } from '@/lib/utils';
 import type { Product } from '@/types';
 
@@ -129,28 +129,19 @@ export default function ProductForm({ product }: ProductFormProps) {
   const onSubmit = async (data: ProductFormData) => {
     setIsLoading(true);
     try {
-      const formData = new FormData();
-      
-      Object.entries(data).forEach(([key, value]) => {
-        if (key === 'colors' || key === 'tags' || key === 'sizes') {
-          formData.append(key, JSON.stringify(value));
-        } else if (value !== undefined) {
-          formData.append(key, String(value));
-        }
-      });
-
-      images.forEach((image) => {
-        formData.append('images', image);
-      });
+      const payload = {
+        ...data,
+        images: [], // Note: Cloudinary/S3 image upload workflow to be added separately
+      };
 
       if (product) {
-        await updateProduct(product.id, formData);
+        await updateProductAction(product.id, payload);
         toast({
           title: 'Product updated!',
           description: 'The product has been successfully updated.',
         });
       } else {
-        await createProduct(formData);
+        await createProductAction(payload);
         toast({
           title: 'Product created!',
           description: 'The product has been successfully created.',

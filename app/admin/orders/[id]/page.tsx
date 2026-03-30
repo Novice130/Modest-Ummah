@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { getOrder, updateOrder } from '@/lib/api';
+import { fetchOrderById, updateOrderAction } from '@/lib/actions/order.actions';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -57,7 +57,7 @@ function OrderDetailsContent() {
   
   async function loadOrder() {
     try {
-      const data = await getOrder(id);
+      const data = await fetchOrderById(id);
       setOrder(data);
     } catch(e) {
       console.error(e);
@@ -89,7 +89,7 @@ function OrderDetailsContent() {
     
     try {
       // Cast newStatus to match the union type required by PocketBase types
-      await updateOrder(order.id, { status: newStatus as any });
+      await updateOrderAction(order.id, { status: newStatus as any });
       setOrder({ ...order, status: newStatus as any });
     } catch(e) {
       alert('Failed to update status');

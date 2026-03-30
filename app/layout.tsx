@@ -7,6 +7,7 @@ import Header from '@/components/layout/header';
 import Footer from '@/components/layout/footer';
 import CartDrawer from '@/components/cart/cart-drawer';
 import AppShell from '@/components/layout/app-shell';
+import { getSession } from '@/lib/actions/auth.actions';
 import './globals.css';
 
 const poppins = Poppins({
@@ -84,11 +85,13 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await getSession();
+
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -102,7 +105,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
+          <AuthProvider initialUser={session as any}>
             <AppShell>{children}</AppShell>
             <Toaster />
           </AuthProvider>

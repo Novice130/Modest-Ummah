@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Plus, Search, Trash2, Edit, Loader2, Eye } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import type { Product } from '@/types';
+import { fetchAllProductsAdmin } from '@/lib/actions/product.actions';
 import { useRouter } from 'next/navigation';
 
 export default function AdminProductsPage() {

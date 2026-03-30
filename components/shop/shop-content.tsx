@@ -9,7 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getProducts } from '@/lib/api';
+import { fetchProducts } from '@/lib/actions/product.actions';
 import type { Product } from '@/types';
 
 interface ShopContentProps {
@@ -29,64 +29,33 @@ interface ShopContentProps {
 
 export default async function ShopContent({ searchParams }: ShopContentProps) {
   const page = parseInt(searchParams.page || '1', 10);
-  const perPage = 12;
+  const limit = 12;
 
-  // Build filter query
-  let filter = '';
-  const filters: string[] = [];
+  let minPrice = searchParams.minPrice;
+  let maxPrice = searchParams.maxPrice;
 
-  if (searchParams.category) {
-    filters.push(`category="${searchParams.category}"`);
-  }
-  if (searchParams.subcategory) {
-    filters.push(`subcategory="${searchParams.subcategory}"`);
-  }
-  if (searchParams.color) {
-    filters.push(`colors~"${searchParams.color}"`);
-  }
-  if (searchParams.size) {
-    filters.push(`sizes~"${searchParams.size}"`);
-  }
-  if (searchParams.search) {
-    filters.push(`(name~"${searchParams.search}" || description~"${searchParams.search}")`);
-  }
   if (searchParams.price) {
     const [min, max] = searchParams.price.replace('+', '').split('-');
-    if (min) filters.push(`price>=${min}`);
-    if (max) filters.push(`price<=${max}`);
+    if (min) minPrice = min;
+    if (max) maxPrice = max;
   }
 
-  filter = filters.join(' && ');
-
-  // Build sort query
-  let sort = '-price'; // Default to price high-to-low since date sorting is restricted
-  switch (searchParams.sort) {
-    case 'price-asc':
-      sort = 'price';
-      break;
-    case 'price-desc':
-      sort = '-price';
-      break;
-    case 'name':
-      sort = 'name';
-      break;
-    // case 'newest': // Date sorting restricted on backend
-    //   sort = '-created';
-    //   break;
-  }
-
-  // Fetch products from database
+  // Fetch products from database natively
   let result;
   try {
-    result = await getProducts({
+    result = await fetchProducts({
       page,
-      perPage,
-      filter,
-      sort,
+      limit,
+      category: searchParams.category,
+      subcategory: searchParams.subcategory,
+      search: searchParams.search,
+      minPrice,
+      maxPrice,
+      sort: searchParams.sort || '-price',
     });
   } catch (error) {
     console.error('failed to fetch products:', error);
-    throw error; // Re-throw to let error boundary handle it, but now we have a log
+    throw error;
   }
 
   const products = result.items;
@@ -98,7 +67,7 @@ export default async function ShopContent({ searchParams }: ShopContentProps) {
       {/* Sort & Results Header */}
       <div className="hidden lg:flex items-center justify-between mb-6">
         <p className="text-sm text-muted-foreground">
-          Showing {(page - 1) * perPage + 1} - {Math.min(page * perPage, totalItems)} of{' '}
+          Showing {(page - 1) * limit + 1} - {Math.min(page * limit, totalItems)} of{' '}
           {totalItems} products
         </p>
         <Select defaultValue={searchParams.sort || 'price-desc'}>

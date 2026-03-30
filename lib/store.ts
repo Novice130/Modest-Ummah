@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { CartItem, User } from '@/types';
-import { createOrUpdateCart, getCart, subscribeToCart, unsubscribeFromCart, getPocketBase } from '@/lib/api';
+import { saveCartAction, fetchUserCart } from '@/lib/actions/cart.actions';
 
 interface CartState {
   items: CartItem[];
@@ -16,8 +16,6 @@ interface CartState {
   closeCart: () => void;
   syncWithServer: (userId: string) => Promise<void>;
   loadFromServer: (userId: string) => Promise<void>;
-  startRealtimeSync: (userId: string) => void;
-  stopRealtimeSync: () => void;
   getItemCount: () => number;
   getSubtotal: () => number;
 }
@@ -47,9 +45,9 @@ export const useCartStore = create<CartState>()(
           }
 
           // Sync with server if user is logged in
-          const pb = getPocketBase();
-          if (pb.authStore.isValid && pb.authStore.model?.id) {
-            createOrUpdateCart(pb.authStore.model.id, newItems).catch(console.error);
+          const authUser = useAuthStore.getState().user;
+          if (authUser?.id) {
+            saveCartAction(newItems).catch(console.error);
           }
 
           return { items: newItems };
@@ -68,9 +66,9 @@ export const useCartStore = create<CartState>()(
           );
 
           // Sync with server if user is logged in
-          const pb = getPocketBase();
-          if (pb.authStore.isValid && pb.authStore.model?.id) {
-            createOrUpdateCart(pb.authStore.model.id, newItems).catch(console.error);
+          const authUser = useAuthStore.getState().user;
+          if (authUser?.id) {
+            saveCartAction(newItems).catch(console.error);
           }
 
           return { items: newItems };
@@ -91,9 +89,9 @@ export const useCartStore = create<CartState>()(
           );
 
           // Sync with server if user is logged in
-          const pb = getPocketBase();
-          if (pb.authStore.isValid && pb.authStore.model?.id) {
-            createOrUpdateCart(pb.authStore.model.id, newItems).catch(console.error);
+          const authUser = useAuthStore.getState().user;
+          if (authUser?.id) {
+            saveCartAction(newItems).catch(console.error);
           }
 
           return { items: newItems };
@@ -102,9 +100,9 @@ export const useCartStore = create<CartState>()(
 
       clearCart: () => {
         // Sync with server if user is logged in
-        const pb = getPocketBase();
-        if (pb.authStore.isValid && pb.authStore.model?.id) {
-          createOrUpdateCart(pb.authStore.model.id, []).catch(console.error);
+        const authUser = useAuthStore.getState().user;
+        if (authUser?.id) {
+          saveCartAction([]).catch(console.error);
         }
 
         set({ items: [] });
@@ -119,7 +117,7 @@ export const useCartStore = create<CartState>()(
         try {
           const items = get().items;
           if (items.length > 0) {
-            await createOrUpdateCart(userId, items);
+            await saveCartAction(items);
           }
         } catch (error) {
           console.error('Error syncing cart with server:', error);
@@ -131,7 +129,7 @@ export const useCartStore = create<CartState>()(
       loadFromServer: async (userId) => {
         set({ isSyncing: true });
         try {
-          const cart = await getCart(userId);
+          const cart = await fetchUserCart();
           if (cart && cart.items) {
             const items = typeof cart.items === 'string' 
               ? JSON.parse(cart.items) 
@@ -157,7 +155,7 @@ export const useCartStore = create<CartState>()(
 
             // Sync merged cart back to server
             if (mergedItems.length > 0) {
-              await createOrUpdateCart(userId, mergedItems);
+              await saveCartAction(mergedItems);
             }
           }
         } catch (error) {
@@ -165,21 +163,6 @@ export const useCartStore = create<CartState>()(
         } finally {
           set({ isSyncing: false });
         }
-      },
-
-      startRealtimeSync: (userId) => {
-        subscribeToCart(userId, (cart) => {
-          if (cart.items) {
-            const items = typeof cart.items === 'string' 
-              ? JSON.parse(cart.items) 
-              : cart.items;
-            set({ items });
-          }
-        });
-      },
-
-      stopRealtimeSync: () => {
-        unsubscribeFromCart();
       },
 
       getItemCount: () => {
@@ -216,29 +199,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ user, isLoading: false });
     
     // Sync cart when user logs in
-    if (user) {
+    if (user?.id) {
       const cartStore = useCartStore.getState();
       cartStore.loadFromServer(user.id);
-      cartStore.startRealtimeSync(user.id);
-    } else {
-      // Stop realtime sync when user logs out
-      useCartStore.getState().stopRealtimeSync();
     }
   },
   setLoading: (isLoading) => set({ isLoading }),
   initAuth: () => {
-    const pb = getPocketBase();
-    if (pb.authStore.isValid && pb.authStore.model) {
-      const user = pb.authStore.model as User;
-      set({ user, isLoading: false });
-      
-      // Start cart sync
-      const cartStore = useCartStore.getState();
-      cartStore.loadFromServer(user.id);
-      cartStore.startRealtimeSync(user.id);
-    } else {
-      set({ user: null, isLoading: false });
-    }
+    // This is explicitly left as a NOOP because AuthProvider now relies
+    // completely on Next.js Server Sessions for exact initial state injection.
   },
 }));
 

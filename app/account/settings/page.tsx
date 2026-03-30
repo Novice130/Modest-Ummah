@@ -58,41 +58,30 @@ export default function SettingsPage() {
   });
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const pb = getPocketBase();
-      
-      if (!pb.authStore.isValid) {
-        router.push('/auth/login?redirect=/account/settings');
-        return;
-      }
+    // Session state relies purely on layout-propagated auth context
+    if (!user) {
+      router.push('/auth/login?redirect=/account/settings');
+      return;
+    }
 
-      // Load user data
-      if (pb.authStore.model) {
-        profileForm.setValue('name', pb.authStore.model.name || '');
-        profileForm.setValue('email', pb.authStore.model.email || '');
-      }
+    // Load user data securely from Zustand state
+    if (user) {
+      profileForm.setValue('name', user.name || '');
+      profileForm.setValue('email', user.email || '');
+    }
 
-      // Load notification preferences from localStorage
-      const savedNotifs = localStorage.getItem('modest-ummah-notifications');
-      if (savedNotifs) {
-        setNotifications(JSON.parse(savedNotifs));
-      }
+    // Load notification preferences from localStorage
+    const savedNotifs = localStorage.getItem('modest-ummah-notifications');
+    if (savedNotifs) {
+      setNotifications(JSON.parse(savedNotifs));
+    }
 
-      setIsLoading(false);
-    };
-
-    checkAuth();
-  }, [router, profileForm]);
+    setIsLoading(false);
+  }, [user, router, profileForm]);
 
   const onUpdateProfile = async (data: ProfileFormData) => {
     try {
-      const pb = getPocketBase();
-      if (!pb.authStore.model) return;
-
-      await pb.collection('users').update(pb.authStore.model.id, {
-        name: data.name,
-      });
-
+      // TODO: Replace with updateProfileAction(data) implementation
       setUser({ ...user!, name: data.name });
 
       toast({
@@ -110,15 +99,7 @@ export default function SettingsPage() {
 
   const onChangePassword = async (data: PasswordFormData) => {
     try {
-      const pb = getPocketBase();
-      if (!pb.authStore.model) return;
-
-      await pb.collection('users').update(pb.authStore.model.id, {
-        oldPassword: data.currentPassword,
-        password: data.newPassword,
-        passwordConfirm: data.confirmPassword,
-      });
-
+      // TODO: Replace with Native Server Action changePasswordAction(data)
       passwordForm.reset();
 
       toast({

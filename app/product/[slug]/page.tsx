@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation';
 import ProductGallery from '@/components/product/product-gallery';
 import ProductInfo from '@/components/product/product-info';
 import ProductRecommendations from '@/components/product/product-recommendations';
-import { getProduct } from '@/lib/api';
+import { fetchProductBySlugOrId } from '@/lib/actions/product.actions';
 import type { Product } from '@/types';
 
 interface ProductPageProps {
@@ -15,7 +15,7 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
   const { slug } = await params;
   
   try {
-    const product = await getProduct(slug);
+    const product = await fetchProductBySlugOrId(slug);
     
     if (!product) {
       return {
@@ -45,7 +45,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
   let product: Product | null = null;
   
   try {
-    product = await getProduct(slug);
+    product = await fetchProductBySlugOrId(slug);
   } catch (error) {
     console.error('Failed to fetch product:', error);
   }

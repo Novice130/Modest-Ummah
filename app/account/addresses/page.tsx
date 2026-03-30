@@ -25,7 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { getPocketBase } from '@/lib/api';
+import { useAuthStore } from '@/lib/store';
 import type { ShippingAddress } from '@/types';
 
 const addressSchema = z.object({
@@ -68,30 +68,27 @@ export default function AddressesPage() {
     },
   });
 
+  const { user } = useAuthStore();
+
   useEffect(() => {
-    const checkAuth = async () => {
-      const pb = getPocketBase();
-      
-      if (!pb.authStore.isValid) {
-        router.push('/auth/login?redirect=/account/addresses');
-        return;
+    // Session state relies purely on layout-propagated auth context
+    if (!user) {
+      router.push('/auth/login?redirect=/account/addresses');
+      return;
+    }
+
+    // Load addresses from localStorage (in production, use DB)
+    try {
+      const saved = localStorage.getItem('modest-ummah-addresses');
+      if (saved) {
+        setAddresses(JSON.parse(saved));
       }
+    } catch (error) {
+      console.error('Error loading addresses:', error);
+    }
 
-      // Load addresses from localStorage (in production, use PocketBase)
-      try {
-        const saved = localStorage.getItem('modest-ummah-addresses');
-        if (saved) {
-          setAddresses(JSON.parse(saved));
-        }
-      } catch (error) {
-        console.error('Error loading addresses:', error);
-      }
-
-      setIsLoading(false);
-    };
-
-    checkAuth();
-  }, [router]);
+    setIsLoading(false);
+  }, [user, router]);
 
   const saveAddresses = (updated: SavedAddress[]) => {
     setAddresses(updated);

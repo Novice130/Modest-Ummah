@@ -13,7 +13,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useCartStore } from '@/lib/store';
-import { signIn, signInWithGoogle } from '@/lib/api';
+import { signInWithGoogle } from '@/lib/api';
+import { signInAction } from '@/lib/actions/auth.actions';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -42,17 +43,19 @@ export default function LoginForm() {
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      const authData = await signIn(data.email, data.password);
-      setUser(authData.record as any);
+      const authRecord = await signInAction(data.email, data.password);
+      setUser(authRecord as any);
       
       // Sync cart with server
-      await syncWithServer(authData.record.id);
+      await syncWithServer(authRecord.id);
 
       toast({
         title: 'Welcome back!',
         description: 'You have successfully signed in.',
       });
 
+      // Crucial: Use router.refresh() to ensure root layout fetches new server cookies and passes them implicitly!
+      router.refresh();
       router.push('/account');
     } catch (error: any) {
       toast({

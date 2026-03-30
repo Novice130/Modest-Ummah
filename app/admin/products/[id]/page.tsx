@@ -1,4 +1,4 @@
-import { getProduct } from '@/lib/api';
+import { fetchProductBySlugOrId } from '@/lib/actions/product.actions';
 import ProductEditor from '@/components/admin/product-editor';
 
 interface EditProductPageProps {
@@ -8,12 +8,19 @@ interface EditProductPageProps {
 export default async function EditProductPage({ params }: EditProductPageProps) {
   const { id } = await params;
   
-  // Fetch data on server
   let product = null;
   try {
-     product = await getProduct(id);
+     product = await fetchProductBySlugOrId(id);
   } catch(e) {
-     return <div>Product not found</div>;
+     console.error(e);
+  }
+
+  if (!product) {
+    return (
+      <div className="p-8 text-center text-muted-foreground">
+        Product not found
+      </div>
+    );
   }
 
   return <ProductEditor initialData={product} />;

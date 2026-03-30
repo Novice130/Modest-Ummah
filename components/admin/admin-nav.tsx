@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { LayoutDashboard, ShoppingBag, Package, Users, Settings, LogOut, FileText } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { signOut } from '@/lib/api';
+import { clearSession } from '@/lib/actions/auth.actions';
 import { useRouter } from 'next/navigation';
 
 const navItems = [
@@ -42,7 +42,7 @@ export default function AdminNav() {
   const router = useRouter();
 
   const handleSignOut = async () => {
-    await signOut();
+    await clearSession(true);
     router.push('/admin/login');
   };
 

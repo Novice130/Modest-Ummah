@@ -19,30 +19,23 @@ export default function WishlistPage() {
   const [wishlist, setWishlist] = useState<Product[]>([]);
 
   useEffect(() => {
-    const checkAuth = async () => {
-      const pb = getPocketBase();
-      
-      if (!pb.authStore.isValid) {
-        router.push('/auth/login?redirect=/account/wishlist');
-        return;
+    // Rely exclusively on natively injected Next.js Server Sessions populated via Layout
+    if (!user) {
+      router.push('/auth/login?redirect=/account/wishlist');
+      return;
+    }
+
+    try {
+      const savedWishlist = localStorage.getItem('modest-ummah-wishlist');
+      if (savedWishlist) {
+        setWishlist(JSON.parse(savedWishlist));
       }
-
-      // TODO: Load wishlist from PocketBase when wishlist collection is added
-      // For now, using localStorage as fallback
-      try {
-        const savedWishlist = localStorage.getItem('modest-ummah-wishlist');
-        if (savedWishlist) {
-          setWishlist(JSON.parse(savedWishlist));
-        }
-      } catch (error) {
-        console.error('Error loading wishlist:', error);
-      }
-
-      setIsLoading(false);
-    };
-
-    checkAuth();
-  }, [router]);
+    } catch (error) {
+      console.error('Error loading wishlist:', error);
+    }
+    
+    setIsLoading(false);
+  }, [user, router]);
 
   const removeFromWishlist = (productId: string) => {
     const updated = wishlist.filter(p => p.id !== productId);

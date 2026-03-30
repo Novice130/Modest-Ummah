@@ -5,45 +5,47 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Loader2, Mail, Lock, Shield } from 'lucide-react';
+import { Loader2, Mail, Lock, Shield, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
-import { adminSignIn } from '@/lib/api';
+import { adminSignInAction } from '@/lib/actions/auth.actions';
 
-const adminLoginSchema = z.object({
+const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
 });
 
-type AdminLoginFormData = z.infer<typeof adminLoginSchema>;
+type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function AdminLoginForm() {
   const router = useRouter();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
-  } = useForm<AdminLoginFormData>({
-    resolver: zodResolver(adminLoginSchema),
+  } = useForm<LoginFormData>({
+    resolver: zodResolver(loginSchema),
   });
 
-  const onSubmit = async (data: AdminLoginFormData) => {
+  const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      await adminSignIn(data.email, data.password);
+      await adminSignInAction(data.email, data.password);
 
       toast({
-        title: 'Welcome, Admin!',
-        description: 'You have successfully signed in.',
+        title: 'Sign in successful',
+        description: 'Welcome to the admin dashboard.',
       });
 
-      router.push('/admin/dashboard');
+      router.push('/admin');
+      router.refresh();
     } catch (error: any) {
       toast({
         title: 'Login failed',

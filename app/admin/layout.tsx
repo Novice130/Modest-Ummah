@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { isAdmin } from '@/lib/api';
+import { getSession } from '@/lib/actions/auth.actions';
 import AdminNav from '@/components/admin/admin-nav';
 import { Loader2 } from 'lucide-react';
 
@@ -14,23 +14,37 @@ export default function AdminLayout({
   const router = useRouter();
   const pathname = usePathname();
   const [authorized, setAuthorized] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     // Skip check on login page
     if (pathname === '/admin/login') {
       setAuthorized(true);
+      setLoading(false);
       return;
     }
 
-    const adminCheck = isAdmin();
-    console.log('Admin Check:', adminCheck); // Debug log
-    if (!adminCheck) {
-      // Don't auto-redirect to avoid loops, just show unauthorized state
-      setAuthorized(false);
-    } else {
-      setAuthorized(true);
-    }
+    const checkAuth = async () => {
+      try {
+        const session = await getSession(true);
+        if (session && session.type === 'admin') {
+          setAuthorized(true);
+        } else {
+          setAuthorized(false);
+        }
+      } catch (e) {
+        setAuthorized(false);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAuth();
   }, [pathname, router]);
+
+  if (loading) {
+    return <div className="h-screen w-full flex items-center justify-center"><Loader2 className="animate-spin text-muted-foreground mr-2" /> Checking Authorization...</div>;
+  }
 
   if (!authorized) {
     if (pathname === '/admin/login') return <>{children}</>;
