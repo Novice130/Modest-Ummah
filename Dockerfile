@@ -12,7 +12,6 @@ ARG NEXT_PUBLIC_APP_NAME="Modest Ummah"
 ARG NEXT_PUBLIC_POCKETBASE_URL=""
 ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=""
 ARG DATABASE_URL=""
-ARG JWT_SECRET=""
 
 # Set as environment variables for the build
 ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
@@ -20,22 +19,17 @@ ENV NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
 ENV NEXT_PUBLIC_POCKETBASE_URL=${NEXT_PUBLIC_POCKETBASE_URL}
 ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
 ENV DATABASE_URL=${DATABASE_URL}
-ENV JWT_SECRET=${JWT_SECRET}
-
-# Install dependencies required for some node modules (optional but safer)
-# RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 
 # Copy package files
-COPY package.json package-lock.json* ./
+COPY package.json ./
 
 # Install ALL dependencies (including dev)
-RUN npm ci --legacy-peer-deps
+RUN npm install --legacy-peer-deps
 
 # Copy source files
 COPY . .
 
 # Build the application
-# echoing logs if it fails
 RUN npm run build || (echo "=== BUILD FAILED ===" && cat .next/build-error.log 2>/dev/null; exit 1)
 
 # Production stage
