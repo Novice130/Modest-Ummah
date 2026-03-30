@@ -66,19 +66,8 @@ jobs:
     steps:
       - name: Trigger Dokploy Deployment
         run: |
-          echo "🚀 Triggering Dokploy deployment..."
+          echo "Triggering Dokploy deployment..."
           curl -X POST \
-            "https://dokploy.learnnovice.com/api/deploy" \
-            -H "Authorization: Bearer ${{ secrets.DOKPLOY_PRE_TEST }}" \
-            -H "Content-Type: application/json" \
-            -d '{}' \
-            --fail --silent --show-error || {
-              echo "⚠️ Dokploy API call failed, trying webhook endpoint..."
-              curl -X POST \
-                "https://dokploy.learnnovice.com/api/application.deploy" \
-                -H "Authorization: Bearer ${{ secrets.DOKPLOY_PRE_TEST }}" \
-                -H "Content-Type: application/json" \
-                -d '{}' \
-                --fail --silent --show-error || echo "⚠️ Deploy trigger may need manual URL configuration"
-            }
-          echo "✅ Deployment triggered successfully"
+            "https://dokploy.learnnovice.com/deploy/application/ZqjSEBTJhPMDPHKgIwxPK" \
+            --fail --silent --show-error
+          echo "Deployment triggered successfully"
