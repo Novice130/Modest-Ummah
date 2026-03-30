@@ -36,11 +36,10 @@ export function truncate(text: string, length: number): string {
 
 export function getImageUrl(collectionId: string, recordId: string, fileName: string, thumb?: string): string {
   if (!fileName) return '';
+  // Images are now stored as full URLs in the database
   if (fileName.startsWith('http') || fileName.startsWith('/')) return fileName;
-  
-  const baseUrl = process.env.NEXT_PUBLIC_POCKETBASE_URL || 'http://localhost:8090';
-  const thumbParam = thumb ? `?thumb=${thumb}` : '';
-  return `${baseUrl}/api/files/${collectionId}/${recordId}/${fileName}${thumbParam}`;
+  // Fallback for any legacy PocketBase references
+  return `/uploads/${fileName}`;
 }
 
 /**

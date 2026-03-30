@@ -37,8 +37,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# PocketBase
+# PocketBase (legacy)
 pocketbase/pb_data/
+
+# Drizzle
+drizzle/
 
 # IDE
 .idea

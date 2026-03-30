@@ -19,10 +19,12 @@ interface ProductGalleryProps {
   collectionId?: string;
 }
 
-// Helper to construct PocketBase file URL
-function getPocketBaseImageUrl(collectionId: string, productId: string, filename: string): string {
-  const baseUrl = process.env.NEXT_PUBLIC_POCKETBASE_URL || 'http://localhost:8090';
-  return `${baseUrl}/api/files/${collectionId}/${productId}/${filename}`;
+// Helper to resolve image URLs (images are now stored as full URLs)
+function resolveImageUrl(img: string): string {
+  if (img.startsWith('http') || img.startsWith('blob:') || img.startsWith('/')) {
+    return img;
+  }
+  return `/uploads/${img}`;
 }
 
 // Check if URL is a blob URL
@@ -54,20 +56,11 @@ export default function ProductGallery({ images, name, productId, collectionId }
   // Fallback to placeholder if no images
   const hasImages = images?.length > 0;
   
-  // Transform images to full URLs if needed
+  // Transform images to full URLs
   const displayImages = hasImages 
-    ? images.map(img => {
-        // If it's already a full URL (starts with http, blob, or /), use as-is
-        if (img.startsWith('http') || img.startsWith('blob:') || img.startsWith('/')) {
-          return img;
-        }
-        // Otherwise, construct PocketBase URL
-        if (productId && collectionId) {
-          return getPocketBaseImageUrl(collectionId, productId, img);
-        }
-        return img;
-      })
+    ? images.map(resolveImageUrl)
     : [];
+
 
   // If no images, show placeholder
   if (displayImages.length === 0) {

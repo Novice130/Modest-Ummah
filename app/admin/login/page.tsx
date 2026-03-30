@@ -22,12 +22,13 @@ export default function AdminLoginPage() {
     setError('');
 
     try {
-      // Clear any existing state first
-      const pb = await import('@/lib/pocketbase').then(m => m.getPocketBase());
-      pb.authStore.clear();
+      // Clear any existing admin session first
+      const { getAdminPocketBase } = await import('@/lib/pocketbase');
+      const adminPb = getAdminPocketBase();
+      adminPb.authStore.clear();
       
       await adminSignIn(email, password);
-      router.push('/admin');
+      router.push('/admin/dashboard');
     } catch (err) {
       console.error(err);
       setError('Invalid admin credentials');

@@ -1,29 +1,61 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getAdminPocketBase } from '@/lib/pocketbase';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Loader2, Search } from 'lucide-react';
+import { getDb } from '@/lib/db';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Loader2, Search, Users } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
-import type { UsersResponse } from '@/types/pocketbase-types';
+import { getAllOrders } from '@/lib/pocketbase';
+
+interface CustomerData {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: string;
+  totalOrders: number;
+  totalSpent: number;
+}
 
 export default function AdminCustomersPage() {
-  const [users, setUsers] = useState<UsersResponse[]>([]);
+  const [customers, setCustomers] = useState<CustomerData[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [totalCount, setTotalCount] = useState(0);
 
   useEffect(() => {
     async function loadCustomers() {
       setLoading(true);
       try {
-        const client = getAdminPocketBase();
-        const result = await client.collection('users').getList<UsersResponse>(1, 50, {
-          filter: search ? `email~"${search}" || name~"${search}"` : '',
-          sort: '-created',
+        // Fetch customers through API
+        const params = new URLSearchParams({
+          page: '1',
+          perPage: '50',
+          collection: 'users',
         });
-        setUsers(result.items);
+        if (search) params.set('filter', `email~"${search}" || name~"${search}"`);
+
+        const res = await fetch(`/api/data?${params}`, {
+          credentials: 'include',
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          setCustomers(data.items || []);
+          setTotalCount(data.totalItems || 0);
+        } else {
+          // Fallback: show empty
+          setCustomers([]);
+        }
       } catch (e) {
         console.error(e);
+        setCustomers([]);
       } finally {
         setLoading(false);
       }
@@ -34,12 +66,18 @@ export default function AdminCustomersPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="font-heading text-3xl">Customers</h1>
+        <div>
+          <h1 className="font-heading text-3xl">Customers</h1>
+          <p className="text-muted-foreground mt-1">
+            <Users className="inline h-4 w-4 mr-1" />
+            {totalCount} registered users
+          </p>
+        </div>
       </div>
 
       <div className="flex items-center space-x-2 bg-background border rounded-md px-3 py-2 w-full max-w-sm">
         <Search className="h-4 w-4 text-muted-foreground" />
-        <input 
+        <input
           className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground"
           placeholder="Search customers..."
           value={search}
@@ -54,29 +92,46 @@ export default function AdminCustomersPage() {
               <TableHead>Joined</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
+              <TableHead>Orders</TableHead>
+              <TableHead>Total Spent</TableHead>
               <TableHead>ID</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-8">
+                <TableCell colSpan={6} className="text-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                 </TableCell>
               </TableRow>
-            ) : users.length === 0 ? (
+            ) : customers.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                <TableCell
+                  colSpan={6}
+                  className="text-center py-8 text-muted-foreground"
+                >
                   No customers found.
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell>{formatDate(user.created)}</TableCell>
-                  <TableCell>{user.name || 'N/A'}</TableCell>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{user.id}</TableCell>
+              customers.map((customer) => (
+                <TableRow key={customer.id}>
+                  <TableCell className="text-sm">
+                    {formatDate(customer.createdAt)}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {customer.name || 'N/A'}
+                  </TableCell>
+                  <TableCell>{customer.email}</TableCell>
+                  <TableCell>{customer.totalOrders || 0}</TableCell>
+                  <TableCell>
+                    {customer.totalSpent
+                      ? `$${customer.totalSpent.toFixed(2)}`
+                      : '$0.00'}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs text-muted-foreground">
+                    {customer.id.substring(0, 8)}...
+                  </TableCell>
                 </TableRow>
               ))
             )}

@@ -137,7 +137,7 @@ export default function ProductEditor({ initialData }: ProductEditorProps) {
     return '/placeholder.jpg';
   };
 
-  // Construct preview images - combine existing (with PocketBase URLs) and new uploads (with blob URLs)
+  // Construct preview images - combine existing URLs and new uploads (blob URLs)
   const getPreviewImageUrls = (): string[] => {
     const existingImageUrls = (initialData?.id && initialData?.collectionId)
       ? formData.images.map(img => getImageUrl(initialData.collectionId, initialData.id, img))
@@ -230,7 +230,7 @@ export default function ProductEditor({ initialData }: ProductEditorProps) {
       console.error(err);
       // Try to show more specific error message
       let errorMessage = 'Failed to save product.';
-      // PocketBase returns errors in err.data.data (nested)
+      // Server returns errors in err.data.data (nested)
       const fieldData = err?.data?.data || err?.response?.data;
       if (fieldData && typeof fieldData === 'object') {
         const fieldErrors = Object.entries(fieldData)

@@ -1,29 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createPaymentIntent } from '@/lib/stripe';
-import PocketBase from 'pocketbase';
-
-// Server-side PocketBase instance
-function getServerPocketBase() {
-  return new PocketBase(process.env.NEXT_PUBLIC_POCKETBASE_URL || 'http://localhost:8090');
-}
+import { getDb } from '@/lib/db';
+import { orders } from '@/lib/schema';
+import type { ShippingAddressDB, OrderItem } from '@/lib/schema';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    console.log('Received body:', JSON.stringify(body, null, 2));
-    const { 
-      amount, 
-      orderId, 
-      customerEmail, 
-      shippingAddress, 
-      items, 
+    const {
+      amount,
+      orderId,
+      customerEmail,
+      shippingAddress,
+      items,
       userId,
       shipping,
       tax,
-      shippingService
+      shippingService,
     } = body;
-
-    console.log('Parsed items:', items);
 
     if (!amount || !orderId) {
       return NextResponse.json(
@@ -32,36 +26,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Create the order in PocketBase first with status 'pending_payment'
-    const pb = getServerPocketBase();
-    
-    // Convert amounts to plain numbers/float
     const subtotal = amount - (shipping || 0) - (tax || 0);
+    const db = getDb();
 
     try {
-      // Order doesn't exist, create it
-      await pb.collection('orders').create({
-          orderId,
-          user: userId || undefined,
-          email: customerEmail || shippingAddress.email || '',
-          items: JSON.stringify(items),
-          shippingAddress: JSON.stringify(shippingAddress),
-          billingAddress: JSON.stringify(shippingAddress),
-          subtotal: subtotal,
-          shipping: shipping || 0,
-          tax: tax || 0,
-          total: amount,
-          status: 'pending_payment',
-          paymentStatus: 'pending',
-          shippingService: shippingService,
-        });
-      } catch (pbError: any) {
-        console.error('Failed to create order in PocketBase (Schema Mismatch?):', pbError);
-        // Do not throw, allow Stripe Intent creation to proceed so user can pay.
-        // The webhook might fail to fulfill, but the checkout won't freeze/crash.
-      }
+      await db.insert(orders).values({
+        orderId,
+        userId: userId || null,
+        email: customerEmail || shippingAddress?.email || '',
+        items: (items || []) as OrderItem[],
+        shippingAddress: (typeof shippingAddress === 'string'
+          ? JSON.parse(shippingAddress)
+          : shippingAddress || {}) as ShippingAddressDB,
+        billingAddress: (typeof shippingAddress === 'string'
+          ? JSON.parse(shippingAddress)
+          : shippingAddress || {}) as ShippingAddressDB,
+        subtotal: String(subtotal),
+        shipping: String(shipping || 0),
+        tax: String(tax || 0),
+        total: String(amount),
+        status: 'pending_payment',
+        paymentStatus: 'pending',
+        shippingService: shippingService || null,
+      });
+    } catch (dbError: any) {
+      console.error('Failed to create order in database:', dbError);
+      // Don't throw — allow Stripe creation to proceed
+    }
 
-    // 2. Create Stripe PaymentIntent with minimal metadata
     const paymentIntent = await createPaymentIntent({
       amount,
       customerEmail,

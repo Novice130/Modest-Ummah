@@ -5,7 +5,7 @@ import ProductCard from '@/components/product/product-card';
 import { getFeaturedProducts } from '@/lib/pocketbase';
 import type { Product } from '@/types';
 
-// Fallback mock data when PocketBase is not available
+// Fallback data when database is empty
 const fallbackProducts: Product[] = [
   {
     id: '1',
@@ -204,14 +204,14 @@ const fallbackProducts: Product[] = [
 export default async function FeaturedProducts() {
   let products: Product[] = fallbackProducts;
 
-  // Try to fetch from PocketBase
+  // Try to fetch from database
   try {
     const result = await getFeaturedProducts();
     if (result.items && result.items.length > 0) {
       products = result.items;
     }
   } catch (error) {
-    console.warn('Failed to fetch featured products from PocketBase, using fallback data');
+    console.warn('Failed to fetch featured products, using fallback data');
   }
 
   return (

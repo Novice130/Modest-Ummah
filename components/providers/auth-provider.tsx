@@ -12,20 +12,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const { setUser, setLoading } = useAuthStore();
 
   useEffect(() => {
-    // Initialize auth state from PocketBase
     const initAuth = async () => {
       try {
         const pb = getPocketBase();
-        
+
         if (pb.authStore.isValid) {
           const user = getCurrentUser();
           setUser(user);
-          // Force sync cookie to ensure middleware sees it
+          // Set cookie for potential SSR usage
           document.cookie = pb.authStore.exportToCookie({ httpOnly: false, path: '/' });
         } else {
           setUser(null);
-          // Clear cookie if invalid
-          document.cookie = pb.authStore.exportToCookie({ httpOnly: false, path: '/' });
+          // Clear cookie
+          document.cookie = 'auth_token=; path=/; max-age=0';
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
@@ -37,10 +36,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     // Listen for auth changes
     const pb = getPocketBase();
-    pb.authStore.onChange(() => {
+    const unsubscribe = pb.authStore.onChange(() => {
       const user = getCurrentUser();
       setUser(user);
     });
+
+    return () => {
+      if (typeof unsubscribe === 'function') unsubscribe();
+    };
   }, [setUser, setLoading]);
 
   return <>{children}</>;

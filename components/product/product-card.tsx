@@ -26,7 +26,7 @@ function getProductImageSrc(product: Product): string | null {
     return firstImage;
   }
   
-  // Otherwise construct PocketBase URL
+  // Otherwise use getImageUrl fallback
   if (product.collectionId && product.id) {
     return getImageUrl(product.collectionId, product.id, firstImage);
   }
