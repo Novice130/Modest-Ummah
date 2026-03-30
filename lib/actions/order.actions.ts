@@ -9,8 +9,6 @@ import { getSession } from './auth.actions';
 function mapOrder(o: any): Order {
   return {
     id: o.id,
-    collectionId: 'orders',
-    collectionName: 'orders',
     created: o.createdAt.toISOString(),
     updated: o.updatedAt.toISOString(),
     orderId: o.orderId,

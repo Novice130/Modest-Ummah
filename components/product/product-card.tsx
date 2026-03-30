@@ -20,18 +20,7 @@ interface ProductCardProps {
 function getProductImageSrc(product: Product): string | null {
   const firstImage = product.images?.[0];
   if (!firstImage) return null;
-  
-  // If it's already a full URL (http/https/blob), use as-is
-  if (firstImage.startsWith('http') || firstImage.startsWith('blob:') || firstImage.startsWith('/')) {
-    return firstImage;
-  }
-  
-  // Otherwise use getImageUrl fallback
-  if (product.collectionId && product.id) {
-    return getImageUrl(product.collectionId, product.id, firstImage);
-  }
-  
-  return null;
+  return getImageUrl(firstImage);
 }
 
 export default function ProductCard({ product, index = 0 }: ProductCardProps) {

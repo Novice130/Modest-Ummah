@@ -131,17 +131,12 @@ export default function ProductEditor({ initialData }: ProductEditorProps) {
 
   // Get image URL for display
   const getDisplayImageUrl = (image: string) => {
-    if (initialData?.id && initialData?.collectionId) {
-      return getImageUrl(initialData.collectionId, initialData.id, image);
-    }
-    return '/placeholder.jpg';
+    return getImageUrl(image) || '/placeholder.jpg';
   };
 
   // Construct preview images - combine existing URLs and new uploads (blob URLs)
   const getPreviewImageUrls = (): string[] => {
-    const existingImageUrls = (initialData?.id && initialData?.collectionId)
-      ? formData.images.map(img => getImageUrl(initialData.collectionId, initialData.id, img))
-      : [];
+    const existingImageUrls = formData.images.map(img => getImageUrl(img));
     const newUploadUrls = previewImages;
     return [...existingImageUrls, ...newUploadUrls];
   };
@@ -150,8 +145,6 @@ export default function ProductEditor({ initialData }: ProductEditorProps) {
   const previewProduct: Product = {
     ...formData,
     id: initialData?.id || 'preview',
-    collectionId: initialData?.collectionId || 'products',
-    collectionName: 'products',
     created: new Date().toISOString(),
     updated: new Date().toISOString(),
     // Use actual preview URLs for images (both existing and newly uploaded)

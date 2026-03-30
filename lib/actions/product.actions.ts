@@ -8,8 +8,6 @@ import type { Product } from '@/types';
 function mapProduct(p: any): Product {
   return {
     id: p.id,
-    collectionId: 'products',
-    collectionName: 'products',
     created: p.createdAt.toISOString(),
     updated: p.updatedAt.toISOString(),
     name: p.name,

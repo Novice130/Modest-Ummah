@@ -34,11 +34,9 @@ export function truncate(text: string, length: number): string {
   return text.substring(0, length) + '...';
 }
 
-export function getImageUrl(collectionId: string, recordId: string, fileName: string, thumb?: string): string {
+export function getImageUrl(fileName: string): string {
   if (!fileName) return '';
-  // Images are now stored as full URLs in the database
   if (fileName.startsWith('http') || fileName.startsWith('/')) return fileName;
-  // Fallback for any legacy PocketBase references
   return `/uploads/${fileName}`;
 }
 

@@ -91,8 +91,6 @@ export async function signInAction(email: string, password: string) {
   return {
     ...safeUser,
     id: user.id,
-    collectionId: 'users',
-    collectionName: 'users',
     created: user.createdAt.toISOString(),
     updated: user.updatedAt.toISOString(),
   };
@@ -150,8 +148,6 @@ export async function signUpAction(email: string, password: string, name: string
   return {
     ...safeUser,
     id: user.id,
-    collectionId: 'users',
-    collectionName: 'users',
     created: user.createdAt.toISOString(),
     updated: user.updatedAt.toISOString(),
   };

@@ -9,8 +9,6 @@ import type { Product } from '@/types';
 const fallbackProducts: Product[] = [
   {
     id: '1',
-    collectionId: 'products',
-    collectionName: 'products',
     created: new Date().toISOString(),
     updated: new Date().toISOString(),
     name: 'Premium White Thobe',
@@ -33,8 +31,6 @@ const fallbackProducts: Product[] = [
   },
   {
     id: '2',
-    collectionId: 'products',
-    collectionName: 'products',
     created: new Date().toISOString(),
     updated: new Date().toISOString(),
     name: 'Elegant Black Abaya',
@@ -56,8 +52,6 @@ const fallbackProducts: Product[] = [
   },
   {
     id: '3',
-    collectionId: 'products',
-    collectionName: 'products',
     created: new Date().toISOString(),
     updated: new Date().toISOString(),
     name: 'Premium Hijab Set',
@@ -83,8 +77,6 @@ const fallbackProducts: Product[] = [
   },
   {
     id: '4',
-    collectionId: 'products',
-    collectionName: 'products',
     created: new Date().toISOString(),
     updated: new Date().toISOString(),
     name: 'Natural Miswak (5 Pack)',
@@ -106,8 +98,6 @@ const fallbackProducts: Product[] = [
   },
   {
     id: '5',
-    collectionId: 'products',
-    collectionName: 'products',
     created: new Date().toISOString(),
     updated: new Date().toISOString(),
     name: 'Embroidered Kufi Cap',
@@ -132,8 +122,6 @@ const fallbackProducts: Product[] = [
   },
   {
     id: '6',
-    collectionId: 'products',
-    collectionName: 'products',
     created: new Date().toISOString(),
     updated: new Date().toISOString(),
     name: 'Arabian Oud Attar',
@@ -155,8 +143,6 @@ const fallbackProducts: Product[] = [
   },
   {
     id: '7',
-    collectionId: 'products',
-    collectionName: 'products',
     created: new Date().toISOString(),
     updated: new Date().toISOString(),
     name: 'Navy Moroccan Kurta',
@@ -178,8 +164,6 @@ const fallbackProducts: Product[] = [
   },
   {
     id: '8',
-    collectionId: 'products',
-    collectionName: 'products',
     created: new Date().toISOString(),
     updated: new Date().toISOString(),
     name: 'Sage Khimar Set',

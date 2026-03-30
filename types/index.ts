@@ -1,8 +1,6 @@
 // Product types
 export interface Product {
   id: string;
-  collectionId: string;
-  collectionName: string;
   created: string;
   updated: string;
   name: string;
@@ -35,8 +33,6 @@ export interface ProductColor {
 // User types
 export interface User {
   id: string;
-  collectionId: string;
-  collectionName: string;
   created: string;
   updated: string;
   email: string;
@@ -48,8 +44,6 @@ export interface User {
 // Admin types
 export interface Admin {
   id: string;
-  collectionId: string;
-  collectionName: string;
   created: string;
   updated: string;
   email: string;
@@ -70,8 +64,6 @@ export interface CartItem {
 
 export interface Cart {
   id: string;
-  collectionId: string;
-  collectionName: string;
   created: string;
   updated: string;
   user: string;
@@ -84,8 +76,6 @@ export type PaymentStatus = 'pending' | 'paid' | 'failed' | 'refunded' | 'partia
 
 export interface Order {
   id: string;
-  collectionId: string;
-  collectionName: string;
   created: string;
   updated: string;
   orderId: string;

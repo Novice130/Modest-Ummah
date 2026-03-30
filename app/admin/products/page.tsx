@@ -125,7 +125,7 @@ export default function AdminProductsPage() {
                     <div className="relative w-10 h-10 rounded-md overflow-hidden bg-muted">
                       {product.images?.[0] && (
                         <Image
-                          src={getImageUrl(product.collectionId, product.id, product.images[0])}
+                          src={getImageUrl(product.images[0])}
                           alt={product.name}
                           fill
                           className="object-cover"

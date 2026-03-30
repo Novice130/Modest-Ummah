@@ -88,7 +88,7 @@ function OrderDetailsContent() {
     if (!confirm(`Mark order as ${newStatus}?`)) return;
     
     try {
-      // Cast newStatus to match the union type required by PocketBase types
+      // Cast newStatus to match the union type
       await updateOrderAction(order.id, { status: newStatus as any });
       setOrder({ ...order, status: newStatus as any });
     } catch(e) {

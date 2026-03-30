@@ -22,11 +22,6 @@ export default function AdminLoginPage() {
     setError('');
 
     try {
-      // Clear any existing admin session first
-      const { getAdminPocketBase } = await import('@/lib/api');
-      const adminPb = getAdminPocketBase();
-      adminPb.authStore.clear();
-      
       await adminSignIn(email, password);
       router.push('/admin/dashboard');
     } catch (err) {

@@ -52,8 +52,6 @@ export async function POST(request: NextRequest) {
       record: {
         ...safeUser,
         id: user.id,
-        collectionId: 'users',
-        collectionName: 'users',
         created: user.createdAt.toISOString(),
         updated: user.updatedAt.toISOString(),
       },

@@ -6,7 +6,6 @@ import { like, or, desc, count, sum, eq } from 'drizzle-orm';
 
 /**
  * Generic data API route for client-side collection queries.
- * This replaces the PocketBase SDK's collection().getList() pattern.
  */
 export async function GET(request: NextRequest) {
   const auth = await getAuthFromRequest(request, true);

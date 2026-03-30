@@ -10,8 +10,6 @@ export default async function ProductRecommendations({ product }: ProductRecomme
   const relatedProducts: Product[] = [
     {
       id: '2',
-      collectionId: 'products',
-      collectionName: 'products',
       created: new Date().toISOString(),
       updated: new Date().toISOString(),
       name: 'Classic Beige Thobe',
@@ -33,8 +31,6 @@ export default async function ProductRecommendations({ product }: ProductRecomme
     },
     {
       id: '3',
-      collectionId: 'products',
-      collectionName: 'products',
       created: new Date().toISOString(),
       updated: new Date().toISOString(),
       name: 'Navy Moroccan Thobe',
@@ -57,8 +53,6 @@ export default async function ProductRecommendations({ product }: ProductRecomme
     },
     {
       id: '4',
-      collectionId: 'products',
-      collectionName: 'products',
       created: new Date().toISOString(),
       updated: new Date().toISOString(),
       name: 'Premium Kufi Cap',
@@ -80,8 +74,6 @@ export default async function ProductRecommendations({ product }: ProductRecomme
     },
     {
       id: '5',
-      collectionId: 'products',
-      collectionName: 'products',
       created: new Date().toISOString(),
       updated: new Date().toISOString(),
       name: 'Arabian Oud Attar',

@@ -15,8 +15,6 @@ import { cn } from '@/lib/utils';
 interface ProductGalleryProps {
   images: string[];
   name: string;
-  productId?: string;
-  collectionId?: string;
 }
 
 // Helper to resolve image URLs (images are now stored as full URLs)
@@ -32,7 +30,7 @@ function isBlobUrl(url: string): boolean {
   return url.startsWith('blob:');
 }
 
-export default function ProductGallery({ images, name, productId, collectionId }: ProductGalleryProps) {
+export default function ProductGallery({ images, name }: ProductGalleryProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [emblaRef, emblaApi] = useEmblaCarousel({ loop: true });
 

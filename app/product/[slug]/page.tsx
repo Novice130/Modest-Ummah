@@ -99,7 +99,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
 
         {/* Product Layout */}
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-12">
-          <ProductGallery images={product.images} name={product.name} productId={product.id} collectionId={product.collectionId} />
+          <ProductGallery images={product.images} name={product.name} />
           <ProductInfo product={product} />
         </div>
 

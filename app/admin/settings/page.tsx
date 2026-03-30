@@ -15,7 +15,7 @@ export default function AdminSettingsPage() {
 
   const handleSave = async () => {
     setSaving(true);
-    // Placeholder - in a real app, save to PocketBase or env
+    // Placeholder - not persisted yet
     await new Promise(r => setTimeout(r, 500));
     alert('Settings saved! (Placeholder - not persisted)');
     setSaving(false);

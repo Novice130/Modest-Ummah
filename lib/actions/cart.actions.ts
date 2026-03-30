@@ -9,8 +9,6 @@ import { getSession } from './auth.actions';
 function mapCart(c: any): Cart {
   return {
     id: c.id,
-    collectionId: 'carts',
-    collectionName: 'carts',
     created: c.createdAt.toISOString(),
     updated: c.updatedAt.toISOString(),
     user: c.userId,

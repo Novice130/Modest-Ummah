@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { getDb } from '@/lib/db';
 import {
   Table,
   TableBody,
@@ -12,7 +11,6 @@ import {
 } from '@/components/ui/table';
 import { Loader2, Search, Users } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
-import { getAllOrders } from '@/lib/api';
 
 interface CustomerData {
   id: string;
