@@ -797,8 +797,8 @@ export async function createProduct(data: FormData) {
       colors: productData.colors || [],
       sizes: productData.sizes || [],
       tags: productData.tags || [],
-      featured: productData.featured === 'true' || productData.featured === true,
-      inStock: productData.inStock !== 'false',
+      featured: String(productData.featured) === 'true',
+      inStock: String(productData.inStock) !== 'false',
       stockQuantity: parseInt(productData.stockQuantity || '0', 10),
       sku: productData.sku || '',
       weight: productData.weight ? String(productData.weight) : null,
@@ -828,7 +828,7 @@ export async function updateProduct(id: string, data: FormData) {
     } else if (key === 'price' || key === 'compareAtPrice' || key === 'weight') {
       updateData[key] = value ? String(value) : null;
     } else if (key === 'featured' || key === 'inStock') {
-      updateData[key] = value === 'true' || value === true;
+      updateData[key] = String(value) === 'true';
     } else if (key === 'stockQuantity') {
       updateData[key] = parseInt(value as string, 10);
     } else {
