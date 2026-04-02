@@ -49,8 +49,11 @@ export default function AdminNav() {
   return (
     <div className="flex flex-col h-full border-r bg-background">
       <div className="p-6">
-        <Link href="/" className="flex items-center gap-2 font-heading font-bold text-xl">
-          <span className="text-primary">Modest</span> Ummah
+        <Link href="/" className="flex items-center gap-2">
+          <img src="/images/logo.png" alt="Modest Ummah" className="h-8 w-auto" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} />
+          <span className="font-heading font-bold text-xl hidden">
+            <span className="text-primary">Modest</span> Ummah
+          </span>
         </Link>
       </div>
 
