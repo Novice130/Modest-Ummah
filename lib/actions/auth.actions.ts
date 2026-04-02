@@ -68,87 +68,102 @@ export async function setSession(token: string, isAdmin = false) {
 import { verifyPassword, createToken, hashPassword } from '@/lib/auth';
 
 export async function signInAction(email: string, password: string) {
-  if (!email || !password) throw new Error('Email and password are required');
+  if (!email || !password) return { error: 'Email and password are required' };
 
-  const db = getDb();
-  const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
+  try {
+    const db = getDb();
+    const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
 
-  if (!user) throw new Error('Invalid email or password.');
+    if (!user) return { error: 'Invalid email or password.' };
 
-  const valid = await verifyPassword(password, user.passwordHash);
-  if (!valid) throw new Error('Invalid email or password.');
+    const valid = await verifyPassword(password, user.passwordHash);
+    if (!valid) return { error: 'Invalid email or password.' };
 
-  const token = await createToken({
-    sub: user.id,
-    email: user.email,
-    name: user.name || '',
-    type: 'user',
-  });
+    const token = await createToken({
+      sub: user.id,
+      email: user.email,
+      name: user.name || '',
+      type: 'user',
+    });
 
-  await setSession(token, false);
+    await setSession(token, false);
 
-  const { passwordHash: _, ...safeUser } = user;
-  return {
-    ...safeUser,
-    id: user.id,
-    created: user.createdAt.toISOString(),
-    updated: user.updatedAt.toISOString(),
-  };
+    const { passwordHash: _, ...safeUser } = user;
+    return {
+      ...safeUser,
+      id: user.id,
+      created: user.createdAt.toISOString(),
+      updated: user.updatedAt.toISOString(),
+    };
+  } catch (e) {
+    console.error('signInAction error:', e);
+    return { error: 'Something went wrong. Please try again.' };
+  }
 }
 
 export async function adminSignInAction(email: string, password: string) {
-  if (!email || !password) throw new Error('Email and password required');
+  if (!email || !password) return { error: 'Email and password required' };
 
-  const db = getDb();
-  const [admin] = await db.select().from(admins).where(eq(admins.email, email)).limit(1);
+  try {
+    const db = getDb();
+    const [admin] = await db.select().from(admins).where(eq(admins.email, email)).limit(1);
 
-  if (!admin) throw new Error('Invalid credentials');
+    if (!admin) return { error: 'Invalid credentials' };
 
-  const valid = await verifyPassword(password, admin.passwordHash);
-  if (!valid) throw new Error('Invalid credentials');
+    const valid = await verifyPassword(password, admin.passwordHash);
+    if (!valid) return { error: 'Invalid credentials' };
 
-  const token = await createToken({
-    sub: admin.id,
-    email: admin.email,
-    name: admin.name || '',
-    type: 'admin',
-  }, true);
+    const token = await createToken({
+      sub: admin.id,
+      email: admin.email,
+      name: admin.name || '',
+      type: 'admin',
+    }, true);
 
-  await setSession(token, true);
+    await setSession(token, true);
 
-  return { id: admin.id, email: admin.email, name: admin.name || '' };
+    return { id: admin.id, email: admin.email, name: admin.name || '' };
+  } catch (e) {
+    console.error('adminSignInAction error:', e);
+    return { error: 'Something went wrong. Please try again.' };
+  }
 }
 
 export async function signUpAction(email: string, password: string, name: string) {
-  if (!email || !password || !name) throw new Error('All fields are required');
+  if (!email || !password || !name) return { error: 'All fields are required' };
 
-  const db = getDb();
-  const [existingUser] = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
+  try {
+    const db = getDb();
+    const [existingUser] = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
 
-  if (existingUser) throw new Error('User already exists');
+    if (existingUser) return { error: 'An account with this email already exists' };
 
-  const hashedPassword = await hashPassword(password);
-  
-  const [user] = await db.insert(users).values({
-    email: email.toLowerCase(),
-    passwordHash: hashedPassword,
-    name,
-  }).returning();
+    const hashedPassword = await hashPassword(password);
 
-  const token = await createToken({
-    sub: user.id,
-    email: user.email,
-    name: user.name || '',
-    type: 'user',
-  });
+    const [user] = await db.insert(users).values({
+      email: email.toLowerCase(),
+      passwordHash: hashedPassword,
+      name,
+    }).returning();
 
-  await setSession(token, false);
+    const token = await createToken({
+      sub: user.id,
+      email: user.email,
+      name: user.name || '',
+      type: 'user',
+    });
 
-  const { passwordHash: _, ...safeUser } = user;
-  return {
-    ...safeUser,
-    id: user.id,
-    created: user.createdAt.toISOString(),
-    updated: user.updatedAt.toISOString(),
-  };
+    await setSession(token, false);
+
+    const { passwordHash: _, ...safeUser } = user;
+    return {
+      ...safeUser,
+      id: user.id,
+      created: user.createdAt.toISOString(),
+      updated: user.updatedAt.toISOString(),
+    };
+  } catch (e) {
+    console.error('signUpAction error:', e);
+    return { error: 'Something went wrong. Please try again.' };
+  }
 }

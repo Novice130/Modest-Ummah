@@ -91,7 +91,7 @@ export async function signInWithGoogle(): Promise<{ record: { id: string; email:
   return new Promise(() => {});
 }
 
-export async function adminSignIn(email: string, password: string) {
+export async function adminSignIn(email: string, password: string): Promise<{ id: string; email: string; name: string } | { error: string }> {
   return adminSignInAction(email, password);
 }
 

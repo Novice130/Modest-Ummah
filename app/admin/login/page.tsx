@@ -22,11 +22,18 @@ export default function AdminLoginPage() {
     setError('');
 
     try {
-      await adminSignIn(email, password);
-      router.push('/admin/dashboard');
+      const result = await adminSignIn(email, password);
+
+      if (result && 'error' in result) {
+        setError(result.error);
+        setLoading(false);
+        return;
+      }
+
+      router.push('/admin');
     } catch (err) {
       console.error(err);
-      setError('Invalid admin credentials');
+      setError('Something went wrong. Please try again.');
     } finally {
       if (window.location.pathname === '/admin/login') {
          setLoading(false);

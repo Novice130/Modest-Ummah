@@ -43,24 +43,33 @@ export default function LoginForm() {
   const onSubmit = async (data: LoginFormData) => {
     setIsLoading(true);
     try {
-      const authRecord = await signInAction(data.email, data.password);
-      setUser(authRecord as any);
-      
+      const result = await signInAction(data.email, data.password);
+
+      if ('error' in result) {
+        toast({
+          title: 'Sign in failed',
+          description: result.error,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setUser(result as any);
+
       // Sync cart with server
-      await syncWithServer(authRecord.id);
+      await syncWithServer(result.id);
 
       toast({
         title: 'Welcome back!',
         description: 'You have successfully signed in.',
       });
 
-      // Crucial: Use router.refresh() to ensure root layout fetches new server cookies and passes them implicitly!
       router.refresh();
       router.push('/account');
     } catch (error: any) {
       toast({
         title: 'Sign in failed',
-        description: error.message || 'Invalid email or password.',
+        description: 'Something went wrong. Please try again.',
         variant: 'destructive',
       });
     } finally {

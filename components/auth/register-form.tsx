@@ -58,20 +58,30 @@ export default function RegisterForm() {
   const onSubmit = async (data: RegisterFormData) => {
     setIsLoading(true);
     try {
-      const user = await signUpAction(data.email, data.password, data.name);
-      setUser(user as any);
+      const result = await signUpAction(data.email, data.password, data.name);
+
+      if ('error' in result) {
+        toast({
+          title: 'Registration failed',
+          description: result.error,
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      setUser(result as any);
 
       toast({
         title: 'Account created!',
-        description: 'Welcome to Modest Ummah. Please check your email to verify your account.',
+        description: 'Welcome to Modest Ummah.',
       });
-      
+
       router.refresh();
       router.push('/account');
     } catch (error: any) {
       toast({
         title: 'Registration failed',
-        description: error.message || 'Could not create account. Please try again.',
+        description: 'Something went wrong. Please try again.',
         variant: 'destructive',
       });
     } finally {
