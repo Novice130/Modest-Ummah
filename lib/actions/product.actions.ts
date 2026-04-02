@@ -175,7 +175,14 @@ export async function deleteProductAction(id: string) {
 
 export async function fetchProductBySlugOrId(idOrSlug: string): Promise<Product | null> {
   const db = getDb();
-  let [result] = await db.select().from(products).where(eq(products.id, idOrSlug)).limit(1);
+
+  // UUID v4 pattern check — only query by ID if it looks like a UUID
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
+
+  let result;
+  if (isUUID) {
+    [result] = await db.select().from(products).where(eq(products.id, idOrSlug)).limit(1);
+  }
   if (!result) {
     [result] = await db.select().from(products).where(eq(products.slug, idOrSlug)).limit(1);
   }

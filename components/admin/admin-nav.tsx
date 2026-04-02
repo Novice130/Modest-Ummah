@@ -47,7 +47,7 @@ export default function AdminNav() {
   };
 
   return (
-    <div className="flex flex-col h-full border-r bg-muted/20">
+    <div className="flex flex-col h-full border-r bg-background">
       <div className="p-6">
         <Link href="/" className="flex items-center gap-2 font-heading font-bold text-xl">
           <span className="text-primary">Modest</span> Ummah

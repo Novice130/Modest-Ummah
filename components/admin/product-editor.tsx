@@ -200,12 +200,15 @@ export default function ProductEditor({ initialData }: ProductEditorProps) {
       data.append('colors', JSON.stringify(formData.colors));
       data.append('sizes', JSON.stringify(formData.sizes));
       data.append('tags', JSON.stringify(formData.tags));
-      
+
+      // Send existing image URLs so they're preserved
+      data.append('images', JSON.stringify(formData.images));
+
       // Auto-generate slug if missing
       const slug = formData.slug || formData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-');
       data.append('slug', slug);
 
-      // Handle Image File Uploads
+      // Handle Image File Uploads (appended separately as File objects)
       if (formData.imageFiles && formData.imageFiles.length > 0) {
         for (const file of formData.imageFiles) {
           data.append('images', file);

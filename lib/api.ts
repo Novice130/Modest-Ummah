@@ -27,22 +27,56 @@ export async function getAllProducts(
 }
 
 export async function createProduct(data: FormData) {
+  // Upload image files first if any
+  const imageFiles: File[] = [];
   const plain: Record<string, any> = {};
+
   data.forEach((value, key) => {
-    if (typeof value === 'string') {
+    if (key === 'images' && value instanceof File) {
+      imageFiles.push(value);
+    } else if (typeof value === 'string') {
       plain[key] = value;
     }
   });
+
+  if (imageFiles.length > 0) {
+    const uploadForm = new FormData();
+    imageFiles.forEach(f => uploadForm.append('files', f));
+    const res = await fetch('/api/upload', { method: 'POST', body: uploadForm });
+    if (res.ok) {
+      const { urls } = await res.json();
+      // Merge with any existing image URLs
+      const existing = plain.images ? JSON.parse(plain.images) : [];
+      plain.images = JSON.stringify([...existing, ...urls]);
+    }
+  }
+
   return createProductAction(plain);
 }
 
 export async function updateProduct(id: string, data: FormData) {
+  const imageFiles: File[] = [];
   const plain: Record<string, any> = {};
+
   data.forEach((value, key) => {
-    if (typeof value === 'string') {
+    if (key === 'images' && value instanceof File) {
+      imageFiles.push(value);
+    } else if (typeof value === 'string') {
       plain[key] = value;
     }
   });
+
+  if (imageFiles.length > 0) {
+    const uploadForm = new FormData();
+    imageFiles.forEach(f => uploadForm.append('files', f));
+    const res = await fetch('/api/upload', { method: 'POST', body: uploadForm });
+    if (res.ok) {
+      const { urls } = await res.json();
+      const existing = plain.images ? JSON.parse(plain.images) : [];
+      plain.images = JSON.stringify([...existing, ...urls]);
+    }
+  }
+
   return updateProductAction(id, plain);
 }
 
