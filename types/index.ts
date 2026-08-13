@@ -1,4 +1,9 @@
 // Product types
+export type ProductType = 'simple' | 'variable';
+export type ProductStatus = 'draft' | 'pending' | 'scheduled' | 'published';
+export type ProductVisibility = 'public' | 'hidden' | 'search_only';
+export type BackorderPolicy = 'no' | 'notify' | 'yes';
+
 export interface Product {
   id: string;
   created: string;
@@ -22,6 +27,26 @@ export interface Product {
   weight?: number;
   dimensions?: string;
   similarProducts: string[];
+  productType: ProductType;
+  status: ProductStatus;
+  visibility: ProductVisibility;
+  publishedAt?: string;
+  saleStartsAt?: string;
+  saleEndsAt?: string;
+  manageStock: boolean;
+  backorderPolicy: BackorderPolicy;
+  lowStockThreshold: number;
+  shippingClass?: string;
+  lengthIn?: number;
+  widthIn?: number;
+  heightIn?: number;
+  taxClass?: string;
+  metaTitle?: string;
+  metaDescription?: string;
+  ogImage?: string;
+  upsellIds: string[];
+  crossSellIds: string[];
+  imageAlts: Record<string, string>;
 }
 
 export interface ProductColor {
@@ -54,6 +79,7 @@ export interface Admin {
 // Cart types
 export interface CartItem {
   productId: string;
+  variantId?: string;
   name: string;
   price: number;
   quantity: number;

@@ -295,6 +295,7 @@ export default function CheckoutForm() {
           },
           items: items.map(item => ({
             productId: item.productId,
+            variantId: item.variantId,
             quantity: item.quantity,
             color: item.color,
             size: item.size,

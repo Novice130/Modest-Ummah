@@ -10,7 +10,7 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
   
   let product = null;
   try {
-     product = await fetchProductBySlugOrId(id);
+     product = await fetchProductBySlugOrId(id, true);
   } catch(e) {
      console.error(e);
   }

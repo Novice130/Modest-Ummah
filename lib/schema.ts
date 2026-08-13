@@ -29,6 +29,19 @@ export const paymentStatusEnum = pgEnum('payment_status', [
   'refunded',
   'partial',
 ]);
+export const productTypeEnum = pgEnum('product_type', ['simple', 'variable']);
+export const productStatusEnum = pgEnum('product_status', [
+  'draft',
+  'pending',
+  'scheduled',
+  'published',
+]);
+export const productVisibilityEnum = pgEnum('product_visibility', [
+  'public',
+  'hidden',
+  'search_only',
+]);
+export const backorderPolicyEnum = pgEnum('backorder_policy', ['no', 'notify', 'yes']);
 
 // ─── Users ──────────────────────────────────────────────
 export const users = pgTable(
@@ -88,6 +101,30 @@ export const products = pgTable(
     weight: decimal('weight', { precision: 8, scale: 2 }),
     dimensions: text('dimensions'),
     similarProducts: jsonb('similar_products').$type<string[]>().default([]),
+    // ─── WooCommerce parity columns ─────────────────────
+    // Defaults to 'published' so pre-migration rows stay live without a
+    // backfill UPDATE. The builder writes 'draft' explicitly for new
+    // drafts. published_at is set at the transition INTO 'published'.
+    productType: productTypeEnum('product_type').notNull().default('simple'),
+    status: productStatusEnum('status').notNull().default('published'),
+    visibility: productVisibilityEnum('visibility').notNull().default('public'),
+    publishedAt: timestamp('published_at'),
+    saleStartsAt: timestamp('sale_starts_at'),
+    saleEndsAt: timestamp('sale_ends_at'),
+    manageStock: boolean('manage_stock').default(true),
+    backorderPolicy: backorderPolicyEnum('backorder_policy').default('no'),
+    lowStockThreshold: integer('low_stock_threshold').default(5),
+    shippingClass: text('shipping_class'),
+    lengthIn: decimal('length_in', { precision: 8, scale: 2 }),
+    widthIn: decimal('width_in', { precision: 8, scale: 2 }),
+    heightIn: decimal('height_in', { precision: 8, scale: 2 }),
+    taxClass: text('tax_class'),
+    metaTitle: text('meta_title'),
+    metaDescription: text('meta_description'),
+    ogImage: text('og_image'),
+    upsellIds: jsonb('upsell_ids').$type<string[]>().default([]),
+    crossSellIds: jsonb('cross_sell_ids').$type<string[]>().default([]),
+    imageAlts: jsonb('image_alts').$type<Record<string, string>>().default({}),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -96,7 +133,81 @@ export const products = pgTable(
     index('idx_products_category').on(table.category),
     index('idx_products_featured').on(table.featured),
     index('idx_products_sku').on(table.sku),
+    // New Arrivals: published rows ordered by the moment they went live.
+    index('idx_products_status_published').on(table.status, table.publishedAt),
+    index('idx_products_featured_published').on(table.featured, table.publishedAt),
   ]
+);
+
+// ─── Product variants ───────────────────────────────────
+export const productVariants = pgTable(
+  'product_variants',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    sku: text('sku').notNull(),
+    attributes: jsonb('attributes').$type<Record<string, string>>().notNull(),
+    price: decimal('price', { precision: 10, scale: 2 }),
+    compareAtPrice: decimal('compare_at_price', { precision: 10, scale: 2 }),
+    stockQuantity: integer('stock_quantity').default(0),
+    inStock: boolean('in_stock').default(true),
+    image: text('image'),
+    weight: decimal('weight', { precision: 8, scale: 2 }),
+    position: integer('position').default(0),
+  },
+  (table) => [
+    uniqueIndex('idx_variants_sku').on(table.sku),
+    index('idx_variants_product').on(table.productId),
+  ]
+);
+
+// ─── Categories (replaces the hardcoded 3-value enum) ────
+export const categories = pgTable(
+  'categories',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    parentId: uuid('parent_id').references((): any => categories.id, { onDelete: 'cascade' }),
+    description: text('description').default(''),
+    image: text('image'),
+    position: integer('position').default(0),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_categories_slug').on(table.slug),
+    index('idx_categories_parent').on(table.parentId),
+  ]
+);
+
+// ─── Product attributes ─────────────────────────────────
+export const productAttributes = pgTable(
+  'product_attributes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    name: text('name').notNull(),
+    terms: jsonb('terms').$type<string[]>().notNull().default([]),
+    usedForVariations: boolean('used_for_variations').default(false),
+    position: integer('position').default(0),
+  },
+  (table) => [
+    index('idx_attributes_product').on(table.productId),
+  ]
+);
+
+// ─── Settings (single-row key/value) ────────────────────
+export const settings = pgTable(
+  'settings',
+  {
+    key: text('key').primaryKey(),
+    value: jsonb('value').notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  }
 );
 
 // ─── Orders ─────────────────────────────────────────────
@@ -177,6 +288,7 @@ export const adminLoginAttempts = pgTable(
 
 export interface OrderItem {
   productId: string;
+  variantId?: string;
   name: string;
   price: number;
   quantity: number;
@@ -201,6 +313,7 @@ export interface ShippingAddressDB {
 
 export interface CartItemDB {
   productId: string;
+  variantId?: string;
   name: string;
   price: number;
   quantity: number;
@@ -220,3 +333,11 @@ export type OrderSelect = typeof orders.$inferSelect;
 export type OrderInsert = typeof orders.$inferInsert;
 export type CartSelect = typeof carts.$inferSelect;
 export type CartInsert = typeof carts.$inferInsert;
+export type ProductVariantSelect = typeof productVariants.$inferSelect;
+export type ProductVariantInsert = typeof productVariants.$inferInsert;
+export type CategorySelect = typeof categories.$inferSelect;
+export type CategoryInsert = typeof categories.$inferInsert;
+export type ProductAttributeSelect = typeof productAttributes.$inferSelect;
+export type ProductAttributeInsert = typeof productAttributes.$inferInsert;
+export type SettingSelect = typeof settings.$inferSelect;
+export type SettingInsert = typeof settings.$inferInsert;

@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { products } from '@/lib/schema';
+import { products, productVariants } from '@/lib/schema';
 import { inArray } from 'drizzle-orm';
 import { getShippingRates, getFreeShippingInfo } from '@/lib/shipping';
 import { calculateTax } from '@/lib/taxcloud';
@@ -9,6 +9,7 @@ export const MAX_QTY = 99;
 
 export interface CheckoutItemInput {
   productId: string;
+  variantId?: string;
   quantity: number;
   color?: string;
   size?: string;
@@ -70,6 +71,20 @@ export async function resolveCheckoutOrder(input: {
     .where(inArray(products.id, productIds));
 
   const byId = new Map(rows.map((r) => [r.id, r]));
+
+  // Variant prices override the parent price. One query for all variants
+  // referenced by this cart.
+  const variantIds = [
+    ...new Set(items.map((i) => i.variantId).filter(Boolean)),
+  ] as string[];
+  const variantRows = variantIds.length
+    ? await db
+        .select()
+        .from(productVariants)
+        .where(inArray(productVariants.id, variantIds))
+    : [];
+  const variantById = new Map(variantRows.map((v) => [v.id, v]));
+
   const resolvedItems: OrderItem[] = [];
 
   for (const item of items) {
@@ -83,17 +98,38 @@ export async function resolveCheckoutOrder(input: {
     }
 
     const quantity = Math.min(item.quantity, MAX_QTY);
-    const price = round2(parseFloat(product.price as string) || 0);
+
+    let price: number;
+    let sku: string | undefined;
+    let image: string | undefined = item.image;
+    let variantId: string | undefined;
+
+    if (item.variantId) {
+      const variant = variantById.get(item.variantId);
+      if (!variant || variant.productId !== product.id) {
+        throw new Error('A product variant in your cart no longer exists');
+      }
+      price = variant.price !== null && variant.price !== undefined
+        ? parseFloat(variant.price as string)
+        : parseFloat(product.price as string);
+      sku = variant.sku;
+      image = variant.image || item.image;
+      variantId = variant.id;
+    } else {
+      price = parseFloat(product.price as string);
+      sku = product.sku || undefined;
+    }
 
     resolvedItems.push({
       productId: product.id,
+      variantId,
       name: product.name,
-      price,
+      price: round2(price || 0),
       quantity,
       color: item.color,
       size: item.size,
-      image: item.image,
-      sku: product.sku || undefined,
+      image,
+      sku,
     });
   }
 
@@ -142,7 +178,7 @@ export async function resolveCheckoutOrder(input: {
     items: resolvedItems.map((item) => {
       const product = byId.get(item.productId)!;
       return {
-        id: item.productId,
+        id: item.variantId || item.productId,
         price: item.price,
         quantity: item.quantity,
         category: product.category,

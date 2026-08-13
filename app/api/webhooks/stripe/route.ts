@@ -6,6 +6,7 @@ import Stripe from 'stripe';
 import { getDb } from '@/lib/db';
 import { orders, carts, stripeEvents } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
+import { decrementStock, restock } from '@/lib/inventory';
 import type { ShippingAddressDB, OrderItem } from '@/lib/schema';
 
 export async function POST(request: NextRequest) {
@@ -77,6 +78,11 @@ export async function POST(request: NextRequest) {
           const items = (existingOrder.items || []) as OrderItem[];
           const shippingAddress = existingOrder.shippingAddress as ShippingAddressDB;
           const email = existingOrder.email;
+
+          // Decrement stock on payment success. Oversells are logged, not
+          // fatal — the customer has already paid. stripe_events idempotency
+          // prevents a Stripe retry from double-decrementing.
+          await decrementStock(items);
 
           // Clear user's cart
           if (existingOrder.userId) {
@@ -186,6 +192,15 @@ export async function POST(request: NextRequest) {
             })
             .where(eq(orders.id, existingOrder.id));
           console.log('Order refund recorded');
+
+          // Full refunds restock. Partial refunds leave stock alone —
+          // without per-item refund quantities we cannot know what to
+          // restock safely.
+          if (charge.refunded) {
+            const items = (existingOrder.items || []) as OrderItem[];
+            await restock(items);
+            console.log('Stock restocked for order:', existingOrder.orderId);
+          }
         }
       } catch (error) {
         console.error('Error recording refund:', error);
