@@ -17,16 +17,18 @@ export async function POST(request: NextRequest) {
       userId,
       shipping,
       tax,
+      discount,
       shippingService,
+      couponCode,
     } = body;
 
     // Tampered or stale client totals must never reach Stripe. Rejecting
     // (rather than silently overwriting) keeps tampering visible in logs.
-    if (amount !== undefined || shipping !== undefined || tax !== undefined) {
+    if (amount !== undefined || shipping !== undefined || tax !== undefined || discount !== undefined) {
       return NextResponse.json(
         {
           error:
-            'Client-supplied totals are not accepted. Prices are resolved server-side.',
+            'Client-supplied totals are not accepted. Prices and discounts are resolved server-side.',
         },
         { status: 400 }
       );
@@ -43,6 +45,7 @@ export async function POST(request: NextRequest) {
       items,
       shippingAddress,
       shippingService,
+      couponCode: typeof couponCode === 'string' ? couponCode : null,
     });
 
     const address = normalizeShippingAddress(shippingAddress);
@@ -67,6 +70,8 @@ export async function POST(request: NextRequest) {
       shippingAddress: address as ShippingAddressDB,
       billingAddress: address as ShippingAddressDB,
       subtotal: String(resolved.subtotal),
+      discount: String(resolved.discount),
+      couponCode: resolved.couponCode,
       shipping: String(resolved.shipping),
       tax: String(resolved.tax),
       total: String(resolved.total),
@@ -89,6 +94,10 @@ export async function POST(request: NextRequest) {
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id,
       resolvedTotal: resolved.total,
+      resolvedSubtotal: resolved.subtotal,
+      resolvedDiscount: resolved.discount,
+      resolvedShipping: resolved.shipping,
+      resolvedTax: resolved.tax,
     });
   } catch (error: any) {
     console.error('Payment intent creation error:', error);

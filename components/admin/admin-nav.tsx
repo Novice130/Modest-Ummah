@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ShoppingBag, Package, Users, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Package, Users, Settings, LogOut, TicketPercent } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { clearSession } from '@/lib/actions/auth.actions';
@@ -23,6 +23,11 @@ const navItems = [
     title: 'Orders',
     href: '/admin/orders',
     icon: Package,
+  },
+  {
+    title: 'Coupons',
+    href: '/admin/coupons',
+    icon: TicketPercent,
   },
   {
     title: 'Customers',

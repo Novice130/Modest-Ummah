@@ -7,6 +7,7 @@ import { getDb } from '@/lib/db';
 import { orders, carts, stripeEvents } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
 import { decrementStock, restock } from '@/lib/inventory';
+import { recordCouponUsage } from '@/lib/coupons';
 import type { ShippingAddressDB, OrderItem } from '@/lib/schema';
 
 export async function POST(request: NextRequest) {
@@ -84,6 +85,12 @@ export async function POST(request: NextRequest) {
           // fatal — the customer has already paid. stripe_events idempotency
           // prevents a Stripe retry from double-decrementing.
           await decrementStock(items);
+
+          // Coupon usage counts on payment success. The stripe_events
+          // dedupe above guarantees a replayed webhook cannot double-count.
+          if (existingOrder.couponCode) {
+            await recordCouponUsage(existingOrder.couponCode);
+          }
 
           // Clear user's cart
           if (existingOrder.userId) {

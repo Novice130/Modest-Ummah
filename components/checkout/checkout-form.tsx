@@ -141,6 +141,11 @@ export default function CheckoutForm() {
   const [selectedShipping, setSelectedShipping] = useState<ShippingRate | null>(null);
   const [tax, setTax] = useState(0);
   const [serverTotal, setServerTotal] = useState<number | null>(null);
+  const [serverDiscount, setServerDiscount] = useState(0);
+  const [serverSubtotal, setServerSubtotal] = useState<number | null>(null);
+  const [serverShipping, setServerShipping] = useState<number | null>(null);
+  const [serverTax, setServerTax] = useState<number | null>(null);
+  const [couponCode, setCouponCode] = useState('');
   const [isCalculating, setIsCalculating] = useState(false);
   const [addressData, setAddressData] = useState<CheckoutFormData | null>(null);
 
@@ -302,10 +307,19 @@ export default function CheckoutForm() {
           })),
           userId: user?.id,
           shippingService: selectedShipping.service,
+          couponCode: couponCode.trim() || undefined,
         }),
       });
 
-      const { clientSecret, resolvedTotal, error } = await response.json();
+      const {
+        clientSecret,
+        resolvedTotal,
+        resolvedSubtotal,
+        resolvedDiscount,
+        resolvedShipping,
+        resolvedTax,
+        error,
+      } = await response.json();
       
       if (error) {
         throw new Error(error);
@@ -318,6 +332,10 @@ export default function CheckoutForm() {
       if (typeof resolvedTotal === 'number') {
         setServerTotal(resolvedTotal);
       }
+      if (typeof resolvedSubtotal === 'number') setServerSubtotal(resolvedSubtotal);
+      if (typeof resolvedDiscount === 'number') setServerDiscount(resolvedDiscount);
+      if (typeof resolvedShipping === 'number') setServerShipping(resolvedShipping);
+      if (typeof resolvedTax === 'number') setServerTax(resolvedTax);
 
       setClientSecret(clientSecret);
       setStep('payment');
@@ -497,6 +515,28 @@ export default function CheckoutForm() {
                     Save this information for next time
                   </Label>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Coupon — display only; the server resolves and validates it
+                against the database row before charging anything. */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Promo Code</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex gap-2">
+                  <Input
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value)}
+                    placeholder="Enter coupon code (optional)"
+                    className="flex-1 uppercase"
+                    aria-label="Coupon code"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Discounts are validated and applied at the final step.
+                </p>
               </CardContent>
             </Card>
 
@@ -690,17 +730,25 @@ export default function CheckoutForm() {
             <div className="border-t pt-4 space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Subtotal</span>
-                <span>{formatPrice(subtotal)}</span>
+                <span>{formatPrice(serverSubtotal ?? subtotal)}</span>
               </div>
+              {serverDiscount > 0 && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Discount{couponCode.trim() ? ` (${couponCode.trim().toUpperCase()})` : ''}
+                  </span>
+                  <span className="text-green-600">-{formatPrice(serverDiscount)}</span>
+                </div>
+              )}
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Shipping</span>
                 <span>
                   {step === 'info' ? (
                     <span className="text-muted-foreground">Calculated at next step</span>
-                  ) : shipping === 0 ? (
+                  ) : (serverShipping ?? shipping) === 0 ? (
                     <span className="text-green-600">Free</span>
                   ) : (
-                    formatPrice(shipping)
+                    formatPrice(serverShipping ?? shipping)
                   )}
                 </span>
               </div>
@@ -710,7 +758,7 @@ export default function CheckoutForm() {
                   {step === 'info' ? (
                     <span className="text-muted-foreground">Calculated at next step</span>
                   ) : (
-                    formatPrice(tax)
+                    formatPrice(serverTax ?? tax)
                   )}
                 </span>
               </div>

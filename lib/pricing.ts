@@ -3,6 +3,7 @@ import { products, productVariants } from '@/lib/schema';
 import { inArray } from 'drizzle-orm';
 import { getShippingRates, getFreeShippingInfo } from '@/lib/shipping';
 import { calculateTax } from '@/lib/taxcloud';
+import { evaluateCoupon } from '@/lib/coupons';
 import type { OrderItem, ShippingAddressDB } from '@/lib/schema';
 
 export const MAX_QTY = 99;
@@ -19,11 +20,13 @@ export interface CheckoutItemInput {
 export interface ResolvedOrder {
   items: OrderItem[];
   subtotal: number;
+  discount: number;
   shipping: number;
   tax: number;
   total: number;
   taxEstimate: number;
   shippingService: string;
+  couponCode: string | null;
 }
 
 function round2(n: number): number {
@@ -52,6 +55,7 @@ export async function resolveCheckoutOrder(input: {
   items: CheckoutItemInput[];
   shippingAddress: unknown;
   shippingService?: string | null;
+  couponCode?: string | null;
 }): Promise<ResolvedOrder> {
   const db = getDb();
 
@@ -137,6 +141,25 @@ export async function resolveCheckoutOrder(input: {
     resolvedItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
   );
 
+  // Coupon validation against the DB row: enabled, window, usage limit,
+  // min spend, and product/category eligibility. Discount comes from the
+  // resolved line items only — client-supplied discount values are ignored.
+  const coupon = await evaluateCoupon(
+    input.couponCode,
+    subtotal,
+    resolvedItems.map((item) => ({
+      productId: item.productId,
+      category: byId.get(item.productId)?.category || 'men',
+      price: item.price,
+      quantity: item.quantity,
+    }))
+  );
+  if (!coupon.ok) {
+    throw new Error(coupon.error || 'Invalid coupon');
+  }
+  const discount = round2(coupon.discount || 0);
+  const taxableSubtotal = Math.max(0, subtotal - discount);
+
   const address = normalizeShippingAddress(input.shippingAddress);
   if (!address.address1 || !address.city || !address.state || !address.postalCode) {
     throw new Error('Shipping address is incomplete');
@@ -169,7 +192,7 @@ export async function resolveCheckoutOrder(input: {
     ratesResult.rates.find((r) => r.service === input.shippingService) ||
     ratesResult.rates[0];
 
-  const freeShipping = getFreeShippingInfo(subtotal);
+  const freeShipping = getFreeShippingInfo(taxableSubtotal);
   const shipping = freeShipping.eligible
     ? 0
     : round2(selected?.rate ?? 9.99);
@@ -179,7 +202,9 @@ export async function resolveCheckoutOrder(input: {
       const product = byId.get(item.productId)!;
       return {
         id: item.variantId || item.productId,
-        price: item.price,
+        // Discount spread proportionally across line items so the tax
+        // lookup uses the true taxable price of each item.
+        price: subtotal > 0 ? round2(item.price * (taxableSubtotal / subtotal)) : item.price,
         quantity: item.quantity,
         category: product.category,
         subcategory: product.subcategory,
@@ -199,10 +224,12 @@ export async function resolveCheckoutOrder(input: {
   return {
     items: resolvedItems,
     subtotal,
+    discount,
     shipping,
     tax,
-    total: round2(subtotal + shipping + tax),
+    total: round2(taxableSubtotal + shipping + tax),
     taxEstimate: tax,
     shippingService: freeShipping.eligible ? 'standard' : (selected?.service || 'standard'),
+    couponCode: coupon.couponCode || null,
   };
 }

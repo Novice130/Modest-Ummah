@@ -42,6 +42,7 @@ export const productVisibilityEnum = pgEnum('product_visibility', [
   'search_only',
 ]);
 export const backorderPolicyEnum = pgEnum('backorder_policy', ['no', 'notify', 'yes']);
+export const couponTypeEnum = pgEnum('coupon_type', ['percentage', 'fixed']);
 
 // ─── Users ──────────────────────────────────────────────
 export const users = pgTable(
@@ -215,6 +216,30 @@ export const settings = pgTable(
   }
 );
 
+// ─── Coupons ─────────────────────────────────────────────
+export const coupons = pgTable(
+  'coupons',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    code: text('code').notNull(),
+    type: couponTypeEnum('type').notNull().default('percentage'),
+    amount: decimal('amount', { precision: 10, scale: 2 }).notNull().default('0'),
+    minSpend: decimal('min_spend', { precision: 10, scale: 2 }),
+    usageLimit: integer('usage_limit'),
+    usageCount: integer('usage_count').notNull().default(0),
+    expiresAt: timestamp('expires_at'),
+    startsAt: timestamp('starts_at'),
+    enabled: boolean('enabled').notNull().default(true),
+    productIds: jsonb('product_ids').$type<string[]>().default([]),
+    category: text('category'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_coupons_code').on(table.code),
+  ]
+);
+
 // ─── Orders ─────────────────────────────────────────────
 export const orders = pgTable(
   'orders',
@@ -237,6 +262,8 @@ export const orders = pgTable(
     shippingService: text('shipping_service'),
     trackingNumber: text('tracking_number'),
     trackingCarrier: text('tracking_carrier'),
+    couponCode: text('coupon_code'),
+    discount: decimal('discount', { precision: 10, scale: 2 }).notNull().default('0'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -348,3 +375,5 @@ export type ProductAttributeSelect = typeof productAttributes.$inferSelect;
 export type ProductAttributeInsert = typeof productAttributes.$inferInsert;
 export type SettingSelect = typeof settings.$inferSelect;
 export type SettingInsert = typeof settings.$inferInsert;
+export type CouponSelect = typeof coupons.$inferSelect;
+export type CouponInsert = typeof coupons.$inferInsert;
