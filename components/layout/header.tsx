@@ -122,10 +122,7 @@ export default function Header() {
 
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
-            <img src="/images/logo.png" alt="Modest Ummah" className="h-8 md:h-10 w-auto" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} />
-            <span className="font-heading text-xl md:text-2xl font-bold text-navy-900 dark:text-white hidden">
-              Modest Ummah
-            </span>
+            <img src="/images/logo.png" alt="Modest Ummah" className="h-8 md:h-10 w-auto" />
           </Link>
 
           {/* Desktop Navigation */}

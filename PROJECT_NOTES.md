@@ -377,7 +377,18 @@ JWT_SECRET=your-production-jwt-secret
 STRIPE_SECRET_KEY=sk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
+CRON_SECRET=random-string-shared-with-cron
 ```
+
+### Scheduled Publish Cron
+
+Route `app/api/cron/publish` flips `scheduled -> published` when `published_at`
+passes. Guarded by `x-cron-secret` header, value = `CRON_SECRET` env var.
+
+Dokploy UI: application -> Advanced -> Cron Jobs, add:
+
+- **Schedule**: `*/5 * * * *`
+- **Command**: `curl -fsS -H "x-cron-secret: <CRON_SECRET value>" https://modestummah.com/api/cron/publish`
 
 ### Deployment Process
 

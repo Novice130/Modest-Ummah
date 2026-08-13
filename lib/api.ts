@@ -9,11 +9,6 @@ import {
   adminSignInAction,
 } from '@/lib/actions/auth.actions';
 
-export async function signInWithGoogle(): Promise<{ record: { id: string; email: string; name: string } }> {
-  window.location.href = '/api/auth/google';
-  return new Promise(() => {});
-}
-
 export async function adminSignIn(email: string, password: string): Promise<{ id: string; email: string; name: string } | { error: string }> {
   return adminSignInAction(email, password);
 }

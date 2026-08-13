@@ -99,11 +99,11 @@ const faqCategories = [
     questions: [
       {
         question: 'How do I create an account?',
-        answer: 'Click "Sign In" in the top navigation and then "Create Account." You can register with your email or sign up with Google for faster checkout.',
+        answer: 'Click "Sign In" in the top navigation and then "Create Account." You can register with your email address.',
       },
       {
         question: 'I forgot my password. What do I do?',
-        answer: 'Click "Sign In" then "Forgot Password." Enter your email address and we\'ll send you a link to reset your password.',
+        answer: 'Email us at support@modestummah.com and we\'ll help you reset your password.',
       },
       {
         question: 'How can I contact customer support?',

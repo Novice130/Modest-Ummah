@@ -38,6 +38,11 @@ ENV NODE_ENV=production
 RUN groupadd --system --gid 1001 nodejs
 RUN useradd --system --uid 1001 nextjs
 
+# Upload volume — must exist and be owned by nextjs before USER switch,
+# otherwise the first named-volume mount inherits root ownership and
+# /api/upload cannot write.
+RUN mkdir -p /app/uploads && chown -R nextjs:nodejs /app/uploads
+
 # Copy built files
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./

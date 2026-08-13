@@ -127,7 +127,7 @@ export default function ProductCard({ product, index = 0 }: ProductCardProps) {
           </div>
 
           {/* Add to Cart Button */}
-          <div className="absolute bottom-3 left-3 right-3 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
+          <div className="absolute bottom-3 left-3 right-3 md:opacity-0 md:group-hover:opacity-100 transition-all md:translate-y-2 md:group-hover:translate-y-0">
             <Button
               onClick={handleAddToCart}
               className="w-full"

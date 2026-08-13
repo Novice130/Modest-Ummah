@@ -14,6 +14,32 @@ const ALLOWED_TYPES: Record<string, string> = {
   'image/avif': '.avif',
 };
 
+// Sniffs the actual MIME type from magic bytes. The client-supplied
+// Content-Type / file.type header is never trusted for the extension.
+function sniffImageType(buf: Buffer): string | null {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) {
+    return 'image/jpeg';
+  }
+  if (buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) {
+    return 'image/png';
+  }
+  if (
+    buf.length >= 12 &&
+    buf.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buf.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp';
+  }
+  if (
+    buf.length >= 12 &&
+    buf.subarray(4, 8).toString('ascii') === 'ftyp' &&
+    ['avif', 'avis'].includes(buf.subarray(8, 12).toString('ascii'))
+  ) {
+    return 'image/avif';
+  }
+  return null;
+}
+
 /**
  * Uploads live outside public/ so a redeploy never wipes them and the image
  * build cannot shadow them. In production the Dokploy volume mounts at
@@ -66,15 +92,16 @@ export async function POST(request: NextRequest) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    // Extension is derived from the sniffed MIME type, never from the
-    // user-supplied filename.
-    const ext = ALLOWED_TYPES[file.type];
-    if (!ext) {
+    // Extension derived from sniffed magic bytes, never from the
+    // user-supplied filename or the untrusted file.type header.
+    const sniffed = sniffImageType(buffer);
+    if (!sniffed) {
       return NextResponse.json(
-        { error: `Unsupported file type "${file.type}" for "${file.name}". Allowed: jpg, png, webp, avif.` },
+        { error: `Unsupported file type for "${file.name}". Allowed: jpg, png, webp, avif.` },
         { status: 400 }
       );
     }
+    const ext = ALLOWED_TYPES[sniffed];
 
     // Random filename — Date.now() collides on multi-file uploads in the
     // same millisecond.

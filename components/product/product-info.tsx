@@ -139,7 +139,6 @@ export default function ProductInfo({ product }: ProductInfoProps) {
               <span className="font-medium">Size:</span>
               {selectedSize && <span className="text-muted-foreground">{selectedSize}</span>}
             </div>
-            <button className="text-sm text-sage-600 hover:underline">Size Guide</button>
           </div>
           <div className="flex flex-wrap gap-2">
             {product.sizes.map((size) => (
