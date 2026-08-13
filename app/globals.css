@@ -1,5 +1,16 @@
 @import "tailwindcss";
 
+/* next-themes is configured with attribute="class" (app/layout.tsx), but
+   Tailwind v4 defaults the `dark:` variant to prefers-color-scheme. Without
+   this, the theme toggle swaps the tokens below while every `dark:` utility
+   in the app keeps following the OS setting. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Tailwind v4 does not read tailwind.config.ts unless @config is used, so the
+   animate plugin has to be registered here. Radix enter/exit animations
+   (animate-in, fade-in-0, zoom-in-95, slide-in-from-*) emit no CSS without it. */
+@plugin "tailwindcss-animate";
+
 /* Custom theme config (converted from tailwind.config.ts) */
 @theme {
   /* Brand Colors - Sage */

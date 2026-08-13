@@ -54,3 +54,6 @@ public/workbox-*.js
 # Logs
 logs
 *.log
+
+# Internal planning docs — not for the public repo
+IMPLEMENTATION_PLAN.md

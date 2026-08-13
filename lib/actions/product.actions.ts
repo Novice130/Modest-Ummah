@@ -1,9 +1,21 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { getDb } from '@/lib/db';
 import { products } from '@/lib/schema';
 import { eq, like, or, desc, and, count, sql } from 'drizzle-orm';
 import type { Product } from '@/types';
+
+/**
+ * The homepage is ISR (`export const revalidate = 3600` in app/page.tsx) and
+ * /shop/[category] is prerendered via generateStaticParams. Without this,
+ * a newly created or edited product stays invisible for up to an hour.
+ */
+function revalidateProductPaths(slug?: string) {
+  revalidatePath('/');
+  revalidatePath('/shop');
+  if (slug) revalidatePath(`/product/${slug}`);
+}
 
 function mapProduct(p: any): Product {
   return {
@@ -79,10 +91,14 @@ export async function fetchProducts({
 
   const where = conditions.length > 0 ? and(...conditions) : undefined;
   
+  // Accepts both the internal values ('price', '-price') and the values the
+  // shop UI emits ('price-asc', 'price-desc', 'newest'). Anything unrecognised
+  // falls back to newest-first.
   let orderBy = desc(products.createdAt);
-  if (sort === 'price') orderBy = sql`CAST(${products.price} AS NUMERIC) ASC` as any;
-  else if (sort === '-price') orderBy = sql`CAST(${products.price} AS NUMERIC) DESC` as any;
+  if (sort === 'price' || sort === 'price-asc') orderBy = sql`CAST(${products.price} AS NUMERIC) ASC` as any;
+  else if (sort === '-price' || sort === 'price-desc') orderBy = sql`CAST(${products.price} AS NUMERIC) DESC` as any;
   else if (sort === 'name') orderBy = sql`${products.name} ASC` as any;
+  else if (sort === 'newest') orderBy = desc(products.createdAt);
 
   const [countResult] = await db.select({ count: count() }).from(products).where(where);
   const items = await db.select().from(products).where(where).orderBy(orderBy).limit(limit).offset(offset);
@@ -131,6 +147,7 @@ export async function createProductAction(data: any) {
     sku: data.sku,
   }).returning();
 
+  revalidateProductPaths(created.slug);
   return mapProduct(created);
 }
 
@@ -161,6 +178,8 @@ export async function updateProductAction(id: string, data: any) {
 
   const [updated] = await db.update(products).set(updateData).where(eq(products.id, id)).returning();
   if (!updated) throw new Error('Product not found');
+
+  revalidateProductPaths(updated.slug);
   return mapProduct(updated);
 }
 
@@ -170,6 +189,7 @@ export async function deleteProductAction(id: string) {
 
   const db = getDb();
   const [deleted] = await db.delete(products).where(eq(products.id, id)).returning();
+  if (deleted) revalidateProductPaths(deleted.slug);
   return !!deleted;
 }
 
@@ -191,6 +211,22 @@ export async function fetchProductBySlugOrId(idOrSlug: string): Promise<Product 
 
 export async function fetchFeaturedProducts(category?: string) {
   return fetchProducts({ page: 1, limit: 8, featuredOnly: true, category });
+}
+
+/**
+ * Newest products first. Unlike fetchFeaturedProducts this applies no
+ * `featured` filter, so every product an admin creates lands here
+ * automatically without needing to be flagged.
+ */
+export async function fetchNewArrivals(limit = 8) {
+  const db = getDb();
+  const items = await db
+    .select()
+    .from(products)
+    .orderBy(desc(products.createdAt))
+    .limit(limit);
+
+  return items.map(mapProduct);
 }
 
 export async function fetchRelatedProducts(currentProductId: string, category: string, limit = 4) {

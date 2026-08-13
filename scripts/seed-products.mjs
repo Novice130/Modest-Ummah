@@ -1,6 +1,11 @@
 import { neon } from '@neondatabase/serverless';
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_SZvMx9f6AucU@ep-soft-truth-a840okl3-pooler.eastus2.azure.neon.tech/neondb?sslmode=require';
+const DATABASE_URL = process.env.DATABASE_URL;
+
+if (!DATABASE_URL) {
+  console.error('DATABASE_URL is not set. Run with: DATABASE_URL=... node scripts/seed-products.mjs');
+  process.exit(1);
+}
 
 const sql = neon(DATABASE_URL);
 

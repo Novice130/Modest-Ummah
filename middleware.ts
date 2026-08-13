@@ -1,9 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'modest-ummah-jwt-secret-change-in-production-2026'
-);
+// Duplicated from lib/auth.ts rather than imported: this runs in the edge
+// runtime and must not pull in bcryptjs.
+//
+// Resolved lazily — `next build` loads this file, and JWT_SECRET is a
+// runtime-only env var. No fallback: a known key lets anyone forge a token.
+let _jwtSecret: Uint8Array | null = null;
+
+function getJwtSecret(): Uint8Array {
+  if (!_jwtSecret) {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error(
+        'JWT_SECRET is not set. Generate one with `openssl rand -base64 32` ' +
+        'and add it to your deployment environment.'
+      );
+    }
+    _jwtSecret = new TextEncoder().encode(secret);
+  }
+  return _jwtSecret;
+}
 const JWT_ISSUER = 'modest-ummah';
 
 // Routes that require user authentication
@@ -15,7 +32,7 @@ const adminLoginRoute = '/admin/login';
 
 async function verifyJWT(token: string): Promise<{ sub: string; type: string } | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET, { issuer: JWT_ISSUER });
+    const { payload } = await jwtVerify(token, getJwtSecret(), { issuer: JWT_ISSUER });
     return payload as unknown as { sub: string; type: string };
   } catch {
     return null;

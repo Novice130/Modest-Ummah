@@ -1,9 +1,28 @@
 import bcrypt from 'bcryptjs';
 import { SignJWT, jwtVerify } from 'jose';
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || 'modest-ummah-jwt-secret-change-in-production-2026'
-);
+/**
+ * Resolved on first use, not at module load — `next build` imports this file
+ * while collecting page data, and the secret is a runtime-only env var.
+ *
+ * There is deliberately no fallback value: a known signing key would let
+ * anyone forge an admin token.
+ */
+let _jwtSecret: Uint8Array | null = null;
+
+function getJwtSecret(): Uint8Array {
+  if (!_jwtSecret) {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+      throw new Error(
+        'JWT_SECRET is not set. Generate one with `openssl rand -base64 32` ' +
+        'and add it to .env (and to your deployment environment).'
+      );
+    }
+    _jwtSecret = new TextEncoder().encode(secret);
+  }
+  return _jwtSecret;
+}
 const JWT_ISSUER = 'modest-ummah';
 const USER_TOKEN_EXPIRY = '7d';
 const ADMIN_TOKEN_EXPIRY = '24h';
@@ -39,12 +58,12 @@ export async function createToken(
     .setIssuedAt()
     .setIssuer(JWT_ISSUER)
     .setExpirationTime(isAdmin ? ADMIN_TOKEN_EXPIRY : USER_TOKEN_EXPIRY)
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 }
 
 export async function verifyToken(token: string): Promise<TokenPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET, {
+    const { payload } = await jwtVerify(token, getJwtSecret(), {
       issuer: JWT_ISSUER,
     });
     return payload as unknown as TokenPayload;

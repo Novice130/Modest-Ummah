@@ -1,14 +1,27 @@
 import { neon } from '@neondatabase/serverless';
 import bcrypt from 'bcryptjs';
 
-const DATABASE_URL = process.env.DATABASE_URL || 'postgresql://neondb_owner:npg_SZvMx9f6AucU@ep-soft-truth-a840okl3-pooler.eastus2.azure.neon.tech/neondb?sslmode=require';
+const DATABASE_URL = process.env.DATABASE_URL;
+
+if (!DATABASE_URL) {
+  console.error('DATABASE_URL is not set. Run with: DATABASE_URL=... node scripts/seed-admin.mjs');
+  process.exit(1);
+}
 
 const sql = neon(DATABASE_URL);
 
+const ADMIN_EMAIL = (process.env.ADMIN_EMAIL || 'admin@modestummah.com').toLowerCase();
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+if (!ADMIN_PASSWORD) {
+  console.error('ADMIN_PASSWORD is not set. Run with: ADMIN_PASSWORD=... node scripts/seed-admin.mjs');
+  process.exit(1);
+}
+
 async function seedAdmin() {
-  const email = 'admin@modestummah.com';
-  const password = 'ModestAdmin';
-  const name = 'Admin';
+  const email = ADMIN_EMAIL;
+  const password = ADMIN_PASSWORD;
+  const name = process.env.ADMIN_NAME || 'Admin';
 
   // Check if admin already exists
   const existing = await sql`SELECT id, email FROM admins WHERE email = ${email}`;
@@ -16,10 +29,15 @@ async function seedAdmin() {
   if (existing.length > 0) {
     console.log(`Admin already exists: ${existing[0].email} (id: ${existing[0].id})`);
 
-    // Update password anyway to ensure it matches
-    const hash = await bcrypt.hash(password, 12);
-    await sql`UPDATE admins SET password_hash = ${hash}, updated_at = NOW() WHERE email = ${email}`;
-    console.log('Password updated to "ModestAdmin"');
+    // Only reset the password when explicitly asked, so a routine re-run
+    // cannot silently change the live admin credential.
+    if (process.env.RESET_PASSWORD === 'true') {
+      const hash = await bcrypt.hash(password, 12);
+      await sql`UPDATE admins SET password_hash = ${hash}, updated_at = NOW() WHERE email = ${email}`;
+      console.log('Password reset for existing admin.');
+    } else {
+      console.log('Password left unchanged. Re-run with RESET_PASSWORD=true to reset it.');
+    }
     return;
   }
 

@@ -429,6 +429,30 @@ export default function ProductEditor({ initialData }: ProductEditorProps) {
                 </div>
               </div>
             </section>
+
+            <Separator />
+
+            {/* Visibility */}
+            <section className="space-y-4">
+              <h3 className="text-lg font-heading font-semibold">Visibility</h3>
+              <div className="flex items-center justify-between border p-4 rounded-md">
+                <div className="space-y-0.5">
+                  <Label htmlFor="featured">Featured product</Label>
+                  <p className="text-sm text-muted-foreground">
+                    Show in the &ldquo;Featured Products&rdquo; section on the homepage.
+                  </p>
+                </div>
+                <Switch
+                  id="featured"
+                  checked={formData.featured}
+                  onCheckedChange={(checked) => handleSwitchChange('featured', checked)}
+                />
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Every product appears under <strong>New Arrivals</strong> automatically,
+                newest first — no setting required.
+              </p>
+            </section>
           </div>
         </ScrollArea>
       </div>
