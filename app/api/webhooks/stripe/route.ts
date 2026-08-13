@@ -4,7 +4,7 @@ import { verifyWebhookSignature } from '@/lib/stripe';
 import { sendOrderConfirmation } from '@/lib/email';
 import Stripe from 'stripe';
 import { getDb } from '@/lib/db';
-import { orders, carts } from '@/lib/schema';
+import { orders, carts, stripeEvents } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
 import type { ShippingAddressDB, OrderItem } from '@/lib/schema';
 
@@ -33,6 +33,19 @@ export async function POST(request: NextRequest) {
   }
 
   const db = getDb();
+
+  // Idempotency: Stripe retries events for up to three days. Log each
+  // processed event id; skip anything we have already handled.
+  const [inserted] = await db
+    .insert(stripeEvents)
+    .values({ eventId: event.id, type: event.type })
+    .onConflictDoNothing()
+    .returning();
+
+  if (!inserted) {
+    console.log(`Duplicate webhook event skipped: ${event.id} (${event.type})`);
+    return NextResponse.json({ received: true });
+  }
 
   switch (event.type) {
     case 'payment_intent.succeeded': {

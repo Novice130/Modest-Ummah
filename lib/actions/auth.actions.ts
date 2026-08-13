@@ -1,11 +1,13 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import { headers } from 'next/headers';
 import { verifyToken, clearAuthCookie, createAuthCookie } from '@/lib/auth';
 import { getDb } from '@/lib/db';
 import { users, admins } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
 import type { TokenPayload } from '@/lib/auth';
+import { adminIsLocked, recordAdminAttempt } from '@/lib/admin-login-guard';
 
 export async function getSession(isAdmin = false) {
   const cookieName = isAdmin ? 'admin_token' : 'auth_token';
@@ -104,14 +106,31 @@ export async function signInAction(email: string, password: string) {
 export async function adminSignInAction(email: string, password: string) {
   if (!email || !password) return { error: 'Email and password required' };
 
-  try {
-    const db = getDb();
-    const [admin] = await db.select().from(admins).where(eq(admins.email, email)).limit(1);
+  const normalizedEmail = email.toLowerCase().trim();
+  const headersList = await headers();
+  const ip =
+    headersList.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    headersList.get('x-real-ip') ||
+    'unknown';
 
-    if (!admin) return { error: 'Invalid credentials' };
+  try {
+    if (await adminIsLocked(normalizedEmail, ip)) {
+      return { error: 'Too many failed attempts. Please try again later.' };
+    }
+
+    const db = getDb();
+    const [admin] = await db.select().from(admins).where(eq(admins.email, normalizedEmail)).limit(1);
+
+    if (!admin) {
+      await recordAdminAttempt(normalizedEmail, ip);
+      return { error: 'Invalid credentials' };
+    }
 
     const valid = await verifyPassword(password, admin.passwordHash);
-    if (!valid) return { error: 'Invalid credentials' };
+    if (!valid) {
+      await recordAdminAttempt(normalizedEmail, ip);
+      return { error: 'Invalid credentials' };
+    }
 
     const token = await createToken({
       sub: admin.id,

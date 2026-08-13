@@ -3,6 +3,15 @@ import { getDb } from '@/lib/db';
 import { admins } from '@/lib/schema';
 import { verifyPassword, createToken, createAuthCookie } from '@/lib/auth';
 import { eq } from 'drizzle-orm';
+import { adminIsLocked, recordAdminAttempt } from '@/lib/admin-login-guard';
+
+function clientIp(request: NextRequest): string {
+  return (
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    'unknown'
+  );
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -15,14 +24,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const normalizedEmail = email.toLowerCase().trim();
+    const ip = clientIp(request);
+
+    if (await adminIsLocked(normalizedEmail, ip)) {
+      return NextResponse.json(
+        { error: 'Too many failed attempts. Please try again later.' },
+        { status: 429 }
+      );
+    }
+
     const db = getDb();
     const [admin] = await db
       .select()
       .from(admins)
-      .where(eq(admins.email, email.toLowerCase()))
+      .where(eq(admins.email, normalizedEmail))
       .limit(1);
 
     if (!admin) {
+      await recordAdminAttempt(normalizedEmail, ip);
       return NextResponse.json(
         { error: 'Invalid admin credentials' },
         { status: 401 }
@@ -31,6 +51,7 @@ export async function POST(request: NextRequest) {
 
     const valid = await verifyPassword(password, admin.passwordHash);
     if (!valid) {
+      await recordAdminAttempt(normalizedEmail, ip);
       return NextResponse.json(
         { error: 'Invalid admin credentials' },
         { status: 401 }

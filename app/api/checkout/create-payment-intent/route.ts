@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createPaymentIntent } from '@/lib/stripe';
 import { getDb } from '@/lib/db';
 import { orders } from '@/lib/schema';
-import type { ShippingAddressDB, OrderItem } from '@/lib/schema';
+import { resolveCheckoutOrder, normalizeShippingAddress } from '@/lib/pricing';
+import type { ShippingAddressDB } from '@/lib/schema';
 
 export async function POST(request: NextRequest) {
   try {
@@ -19,44 +20,64 @@ export async function POST(request: NextRequest) {
       shippingService,
     } = body;
 
-    if (!amount || !orderId) {
+    // Tampered or stale client totals must never reach Stripe. Rejecting
+    // (rather than silently overwriting) keeps tampering visible in logs.
+    if (amount !== undefined || shipping !== undefined || tax !== undefined) {
+      return NextResponse.json(
+        {
+          error:
+            'Client-supplied totals are not accepted. Prices are resolved server-side.',
+        },
+        { status: 400 }
+      );
+    }
+
+    if (!orderId) {
       return NextResponse.json(
         { error: 'Missing required fields' },
         { status: 400 }
       );
     }
 
-    const subtotal = amount - (shipping || 0) - (tax || 0);
-    const db = getDb();
+    const resolved = await resolveCheckoutOrder({
+      items,
+      shippingAddress,
+      shippingService,
+    });
 
-    try {
-      await db.insert(orders).values({
-        orderId,
-        userId: userId || null,
-        email: customerEmail || shippingAddress?.email || '',
-        items: (items || []) as OrderItem[],
-        shippingAddress: (typeof shippingAddress === 'string'
-          ? JSON.parse(shippingAddress)
-          : shippingAddress || {}) as ShippingAddressDB,
-        billingAddress: (typeof shippingAddress === 'string'
-          ? JSON.parse(shippingAddress)
-          : shippingAddress || {}) as ShippingAddressDB,
-        subtotal: String(subtotal),
-        shipping: String(shipping || 0),
-        tax: String(tax || 0),
-        total: String(amount),
-        status: 'pending_payment',
-        paymentStatus: 'pending',
-        shippingService: shippingService || null,
-      });
-    } catch (dbError: any) {
-      console.error('Failed to create order in database:', dbError);
-      // Don't throw — allow Stripe creation to proceed
+    const address = normalizeShippingAddress(shippingAddress);
+    const email = customerEmail || address.email || '';
+
+    if (!email) {
+      return NextResponse.json(
+        { error: 'Customer email is required' },
+        { status: 400 }
+      );
     }
 
+    const db = getDb();
+
+    // The order row is created before payment; if this insert fails, the
+    // PaymentIntent must not be created (previously the failure was swallowed).
+    await db.insert(orders).values({
+      orderId,
+      userId: userId || null,
+      email,
+      items: resolved.items,
+      shippingAddress: address as ShippingAddressDB,
+      billingAddress: address as ShippingAddressDB,
+      subtotal: String(resolved.subtotal),
+      shipping: String(resolved.shipping),
+      tax: String(resolved.tax),
+      total: String(resolved.total),
+      status: 'pending_payment',
+      paymentStatus: 'pending',
+      shippingService: resolved.shippingService || null,
+    });
+
     const paymentIntent = await createPaymentIntent({
-      amount,
-      customerEmail,
+      amount: resolved.total,
+      customerEmail: email,
       metadata: {
         orderId,
         userId: userId || '',
@@ -67,6 +88,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id,
+      resolvedTotal: resolved.total,
     });
   } catch (error: any) {
     console.error('Payment intent creation error:', error);

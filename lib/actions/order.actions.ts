@@ -6,6 +6,32 @@ import { eq, desc, and, like, or, count } from 'drizzle-orm';
 import type { Order } from '@/types';
 import { getSession } from './auth.actions';
 
+/**
+ * Shared authorization rule for reading a single order: an admin may read
+ * any order; a user may read only their own. Returns the caller's session
+ * when allowed, or null when denied. Next.js guidance is to verify
+ * authorization inside each Server Function rather than relying on the
+ * proxy/middleware layer alone.
+ */
+export async function assertOrderAccess(
+  order: { userId: string | null } | null
+): Promise<Awaited<ReturnType<typeof getSession>> | null> {
+  if (!order) return null;
+
+  const [adminSession, userSession] = await Promise.all([
+    getSession(true),
+    getSession(false),
+  ]);
+
+  if (adminSession) return adminSession;
+
+  if (userSession && order.userId && order.userId === userSession.id) {
+    return userSession;
+  }
+
+  return null;
+}
+
 function mapOrder(o: any): Order {
   return {
     id: o.id,
@@ -85,6 +111,10 @@ export async function fetchOrderById(orderId: string): Promise<Order | null> {
   }
 
   if (!result) return null;
+
+  const allowed = await assertOrderAccess(result);
+  if (!allowed) return null;
+
   return mapOrder(result);
 }
 

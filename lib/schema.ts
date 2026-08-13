@@ -148,6 +148,31 @@ export const carts = pgTable(
   ]
 );
 
+// ─── Stripe webhook idempotency ─────────────────────────
+export const stripeEvents = pgTable(
+  'stripe_events',
+  {
+    eventId: text('event_id').primaryKey(),
+    type: text('type').notNull(),
+    processedAt: timestamp('processed_at').defaultNow().notNull(),
+  }
+);
+
+// ─── Admin login rate limiting ──────────────────────────
+export const adminLoginAttempts = pgTable(
+  'admin_login_attempts',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    email: text('email').notNull(),
+    ip: text('ip').notNull(),
+    attemptedAt: timestamp('attempted_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('idx_admin_attempts_email_time').on(table.email, table.attemptedAt),
+    index('idx_admin_attempts_ip_time').on(table.ip, table.attemptedAt),
+  ]
+);
+
 // ─── TypeScript types for JSON columns ──────────────────
 
 export interface OrderItem {

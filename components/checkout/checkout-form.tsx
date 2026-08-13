@@ -140,6 +140,7 @@ export default function CheckoutForm() {
   const [shippingRates, setShippingRates] = useState<ShippingRate[]>([]);
   const [selectedShipping, setSelectedShipping] = useState<ShippingRate | null>(null);
   const [tax, setTax] = useState(0);
+  const [serverTotal, setServerTotal] = useState<number | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [addressData, setAddressData] = useState<CheckoutFormData | null>(null);
 
@@ -162,7 +163,7 @@ export default function CheckoutForm() {
 
   const subtotal = getSubtotal();
   const shipping = selectedShipping?.rate || 0;
-  const total = subtotal + shipping + tax;
+  const total = serverTotal ?? subtotal + shipping + tax;
 
   // Wait for hydration before checking cart
   useEffect(() => {
@@ -270,14 +271,13 @@ export default function CheckoutForm() {
       const newOrderId = generateOrderId();
       setOrderId(newOrderId);
 
-      const finalTotal = subtotal + (selectedShipping.rate || 0) + tax;
-
-      // Create payment intent
+      // Create payment intent. No client totals are sent — the server
+      // resolves every price from the database and returns the authoritative
+      // total, which is what Stripe charges.
       const response = await fetch('/api/checkout/create-payment-intent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: finalTotal,
           orderId: newOrderId,
           customerEmail: addressData.email,
           shippingAddress: {
@@ -290,23 +290,20 @@ export default function CheckoutForm() {
             postalCode: addressData.postalCode,
             country: addressData.country,
             phone: addressData.phone,
+            email: addressData.email,
           },
           items: items.map(item => ({
             productId: item.productId,
-            name: item.name,
-            price: item.price,
             quantity: item.quantity,
             color: item.color,
             size: item.size,
           })),
           userId: user?.id,
-          shipping: selectedShipping.rate,
-          tax: tax,
           shippingService: selectedShipping.service,
         }),
       });
 
-      const { clientSecret, error } = await response.json();
+      const { clientSecret, resolvedTotal, error } = await response.json();
       
       if (error) {
         throw new Error(error);
@@ -314,6 +311,10 @@ export default function CheckoutForm() {
 
       if (!clientSecret) {
          throw new Error('Failed to init payment: No client secret returned');
+      }
+
+      if (typeof resolvedTotal === 'number') {
+        setServerTotal(resolvedTotal);
       }
 
       setClientSecret(clientSecret);
