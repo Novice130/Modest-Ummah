@@ -8,10 +8,6 @@ import Features from '@/components/home/features';
 import Newsletter from '@/components/home/newsletter';
 import { ProductCardSkeleton } from '@/components/product/product-card-skeleton';
 
-// ISR ceiling. Product create/update/delete calls revalidatePath('/') so
-// changes appear immediately; this is just the backstop.
-export const revalidate = 3600;
-
 /**
  * Grid shape matches the real sections (grid-cols-2 md:grid-cols-3
  * lg:grid-cols-4) so there is no layout shift when the data resolves.

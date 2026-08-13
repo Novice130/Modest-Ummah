@@ -1,13 +1,8 @@
 import type { Metadata, Viewport } from 'next';
+import { Suspense } from 'react';
 import { Poppins, Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers/theme-provider';
-import { AuthProvider } from '@/components/providers/auth-provider';
-import { Toaster } from '@/components/ui/toaster';
-import Header from '@/components/layout/header';
-import Footer from '@/components/layout/footer';
-import CartDrawer from '@/components/cart/cart-drawer';
-import AppShell from '@/components/layout/app-shell';
-import { getSession } from '@/lib/actions/auth.actions';
+import { SessionShell } from '@/components/providers/session-shell';
 import './globals.css';
 
 const poppins = Poppins({
@@ -84,13 +79,11 @@ export const viewport: Viewport = {
   maximumScale: 5,
 };
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const session = await getSession();
-
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
@@ -104,10 +97,9 @@ export default async function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider initialUser={session as any}>
-            <AppShell>{children}</AppShell>
-            <Toaster />
-          </AuthProvider>
+          <Suspense fallback={null}>
+            <SessionShell>{children}</SessionShell>
+          </Suspense>
         </ThemeProvider>
       </body>
     </html>

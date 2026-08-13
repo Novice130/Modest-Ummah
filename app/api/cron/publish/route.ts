@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
 import { products } from '@/lib/schema';
 import { and, eq, lte } from 'drizzle-orm';
-import { revalidatePath } from 'next/cache';
+import { revalidateTag } from 'next/cache';
+import { PRODUCTS_TAG, PRODUCT_CACHE_PROFILE } from '@/lib/cache';
 
 /**
  * Flips scheduled -> published when published_at passes. Called by a cron
@@ -39,11 +40,9 @@ export async function GET(request: NextRequest) {
   }
 
   if (due.length > 0) {
-    revalidatePath('/');
-    revalidatePath('/shop');
-    for (const row of due) {
-      revalidatePath(`/product/${row.slug}`);
-    }
+    // Route Handlers cannot call updateTag (Server Actions only);
+    // revalidateTag is the correct API here.
+    revalidateTag(PRODUCTS_TAG, PRODUCT_CACHE_PROFILE);
   }
 
   return NextResponse.json({ published: due.length });

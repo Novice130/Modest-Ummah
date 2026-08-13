@@ -13,6 +13,10 @@ const nextConfig = {
     formats: ['image/avif', 'image/webp'],
   },
   turbopack: {}, // Required for Next.js 16 middleware
+  // Enables 'use cache', cacheTag, cacheLife, and updateTag. Cached
+  // scopes may not call cookies()/headers(); those reads live in the
+  // root layout and admin trees, which stay dynamic.
+  cacheComponents: true,
   experimental: {
     // optimizeCss: true, // Disabled to fix missing 'critters' error
   },

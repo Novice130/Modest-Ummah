@@ -18,6 +18,8 @@ const ALLOWED_TYPES: Record<string, string> = {
  * Uploads live outside public/ so a redeploy never wipes them and the image
  * build cannot shadow them. In production the Dokploy volume mounts at
  * /app/uploads; locally the files land in ./uploads (gitignored).
+ * The local path is statically scoped to the uploads subfolder so
+ * Turbopack does not trace the whole project.
  */
 export function getUploadDir(): string {
   if (process.env.UPLOAD_DIR) return process.env.UPLOAD_DIR;
@@ -77,7 +79,7 @@ export async function POST(request: NextRequest) {
     // Random filename — Date.now() collides on multi-file uploads in the
     // same millisecond.
     const uniqueName = `${crypto.randomUUID()}${ext}`;
-    const filePath = path.join(uploadDir, uniqueName);
+    const filePath = path.join(/*turbopackIgnore: true*/ uploadDir, uniqueName);
 
     await writeFile(filePath, buffer);
     // Served by app/api/media/[...path]/route.ts — outside public/.
