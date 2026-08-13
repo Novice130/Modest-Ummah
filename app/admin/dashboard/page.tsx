@@ -13,6 +13,7 @@ import {
   Loader2,
   TrendingUp,
   Star,
+  AlertTriangle,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -64,6 +65,13 @@ interface DashboardStats {
     month: string;
     revenue: number;
     orders: number;
+  }[];
+  lowStock: {
+    id: string;
+    name: string;
+    sku: string;
+    stockQuantity: number;
+    lowStockThreshold: number;
   }[];
 }
 
@@ -315,6 +323,43 @@ export default function AdminDashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Low stock alerts */}
+      {stats.lowStock.length > 0 && (
+        <Card className="border-amber-300">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              Low Stock Alerts
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {stats.lowStock.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between text-sm border-b last:border-0 py-2"
+                >
+                  <div>
+                    <Link
+                      href={`/admin/products/${item.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {item.name}
+                    </Link>
+                    <span className="ml-2 text-muted-foreground font-mono text-xs">
+                      {item.sku || 'no sku'}
+                    </span>
+                  </div>
+                  <span className="text-amber-600 font-medium">
+                    {item.stockQuantity} left (threshold {item.lowStockThreshold})
+                  </span>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Bottom Row: Most Sold + Recent Orders */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

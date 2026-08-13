@@ -57,7 +57,7 @@ export async function getProductsCached({
 
   if (search) {
     const searchPattern = `%${search}%`;
-    conditions.push(or(like(products.name, searchPattern), like(products.description, searchPattern)));
+    conditions.push(or(like(products.name, searchPattern), like(products.sku, searchPattern), like(products.description, searchPattern)));
   }
 
   if (minPrice) {

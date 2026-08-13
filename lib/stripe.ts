@@ -3,7 +3,7 @@ import { loadStripe, Stripe as StripeClient } from '@stripe/stripe-js';
 
 // Server-side Stripe instance
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || 'sk_test_dummy', {
-  apiVersion: '2025-02-24.acacia',
+  apiVersion: '2026-07-29.dahlia',
   typescript: true,
 });
 
@@ -129,6 +129,14 @@ export async function createPaymentIntent(params: {
 // Retrieve payment intent
 export async function getPaymentIntent(id: string) {
   return await stripe.paymentIntents.retrieve(id);
+}
+
+// Full refund of a payment intent (admin action). Returns the refund object.
+export async function refundPaymentIntent(paymentIntentId: string) {
+  const intent = await stripe.paymentIntents.retrieve(paymentIntentId);
+  const charge = typeof intent.latest_charge === 'string' ? intent.latest_charge : intent.latest_charge?.id;
+  if (!charge) throw new Error('No charge found for this payment intent');
+  return await stripe.refunds.create({ charge, reason: 'requested_by_customer' });
 }
 
 // Verify webhook signature

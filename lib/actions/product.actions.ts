@@ -9,7 +9,7 @@ import {
   categories,
   type ProductAttributeInsert,
 } from '@/lib/schema';
-import { eq, inArray, ilike, or, and, desc, ne } from 'drizzle-orm';
+import { eq, inArray, ilike, or, and, desc, ne, count, like } from 'drizzle-orm';
 import { PRODUCTS_TAG, productTag } from '@/lib/cache';
 import { mapProduct } from '@/lib/product-mapper';
 import {
@@ -617,11 +617,94 @@ export async function importProductsAction(input: {
 
 // ─── LEGACY ADMIN ACTIONS (kept for the products table) ──
 
-export async function fetchAllProductsAdmin(page = 1, limit = 50) {
+export async function fetchAllProductsAdmin(
+  page = 1,
+  limit = 50,
+  options?: { search?: string; status?: string }
+) {
   const session = await getSession(true);
   if (!session) throw new Error('Unauthorized');
 
-  return getProductsCached({ page, limit, includeUnpublished: true });
+  const db = getDb();
+  const offset = (page - 1) * limit;
+
+  const conditions: any[] = [];
+  const search = options?.search?.trim();
+  if (search) {
+    const pattern = `%${search}%`;
+    conditions.push(
+      or(like(products.name, pattern), like(products.sku, pattern)) as any
+    );
+  }
+  if (options?.status) {
+    conditions.push(eq(products.status, options.status as any));
+  }
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const [countResult] = await db
+    .select({ count: count() })
+    .from(products)
+    .where(where);
+  const rows = await db
+    .select()
+    .from(products)
+    .where(where)
+    .orderBy(desc(products.createdAt))
+    .limit(limit)
+    .offset(offset);
+
+  return {
+    items: rows.map(mapProduct),
+    totalItems: countResult?.count || 0,
+    totalPages: Math.ceil((countResult?.count || 0) / limit),
+    page,
+    limit,
+  };
+}
+
+/** Bulk update: publish / unpublish (draft) / feature / unfeature / delete. */
+export async function bulkUpdateProductsAction(input: {
+  ids: string[];
+  action: 'publish' | 'draft' | 'feature' | 'unfeature' | 'delete';
+}): Promise<{ updated: number }> {
+  const session = await getSession(true);
+  if (!session) throw new Error('Unauthorized');
+
+  if (!Array.isArray(input.ids) || input.ids.length === 0) {
+    return { updated: 0 };
+  }
+
+  const db = getDb();
+  let updated = 0;
+
+  if (input.action === 'delete') {
+    const deleted = await db
+      .delete(products)
+      .where(inArray(products.id, input.ids))
+      .returning({ id: products.id });
+    updated = deleted.length;
+  } else {
+    const patch: Record<string, unknown> = { updatedAt: new Date() };
+    if (input.action === 'publish') {
+      patch.status = 'published';
+      patch.publishedAt = new Date();
+    } else if (input.action === 'draft') {
+      patch.status = 'draft';
+    } else if (input.action === 'feature') {
+      patch.featured = true;
+    } else if (input.action === 'unfeature') {
+      patch.featured = false;
+    }
+    const rows = await db
+      .update(products)
+      .set(patch)
+      .where(inArray(products.id, input.ids))
+      .returning({ id: products.id });
+    updated = rows.length;
+  }
+
+  if (updated > 0) invalidateProductCaches();
+  return { updated };
 }
 
 export async function deleteProductAction(id: string) {

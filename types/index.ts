@@ -120,6 +120,8 @@ export interface Order {
   shippingAddress: ShippingAddress;
   billingAddress?: ShippingAddress;
   notes?: string;
+  trackingNumber?: string;
+  trackingCarrier?: string;
 }
 
 export interface ShippingAddress {

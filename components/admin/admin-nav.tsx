@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ShoppingBag, Package, Users, Settings, LogOut, FileText } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Package, Users, Settings, LogOut } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { clearSession } from '@/lib/actions/auth.actions';
@@ -11,9 +11,8 @@ import { useRouter } from 'next/navigation';
 const navItems = [
   {
     title: 'Dashboard',
-    href: '/admin',
+    href: '/admin/dashboard',
     icon: LayoutDashboard,
-    exact: true,
   },
   {
     title: 'Products',
@@ -37,7 +36,7 @@ const navItems = [
   },
 ];
 
-export default function AdminNav() {
+export default function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
 
@@ -49,9 +48,8 @@ export default function AdminNav() {
   return (
     <div className="flex flex-col h-full border-r bg-background">
       <div className="p-6">
-        <Link href="/" className="flex items-center gap-2">
-          <img src="/images/logo.png" alt="Modest Ummah" className="h-8 w-auto" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }} />
-          <span className="font-heading font-bold text-xl hidden">
+        <Link href="/admin/dashboard" className="flex items-center gap-2" onClick={onNavigate}>
+          <span className="font-heading font-bold text-xl">
             <span className="text-primary">Modest</span> Ummah
           </span>
         </Link>
@@ -60,19 +58,18 @@ export default function AdminNav() {
       <div className="flex-1 px-4 py-2">
         <nav className="space-y-1">
           {navItems.map((item) => {
-            const isActive = item.exact 
-              ? pathname === item.href
-              : pathname.startsWith(item.href);
+            const isActive = pathname === item.href || pathname.startsWith(`${item.href}/`);
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={onNavigate}
                 className={cn(
-                  "flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                  isActive 
-                    ? "bg-primary text-primary-foreground" 
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  'flex items-center gap-3 px-3 py-2 text-sm font-medium rounded-md transition-colors',
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                 )}
               >
                 <item.icon className="h-4 w-4" />
@@ -84,8 +81,8 @@ export default function AdminNav() {
       </div>
 
       <div className="p-4 border-t">
-        <Button 
-          variant="ghost" 
+        <Button
+          variant="ghost"
           className="w-full justify-start text-muted-foreground hover:text-destructive"
           onClick={handleSignOut}
         >

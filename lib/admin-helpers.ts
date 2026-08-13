@@ -1,6 +1,6 @@
 import { getDb } from './db';
 import { orders, products, users } from './schema';
-import { sql, eq, desc, count, sum, and, gte } from 'drizzle-orm';
+import { sql, eq, desc, count, sum, and, gte, lt } from 'drizzle-orm';
 import type { OrderItem, ShippingAddressDB } from './schema';
 
 // ─── Dashboard Stats ────────────────────────────────────
@@ -17,6 +17,7 @@ export interface DashboardStats {
   mostSoldItems: MostSoldItem[];
   ordersByStatus: StatusCount[];
   revenueByMonth: MonthlyRevenue[];
+  lowStock: LowStockItem[];
 }
 
 export interface RecentOrder {
@@ -46,6 +47,14 @@ export interface MonthlyRevenue {
   orders: number;
 }
 
+export interface LowStockItem {
+  id: string;
+  name: string;
+  sku: string;
+  stockQuantity: number;
+  lowStockThreshold: number;
+}
+
 export async function getDashboardStats(): Promise<DashboardStats> {
   const db = getDb();
 
@@ -54,91 +63,104 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
   const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
 
-  // Total Revenue (paid orders)
-  const [revenueRow] = await db
-    .select({ total: sum(orders.total) })
-    .from(orders)
-    .where(eq(orders.paymentStatus, 'paid'));
-  const totalRevenue = parseFloat(revenueRow?.total || '0');
+  // All independent queries fire in parallel instead of sequentially.
+  const [
+    revenueRow,
+    revenueCurrent,
+    revenuePrev,
+    ordersRow,
+    ordersCurrent,
+    ordersPrev,
+    customersRow,
+    custCurrent,
+    custPrev,
+    productsRow,
+    recentOrdersData,
+    statusCounts,
+    monthlyData,
+    lowStockRows,
+  ] = await Promise.all([
+    db
+      .select({ total: sum(orders.total) })
+      .from(orders)
+      .where(eq(orders.paymentStatus, 'paid')),
+    db
+      .select({ total: sum(orders.total) })
+      .from(orders)
+      .where(and(eq(orders.paymentStatus, 'paid'), gte(orders.createdAt, thirtyDaysAgo))),
+    db
+      .select({ total: sum(orders.total) })
+      .from(orders)
+      .where(
+        and(
+          eq(orders.paymentStatus, 'paid'),
+          gte(orders.createdAt, sixtyDaysAgo),
+          lt(orders.createdAt, thirtyDaysAgo)
+        )
+      ),
+    db.select({ count: count() }).from(orders),
+    db.select({ count: count() }).from(orders).where(gte(orders.createdAt, thirtyDaysAgo)),
+    db
+      .select({ count: count() })
+      .from(orders)
+      .where(and(gte(orders.createdAt, sixtyDaysAgo), lt(orders.createdAt, thirtyDaysAgo))),
+    db.select({ count: count() }).from(users),
+    db.select({ count: count() }).from(users).where(gte(users.createdAt, thirtyDaysAgo)),
+    db
+      .select({ count: count() })
+      .from(users)
+      .where(and(gte(users.createdAt, sixtyDaysAgo), lt(users.createdAt, thirtyDaysAgo))),
+    db.select({ count: count() }).from(products),
+    db.select().from(orders).orderBy(desc(orders.createdAt)).limit(10),
+    db
+      .select({ status: orders.status, count: count() })
+      .from(orders)
+      .groupBy(orders.status),
+    db
+      .select({
+        month: sql<string>`to_char(${orders.createdAt}, 'YYYY-MM')`,
+        revenue: sum(orders.total),
+        orders: count(),
+      })
+      .from(orders)
+      .where(
+        and(eq(orders.paymentStatus, 'paid'), gte(orders.createdAt, new Date(now.getFullYear(), now.getMonth() - 5, 1)))
+      )
+      .groupBy(sql`to_char(${orders.createdAt}, 'YYYY-MM')`)
+      .orderBy(sql`to_char(${orders.createdAt}, 'YYYY-MM')`),
+    db
+      .select({
+        id: products.id,
+        name: products.name,
+        sku: products.sku,
+        stockQuantity: products.stockQuantity,
+        lowStockThreshold: products.lowStockThreshold,
+      })
+      .from(products)
+      .where(
+        and(
+          eq(products.status, 'published'),
+          eq(products.manageStock, true)
+        )
+      ),
+  ]);
 
-  // Revenue last 30 days
-  const [revenueCurrent] = await db
-    .select({ total: sum(orders.total) })
-    .from(orders)
-    .where(
-      and(
-        eq(orders.paymentStatus, 'paid'),
-        gte(orders.createdAt, thirtyDaysAgo)
-      )
-    );
-  const [revenuePrev] = await db
-    .select({ total: sum(orders.total) })
-    .from(orders)
-    .where(
-      and(
-        eq(orders.paymentStatus, 'paid'),
-        gte(orders.createdAt, sixtyDaysAgo),
-        sql`${orders.createdAt} < ${thirtyDaysAgo}`
-      )
-    );
-  const revCurrent = parseFloat(revenueCurrent?.total || '0');
-  const revPrev = parseFloat(revenuePrev?.total || '0');
+  const totalRevenue = parseFloat(revenueRow[0]?.total || '0');
+  const revCurrent = parseFloat(revenueCurrent[0]?.total || '0');
+  const revPrev = parseFloat(revenuePrev[0]?.total || '0');
   const revenueChange = revPrev > 0 ? ((revCurrent - revPrev) / revPrev) * 100 : 0;
 
-  // Total Orders
-  const [ordersRow] = await db.select({ count: count() }).from(orders);
-  const totalOrders = ordersRow?.count || 0;
-
-  // Orders last 30 days vs prev 30 days
-  const [ordersCurrent] = await db
-    .select({ count: count() })
-    .from(orders)
-    .where(gte(orders.createdAt, thirtyDaysAgo));
-  const [ordersPrev] = await db
-    .select({ count: count() })
-    .from(orders)
-    .where(
-      and(
-        gte(orders.createdAt, sixtyDaysAgo),
-        sql`${orders.createdAt} < ${thirtyDaysAgo}`
-      )
-    );
-  const ordCurrent = ordersCurrent?.count || 0;
-  const ordPrev = ordersPrev?.count || 0;
+  const totalOrders = ordersRow[0]?.count || 0;
+  const ordCurrent = ordersCurrent[0]?.count || 0;
+  const ordPrev = ordersPrev[0]?.count || 0;
   const ordersChange = ordPrev > 0 ? ((ordCurrent - ordPrev) / ordPrev) * 100 : 0;
 
-  // Total Customers
-  const [customersRow] = await db.select({ count: count() }).from(users);
-  const totalCustomers = customersRow?.count || 0;
-
-  // Customers last 30 days
-  const [custCurrent] = await db
-    .select({ count: count() })
-    .from(users)
-    .where(gte(users.createdAt, thirtyDaysAgo));
-  const [custPrev] = await db
-    .select({ count: count() })
-    .from(users)
-    .where(
-      and(
-        gte(users.createdAt, sixtyDaysAgo),
-        sql`${users.createdAt} < ${thirtyDaysAgo}`
-      )
-    );
-  const cCurrent = custCurrent?.count || 0;
-  const cPrev = custPrev?.count || 0;
+  const totalCustomers = customersRow[0]?.count || 0;
+  const cCurrent = custCurrent[0]?.count || 0;
+  const cPrev = custPrev[0]?.count || 0;
   const customersChange = cPrev > 0 ? ((cCurrent - cPrev) / cPrev) * 100 : 0;
 
-  // Total Products
-  const [productsRow] = await db.select({ count: count() }).from(products);
-  const totalProducts = productsRow?.count || 0;
-
-  // Recent Orders (last 10)
-  const recentOrdersData = await db
-    .select()
-    .from(orders)
-    .orderBy(desc(orders.createdAt))
-    .limit(10);
+  const totalProducts = productsRow[0]?.count || 0;
 
   const recentOrders: RecentOrder[] = recentOrdersData.map((o) => {
     const addr = o.shippingAddress as ShippingAddressDB;
@@ -153,63 +175,32 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     };
   });
 
-  // Most Sold Items — aggregate from order items JSON
-  const allOrders = await db
-    .select({ items: orders.items })
-    .from(orders)
-    .where(eq(orders.paymentStatus, 'paid'));
-
-  const itemMap = new Map<string, { quantity: number; revenue: number }>();
-  for (const order of allOrders) {
-    const items = (order.items || []) as OrderItem[];
-    for (const item of items) {
-      const existing = itemMap.get(item.name) || { quantity: 0, revenue: 0 };
-      existing.quantity += item.quantity;
-      existing.revenue += item.price * item.quantity;
-      itemMap.set(item.name, existing);
-    }
-  }
-
-  const mostSoldItems: MostSoldItem[] = Array.from(itemMap.entries())
-    .map(([name, data]) => ({
-      name,
-      totalQuantity: data.quantity,
-      totalRevenue: data.revenue,
-    }))
-    .sort((a, b) => b.totalQuantity - a.totalQuantity)
-    .slice(0, 10);
-
-  // Orders by Status
-  const statusCounts = await db
+  // Most-sold aggregation in SQL: unnest the items jsonb of paid orders.
+  // The old implementation loaded every paid order into JS; this pushes the
+  // aggregation into Postgres.
+  const mostSoldRows = await db
     .select({
-      status: orders.status,
-      count: count(),
+      name: sql<string>`item->>'name'`,
+      totalQuantity: sql<number>`COALESCE(SUM((item->>'quantity')::int), 0)::int`,
+      totalRevenue: sql<number>`COALESCE(SUM((item->>'quantity')::int * (item->>'price')::numeric), 0)::float`,
     })
-    .from(orders)
-    .groupBy(orders.status);
+    .from(
+      sql`(SELECT jsonb_array_elements(${orders.items}) AS item FROM ${orders} WHERE ${orders.paymentStatus} = 'paid') AS t`
+    )
+    .groupBy(sql`item->>'name'`)
+    .orderBy(desc(sql`COALESCE(SUM((item->>'quantity')::int), 0)::int`))
+    .limit(10);
+
+  const mostSoldItems: MostSoldItem[] = mostSoldRows.map((m) => ({
+    name: m.name || 'Unknown',
+    totalQuantity: Number(m.totalQuantity || 0),
+    totalRevenue: Number(m.totalRevenue || 0),
+  }));
 
   const ordersByStatus: StatusCount[] = statusCounts.map((s) => ({
     status: s.status,
     count: s.count,
   }));
-
-  // Revenue by Month (last 6 months)
-  const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1);
-  const monthlyData = await db
-    .select({
-      month: sql<string>`to_char(${orders.createdAt}, 'YYYY-MM')`,
-      revenue: sum(orders.total),
-      orders: count(),
-    })
-    .from(orders)
-    .where(
-      and(
-        eq(orders.paymentStatus, 'paid'),
-        gte(orders.createdAt, sixMonthsAgo)
-      )
-    )
-    .groupBy(sql`to_char(${orders.createdAt}, 'YYYY-MM')`)
-    .orderBy(sql`to_char(${orders.createdAt}, 'YYYY-MM')`);
 
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
   const revenueByMonth: MonthlyRevenue[] = monthlyData.map((m) => {
@@ -221,6 +212,17 @@ export async function getDashboardStats(): Promise<DashboardStats> {
       orders: m.orders,
     };
   });
+
+  const lowStock: LowStockItem[] = lowStockRows
+    .filter((p) => (p.stockQuantity || 0) <= (p.lowStockThreshold ?? 5))
+    .map((p) => ({
+      id: p.id,
+      name: p.name,
+      sku: p.sku,
+      stockQuantity: p.stockQuantity || 0,
+      lowStockThreshold: p.lowStockThreshold ?? 5,
+    }))
+    .slice(0, 10);
 
   return {
     totalRevenue,
@@ -234,6 +236,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     mostSoldItems,
     ordersByStatus,
     revenueByMonth,
+    lowStock,
   };
 }
 
@@ -297,13 +300,21 @@ export function generatePirateShipCSV(
       addr.state || '',
       addr.postalCode || '',
       addr.country || 'US',
-      estimatedWeight.toString(),
-      length.toString(),
-      width.toString(),
-      height.toString(),
+      String(estimatedWeight || 16),
+      String(length),
+      String(width),
+      String(height),
       order.orderId,
     ]
-      .map((field) => `${String(field).replace(/"/g, '""')}`)
+      // RFC 4180: quote any field containing a comma, quote, or newline,
+      // and double embedded quotes.
+      .map((field) => {
+        const value = String(field);
+        if (/[",\n\r]/.test(value)) {
+          return `"${value.replace(/"/g, '""')}"`;
+        }
+        return value;
+      })
       .join(',');
   });
 

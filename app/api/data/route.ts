@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getDb } from '@/lib/db';
-import { users, products, orders } from '@/lib/schema';
+import { users, orders } from '@/lib/schema';
 import { getAuthFromRequest } from '@/lib/auth';
-import { like, or, desc, count, sum, eq } from 'drizzle-orm';
+import { like, or, desc, count, sum, eq, sql } from 'drizzle-orm';
 
 /**
  * Generic data API route for client-side collection queries.
  */
 export async function GET(request: NextRequest) {
   const auth = await getAuthFromRequest(request, true);
-  // Allow user-auth too for non-admin collections
-  const userAuth = auth || (await getAuthFromRequest(request, false));
 
   const { searchParams } = new URL(request.url);
   const collection = searchParams.get('collection') || '';
@@ -46,42 +44,31 @@ export async function GET(request: NextRequest) {
           .from(users)
           .where(where);
 
-        const items = await db
+        // Single query with a LEFT JOIN + GROUP BY replaces the old N+1
+        // pattern (one orders query per user).
+        const rows = await db
           .select({
             id: users.id,
             email: users.email,
             name: users.name,
             createdAt: users.createdAt,
             verified: users.verified,
+            totalOrders: sql<number>`COUNT(${orders.id})::int`,
+            totalSpent: sql<number>`COALESCE(SUM(${orders.total}), 0)::float`,
           })
           .from(users)
+          .leftJoin(orders, eq(orders.userId, users.id))
           .where(where)
+          .groupBy(users.id, users.email, users.name, users.createdAt, users.verified)
           .orderBy(desc(users.createdAt))
           .limit(perPage)
           .offset(offset);
 
-        // Enrich with order stats per customer
-        const enriched = await Promise.all(
-          items.map(async (user) => {
-            const [orderStats] = await db
-              .select({
-                totalOrders: count(),
-                totalSpent: sum(orders.total),
-              })
-              .from(orders)
-              .where(eq(orders.userId, user.id));
-
-            return {
-              ...user,
-              createdAt: user.createdAt.toISOString(),
-              totalOrders: orderStats?.totalOrders || 0,
-              totalSpent: parseFloat(orderStats?.totalSpent || '0'),
-            };
-          })
-        );
-
         return NextResponse.json({
-          items: enriched,
+          items: rows.map((u) => ({
+            ...u,
+            createdAt: u.createdAt.toISOString(),
+          })),
           totalItems: countResult?.count || 0,
           totalPages: Math.ceil((countResult?.count || 0) / perPage),
           page,

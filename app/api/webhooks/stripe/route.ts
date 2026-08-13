@@ -44,14 +44,15 @@ export async function POST(request: NextRequest) {
     .returning();
 
   if (!inserted) {
-    console.log(`Duplicate webhook event skipped: ${event.id} (${event.type})`);
+    // Logging the event type only — ids and payloads stay out of logs.
+    console.log(`Duplicate webhook event skipped (${event.type})`);
     return NextResponse.json({ received: true });
   }
 
   switch (event.type) {
     case 'payment_intent.succeeded': {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
-      console.log('Payment succeeded:', paymentIntent.id);
+      console.log('Payment succeeded (type only logged)');
 
       try {
         const metaOrderId = paymentIntent.metadata.orderId;
@@ -73,7 +74,7 @@ export async function POST(request: NextRequest) {
             })
             .where(eq(orders.id, existingOrder.id));
 
-          console.log('Order updated:', metaOrderId);
+          console.log('Order marked paid');
 
           const items = (existingOrder.items || []) as OrderItem[];
           const shippingAddress = existingOrder.shippingAddress as ShippingAddressDB;

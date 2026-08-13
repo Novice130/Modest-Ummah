@@ -3,7 +3,7 @@ import { getDb } from '@/lib/db';
 import { orders } from '@/lib/schema';
 import { generatePirateShipCSV } from '@/lib/admin-helpers';
 import { getAuthFromRequest } from '@/lib/auth';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, and } from 'drizzle-orm';
 import type { ShippingAddressDB, OrderItem } from '@/lib/schema';
 
 export async function POST(request: NextRequest) {
@@ -15,23 +15,27 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { orderIds } = body; // Optional: specific order IDs to export
+    const { orderIds, statusFilter } = body;
 
     const db = getDb();
 
-    let orderData;
+    const conditions = [];
     if (orderIds && orderIds.length > 0) {
-      orderData = await db
-        .select()
-        .from(orders)
-        .where(inArray(orders.id, orderIds));
-    } else {
-      // Export all unfulfilled orders by default
-      orderData = await db
-        .select()
-        .from(orders)
-        .where(eq(orders.paymentStatus, 'paid'));
+      conditions.push(inArray(orders.id, orderIds));
     }
+    if (statusFilter && statusFilter !== 'all') {
+      conditions.push(eq(orders.status, statusFilter));
+    }
+    if (conditions.length === 0) {
+      // Default: all paid orders awaiting fulfillment.
+      conditions.push(eq(orders.paymentStatus, 'paid'));
+    }
+
+    const orderData = await db
+      .select()
+      .from(orders)
+      .where(and(...conditions))
+      .orderBy(orders.createdAt);
 
     const csvInput = orderData.map((o) => ({
       orderId: o.orderId,

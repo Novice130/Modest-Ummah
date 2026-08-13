@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import {
   Table,
   TableBody,
@@ -118,7 +119,12 @@ export default function AdminCustomersPage() {
                     {formatDate(customer.createdAt)}
                   </TableCell>
                   <TableCell className="font-medium">
-                    {customer.name || 'N/A'}
+                    <Link
+                      href={`/admin/customers/${customer.id}`}
+                      className="text-primary hover:underline"
+                    >
+                      {customer.name || 'N/A'}
+                    </Link>
                   </TableCell>
                   <TableCell>{customer.email}</TableCell>
                   <TableCell>{customer.totalOrders || 0}</TableCell>

@@ -1,25 +1,91 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
-import { Save } from 'lucide-react';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
+import { Loader2, Save } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
+import {
+  fetchSettingsAction,
+  saveSettingsAction,
+} from '@/lib/actions/settings.actions';
 
 export default function AdminSettingsPage() {
-  const [storeName, setStoreName] = useState('Modest Ummah');
-  const [storeEmail, setStoreEmail] = useState('admin@modestummah.com');
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [storeName, setStoreName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [supportEmail, setSupportEmail] = useState('');
+  const [storePhone, setStorePhone] = useState('');
+  const [storeAddress, setStoreAddress] = useState('');
+  const [announcementText, setAnnouncementText] = useState('');
+
+  useEffect(() => {
+    fetchSettingsAction()
+      .then((s) => {
+        setStoreName(s.storeName);
+        setContactEmail(s.contactEmail);
+        setSupportEmail(s.supportEmail);
+        setStorePhone(s.storePhone);
+        setStoreAddress(s.storeAddress);
+        setAnnouncementText(s.announcementText);
+      })
+      .catch((e) => {
+        toast({
+          title: 'Failed to load settings',
+          description: e?.message || 'Something went wrong.',
+          variant: 'destructive',
+        });
+      })
+      .finally(() => setLoading(false));
+  }, [toast]);
 
   const handleSave = async () => {
     setSaving(true);
-    // Placeholder - not persisted yet
-    await new Promise(r => setTimeout(r, 500));
-    alert('Settings saved! (Placeholder - not persisted)');
-    setSaving(false);
+    try {
+      const saved = await saveSettingsAction({
+        storeName,
+        contactEmail,
+        supportEmail,
+        storePhone,
+        storeAddress,
+        announcementText,
+      });
+      setStoreName(saved.storeName);
+      setContactEmail(saved.contactEmail);
+      setSupportEmail(saved.supportEmail);
+      setStorePhone(saved.storePhone);
+      setStoreAddress(saved.storeAddress);
+      setAnnouncementText(saved.announcementText);
+      toast({ title: 'Settings saved' });
+    } catch (e: any) {
+      toast({
+        title: 'Failed to save settings',
+        description: e?.message || 'Something went wrong.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaving(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -35,43 +101,74 @@ export default function AdminSettingsPage() {
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="space-y-2">
-            <Label>Store Name</Label>
-            <Input value={storeName} onChange={(e) => setStoreName(e.target.value)} />
+            <Label htmlFor="store-name">Store Name</Label>
+            <Input
+              id="store-name"
+              value={storeName}
+              onChange={(e) => setStoreName(e.target.value)}
+            />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="contact-email">Contact Email</Label>
+              <Input
+                id="contact-email"
+                type="email"
+                value={contactEmail}
+                onChange={(e) => setContactEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="support-email">Support Email</Label>
+              <Input
+                id="support-email"
+                type="email"
+                value={supportEmail}
+                onChange={(e) => setSupportEmail(e.target.value)}
+              />
+            </div>
           </div>
           <div className="space-y-2">
-            <Label>Contact Email</Label>
-            <Input value={storeEmail} onChange={(e) => setStoreEmail(e.target.value)} />
+            <Label htmlFor="store-phone">Store Phone</Label>
+            <Input
+              id="store-phone"
+              value={storePhone}
+              onChange={(e) => setStorePhone(e.target.value)}
+            />
           </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Integrations</CardTitle>
-          <CardDescription>Connected services.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-4 border rounded-lg">
-            <div>
-              <div className="font-medium">Stripe</div>
-              <div className="text-sm text-muted-foreground">Payment processing</div>
-            </div>
-            <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">Connected</span>
+          <div className="space-y-2">
+            <Label htmlFor="store-address">Store Address</Label>
+            <Input
+              id="store-address"
+              value={storeAddress}
+              onChange={(e) => setStoreAddress(e.target.value)}
+            />
           </div>
-          <div className="flex items-center justify-between p-4 border rounded-lg">
-            <div>
-              <div className="font-medium">Pirate Ship</div>
-              <div className="text-sm text-muted-foreground">Shipping labels</div>
-            </div>
-            <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded">Manual Export</span>
+          <div className="space-y-2">
+            <Label htmlFor="announcement">Announcement Bar Text</Label>
+            <Textarea
+              id="announcement"
+              value={announcementText}
+              onChange={(e) => setAnnouncementText(e.target.value)}
+              placeholder="Shown in the top bar on every page (leave empty to hide)."
+            />
           </div>
         </CardContent>
       </Card>
 
       <div className="flex justify-end">
         <Button onClick={handleSave} disabled={saving}>
-          <Save className="mr-2 h-4 w-4" />
-          {saving ? 'Saving...' : 'Save Settings'}
+          {saving ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saving…
+            </>
+          ) : (
+            <>
+              <Save className="mr-2 h-4 w-4" />
+              Save Settings
+            </>
+          )}
         </Button>
       </div>
     </div>

@@ -235,6 +235,8 @@ export const orders = pgTable(
     billingAddress: jsonb('billing_address').$type<ShippingAddressDB>(),
     notes: text('notes'),
     shippingService: text('shipping_service'),
+    trackingNumber: text('tracking_number'),
+    trackingCarrier: text('tracking_carrier'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

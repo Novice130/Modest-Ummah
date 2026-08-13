@@ -51,6 +51,8 @@ function mapOrder(o: any): Order {
     shippingAddress: (o.shippingAddress || {}) as any,
     billingAddress: o.billingAddress as any,
     notes: o.notes || undefined,
+    trackingNumber: o.trackingNumber || undefined,
+    trackingCarrier: o.trackingCarrier || undefined,
   };
 }
 
@@ -128,9 +130,66 @@ export async function updateOrderAction(orderId: string, data: Partial<Order>) {
   if (data.paymentStatus) updateData.paymentStatus = data.paymentStatus;
   if (data.paymentIntentId) updateData.paymentIntentId = data.paymentIntentId;
   if (data.notes !== undefined) updateData.notes = data.notes;
+  if ((data as any).trackingNumber !== undefined) updateData.trackingNumber = (data as any).trackingNumber;
+  if ((data as any).trackingCarrier !== undefined) updateData.trackingCarrier = (data as any).trackingCarrier;
 
   const [updated] = await db.update(orders).set(updateData).where(eq(orders.id, orderId)).returning();
 
+  if (!updated) throw new Error('Order not found');
+  return mapOrder(updated);
+}
+
+/**
+ * Admin refund: issues a full Stripe refund and marks the order refunded.
+ * The charge.refunded webhook then restocks inventory (idempotent).
+ */
+export async function refundOrderAction(orderId: string) {
+  const session = await getSession(true);
+  if (!session) throw new Error('Unauthorized');
+
+  const db = getDb();
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) throw new Error('Order not found');
+
+  if (!order.paymentIntentId) throw new Error('Order has no payment intent to refund');
+  if (order.paymentStatus !== 'paid') {
+    throw new Error(`Cannot refund an order with payment status "${order.paymentStatus}"`);
+  }
+
+  const { refundPaymentIntent } = await import('@/lib/stripe');
+  const refund = await refundPaymentIntent(order.paymentIntentId);
+
+  await db
+    .update(orders)
+    .set({
+      paymentStatus: 'refunded',
+      status: 'cancelled',
+      notes: `Refunded by admin (refund ${refund.id})`,
+      updatedAt: new Date(),
+    })
+    .where(eq(orders.id, orderId));
+
+  return { refundId: refund.id };
+}
+
+/** Admin cancel: mark an unpaid/not-shipped order cancelled. */
+export async function cancelOrderAction(orderId: string) {
+  const session = await getSession(true);
+  if (!session) throw new Error('Unauthorized');
+
+  const db = getDb();
+  const [order] = await db.select().from(orders).where(eq(orders.id, orderId)).limit(1);
+  if (!order) throw new Error('Order not found');
+
+  if (order.status === 'shipped' || order.status === 'delivered') {
+    throw new Error('Cannot cancel a shipped or delivered order');
+  }
+
+  const [updated] = await db
+    .update(orders)
+    .set({ status: 'cancelled', updatedAt: new Date() })
+    .where(eq(orders.id, orderId))
+    .returning();
   if (!updated) throw new Error('Order not found');
   return mapOrder(updated);
 }

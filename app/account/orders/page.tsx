@@ -6,34 +6,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatPrice } from '@/lib/utils';
 import { fetchUserOrders } from '@/lib/actions/order.actions';
+import { orderStatusBadgeVariant, formatOrderStatus } from '@/lib/order-status';
 
 export const metadata: Metadata = {
   title: 'My Orders',
   description: 'View your order history.',
-};
-
-const getStatusColor = (status: string) => {
-  switch (status) {
-    case 'delivered':
-      return 'success';
-    case 'shipped':
-      return 'default';
-    case 'processing':
-      return 'gold';
-    case 'pending':
-    case 'pending_payment':
-      return 'secondary';
-    case 'cancelled':
-      return 'destructive';
-    default:
-      return 'outline';
-  }
-};
-
-const formatStatus = (status: string) => {
-  return status
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (c) => c.toUpperCase());
 };
 
 export default async function OrdersPage() {
@@ -89,8 +66,8 @@ export default async function OrdersPage() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={getStatusColor(order.status) as any}>
-                          {formatStatus(order.status)}
+                        <Badge variant={orderStatusBadgeVariant(order.status)}>
+                          {formatOrderStatus(order.status)}
                         </Badge>
                         <Button variant="outline" size="sm" asChild>
                           <Link href={`/account/orders/${order.orderId}`}>

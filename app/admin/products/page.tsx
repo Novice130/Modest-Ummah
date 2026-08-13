@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -14,10 +14,20 @@ import {
   Copy,
   Download,
   Upload,
+  ChevronLeft,
+  ChevronRight,
+  Star,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import {
   AlertDialog,
@@ -41,6 +51,7 @@ import {
   fetchAllProductsAdmin,
   deleteProductAction,
   duplicateProductAction,
+  bulkUpdateProductsAction,
   exportProductsCsv,
   importProductsAction,
 } from '@/lib/actions/product.actions';
@@ -63,6 +74,8 @@ const STATUS_COLORS: Record<string, string> = {
   scheduled: 'bg-blue-500 text-white',
 };
 
+const PAGE_SIZE = 25;
+
 export default function AdminProductsPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -70,9 +83,15 @@ export default function AdminProductsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [page, setPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<Product | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [importResults, setImportResults] = useState<ImportResult[] | null>(null);
   const [importRows, setImportRows] = useState<string[][] | null>(null);
   const [importing, setImporting] = useState(false);
@@ -83,33 +102,75 @@ export default function AdminProductsPage() {
   // Debounce the search input before hitting the server.
   useEffect(() => {
     if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => setDebouncedSearch(search), 300);
+    searchTimer.current = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
   }, [search]);
 
-  useEffect(() => {
-    loadProducts();
-  }, [debouncedSearch]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  async function loadProducts() {
+  const loadProducts = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await fetchAllProductsAdmin(1, 200);
-      const items = debouncedSearch
-        ? result.items.filter(
-            (p) =>
-              p.name.toLowerCase().includes(debouncedSearch.toLowerCase()) ||
-              p.sku.toLowerCase().includes(debouncedSearch.toLowerCase())
-          )
-        : result.items;
-      setProducts(items);
+      const result = await fetchAllProductsAdmin(page, PAGE_SIZE, {
+        search: debouncedSearch,
+        status: statusFilter !== 'all' ? statusFilter : undefined,
+      });
+      setProducts(result.items);
+      setTotalItems(result.totalItems);
+      setTotalPages(Math.max(1, result.totalPages));
     } catch (e: any) {
       setError(e?.message || 'Failed to load products');
     } finally {
       setLoading(false);
+    }
+  }, [page, debouncedSearch, statusFilter]);
+
+  useEffect(() => {
+    loadProducts();
+  }, [loadProducts]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    setSelectedIds((prev) =>
+      prev.size === products.length
+        ? new Set()
+        : new Set(products.map((p) => p.id))
+    );
+  };
+
+  async function handleBulk(action: 'publish' | 'draft' | 'feature' | 'unfeature' | 'delete') {
+    if (selectedIds.size === 0) return;
+    setBulkBusy(true);
+    try {
+      const result = await bulkUpdateProductsAction({
+        ids: Array.from(selectedIds),
+        action,
+      });
+      toast({
+        title: `Updated ${result.updated} product${result.updated === 1 ? '' : 's'}`,
+      });
+      setSelectedIds(new Set());
+      loadProducts();
+    } catch (e: any) {
+      toast({
+        title: 'Bulk update failed',
+        description: e?.message || 'Something went wrong.',
+        variant: 'destructive',
+      });
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -203,9 +264,9 @@ export default function AdminProductsPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="font-heading text-3xl mb-2">My Products</h1>
-          <p className="text-muted-foreground">{products.length} products found</p>
+          <p className="text-muted-foreground">{totalItems} products found</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={downloadTemplate}>
             <Download className="mr-2 h-4 w-4" /> Template
           </Button>
@@ -244,16 +305,52 @@ export default function AdminProductsPage() {
         </div>
       </div>
 
-      <div className="flex items-center space-x-2 bg-background border rounded-md px-3 py-2 w-full max-w-sm">
-        <Search className="h-4 w-4 text-muted-foreground" />
-        <input
-          className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground"
-          placeholder="Search by name or SKU…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label="Search products"
-        />
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center space-x-2 bg-background border rounded-md px-3 py-2 w-full max-w-sm">
+          <Search className="h-4 w-4 text-muted-foreground" />
+          <input
+            className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground"
+            placeholder="Search by name or SKU…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search products"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-[160px]">
+            <SelectValue placeholder="Status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All statuses</SelectItem>
+            <SelectItem value="published">Published</SelectItem>
+            <SelectItem value="draft">Draft</SelectItem>
+            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="scheduled">Scheduled</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
+
+      {/* Bulk action bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 p-3">
+          <span className="text-sm font-medium">{selectedIds.size} selected</span>
+          <Button size="sm" disabled={bulkBusy} onClick={() => handleBulk('publish')}>
+            Publish
+          </Button>
+          <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => handleBulk('draft')}>
+            Move to draft
+          </Button>
+          <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => handleBulk('feature')}>
+            <Star className="mr-1 h-3 w-3" /> Feature
+          </Button>
+          <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => handleBulk('unfeature')}>
+            Unfeature
+          </Button>
+          <Button size="sm" variant="destructive" disabled={bulkBusy} onClick={() => handleBulk('delete')}>
+            Delete
+          </Button>
+        </div>
+      )}
 
       {importResults && (
         <div className="border rounded-lg p-4 bg-background">
@@ -324,6 +421,13 @@ export default function AdminProductsPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-10">
+                <Checkbox
+                  checked={products.length > 0 && selectedIds.size === products.length}
+                  onCheckedChange={toggleSelectAll}
+                  aria-label="Select all products on this page"
+                />
+              </TableHead>
               <TableHead className="w-[80px]">Image</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
@@ -336,25 +440,32 @@ export default function AdminProductsPage() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8">
+                <TableCell colSpan={8} className="text-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
                 </TableCell>
               </TableRow>
             ) : error ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-destructive">
+                <TableCell colSpan={8} className="text-center py-8 text-destructive">
                   Error: {error}
                 </TableCell>
               </TableRow>
             ) : products.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                   No products found. Start by adding one!
                 </TableCell>
               </TableRow>
             ) : (
               products.map((product) => (
-                <TableRow key={product.id}>
+                <TableRow key={product.id} data-state={selectedIds.has(product.id) ? 'selected' : undefined}>
+                  <TableCell>
+                    <Checkbox
+                      checked={selectedIds.has(product.id)}
+                      onCheckedChange={() => toggleSelect(product.id)}
+                      aria-label={`Select ${product.name}`}
+                    />
+                  </TableCell>
                   <TableCell>
                     <div className="relative w-10 h-10 rounded-md overflow-hidden bg-muted">
                       {product.images?.[0] && (
@@ -423,6 +534,33 @@ export default function AdminProductsPage() {
         </Table>
       </div>
 
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            disabled={page <= 1 || loading}
+            onClick={() => setPage((p) => p - 1)}
+            aria-label="Previous page"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm text-muted-foreground">
+            Page {page} of {totalPages}
+          </span>
+          <Button
+            variant="outline"
+            size="icon"
+            disabled={page >= totalPages || loading}
+            onClick={() => setPage((p) => p + 1)}
+            aria-label="Next page"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
       <AlertDialog
         open={!!pendingDelete}
         onOpenChange={(open) => !open && setPendingDelete(null)}
@@ -445,6 +583,7 @@ export default function AdminProductsPage() {
                 try {
                   await deleteProductAction(pendingDelete.id);
                   setProducts((prev) => prev.filter((p) => p.id !== pendingDelete.id));
+                  setTotalItems((t) => t - 1);
                   toast({ title: 'Product deleted' });
                 } catch (e: any) {
                   toast({

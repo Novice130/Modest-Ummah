@@ -1,14 +1,8 @@
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import ProductCard from '@/components/product/product-card';
+import ShopSortSelect from '@/components/shop/shop-sort-select';
 import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { fetchProducts } from '@/lib/actions/product.actions';
 import type { Product } from '@/types';
 
@@ -70,17 +64,7 @@ export default async function ShopContent({ searchParams }: ShopContentProps) {
           Showing {(page - 1) * limit + 1} - {Math.min(page * limit, totalItems)} of{' '}
           {totalItems} products
         </p>
-        <Select defaultValue={searchParams.sort || 'price-desc'}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Sort by" />
-          </SelectTrigger>
-          <SelectContent>
-            {/* <SelectItem value="newest">Newest</SelectItem> */}
-            <SelectItem value="price-desc">Price: High to Low</SelectItem>
-            <SelectItem value="price-asc">Price: Low to High</SelectItem>
-            <SelectItem value="name">Name</SelectItem>
-          </SelectContent>
-        </Select>
+        <ShopSortSelect />
       </div>
 
       {/* Products Grid */}
