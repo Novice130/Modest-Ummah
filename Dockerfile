@@ -10,18 +10,16 @@ WORKDIR /app
 ARG NEXT_PUBLIC_APP_URL=""
 ARG NEXT_PUBLIC_APP_NAME="Modest Ummah"
 ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=""
-ARG DATABASE_URL=""
 
 ENV NEXT_PUBLIC_APP_URL=${NEXT_PUBLIC_APP_URL}
 ENV NEXT_PUBLIC_APP_NAME=${NEXT_PUBLIC_APP_NAME}
 ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY}
-ENV DATABASE_URL=${DATABASE_URL}
 
 # Copy package files
-COPY package.json ./
+COPY package.json package-lock.json ./
 
 # Install ALL dependencies (including dev)
-RUN npm install --legacy-peer-deps
+RUN npm ci
 
 # Copy source files
 COPY . .

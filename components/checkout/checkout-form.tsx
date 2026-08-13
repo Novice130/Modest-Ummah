@@ -43,7 +43,7 @@ const checkoutSchema = z.object({
   postalCode: z.string().min(3, 'Postal code is required'),
   country: z.string().min(2, 'Country is required'),
   phone: z.string().min(10, 'Phone number is required'),
-  saveInfo: z.union([z.boolean(), z.string()]).optional().transform(val => val === true || val === 'on'),
+  saveInfo: z.boolean(),
 });
 
 type CheckoutFormData = z.infer<typeof checkoutSchema>;
@@ -155,6 +155,7 @@ export default function CheckoutForm() {
     defaultValues: {
       email: user?.email || '',
       country: 'US',
+      saveInfo: false,
     },
   });
 
@@ -486,7 +487,11 @@ export default function CheckoutForm() {
                 </div>
 
                 <div className="flex items-center space-x-2">
-                  <Checkbox id="saveInfo" {...register('saveInfo')} />
+                  <Checkbox
+                    id="saveInfo"
+                    checked={watch('saveInfo') === true}
+                    onCheckedChange={(checked) => setValue('saveInfo', checked === true)}
+                  />
                   <Label htmlFor="saveInfo" className="text-sm">
                     Save this information for next time
                   </Label>

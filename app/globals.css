@@ -7,9 +7,10 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* Tailwind v4 does not read tailwind.config.ts unless @config is used, so the
-   animate plugin has to be registered here. Radix enter/exit animations
-   (animate-in, fade-in-0, zoom-in-95, slide-in-from-*) emit no CSS without it. */
-@plugin "tailwindcss-animate";
+   animation package has to be registered here. Radix enter/exit animations
+   (animate-in, fade-in-0, zoom-in-95, slide-in-from-*) emit no CSS without it.
+   tw-animate-css replaces the deprecated tailwindcss-animate. */
+@import "tw-animate-css";
 
 /* Custom theme config (converted from tailwind.config.ts) */
 @theme {

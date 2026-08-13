@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { jwtVerify } from 'jose';
 
-// Duplicated from lib/auth.ts rather than imported: this runs in the edge
-// runtime and must not pull in bcryptjs.
+// Duplicated from lib/auth.ts rather than imported to keep the proxy
+// dependency-light. Note: in Next 16 the proxy convention defaults to the
+// Node.js runtime — the old "edge runtime" premise no longer applies, but
+// avoiding bcryptjs here is still cheap insurance.
 //
 // Resolved lazily — `next build` loads this file, and JWT_SECRET is a
 // runtime-only env var. No fallback: a known key lets anyone forge a token.
@@ -39,7 +41,7 @@ async function verifyJWT(token: string): Promise<{ sub: string; type: string } |
   }
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // --- Admin routes ---
