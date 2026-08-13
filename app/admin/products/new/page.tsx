@@ -1,5 +1,5 @@
-import ProductEditor from '@/components/admin/product-editor';
+import ProductBuilderClient from '@/components/admin/product-builder/product-builder-client';
 
 export default function NewProductPage() {
-  return <ProductEditor />;
+  return <ProductBuilderClient init={{}} />;
 }

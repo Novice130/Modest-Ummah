@@ -116,8 +116,11 @@ export async function getNewArrivalsCached(limit = 8) {
   const items = await db
     .select()
     .from(products)
-    .where(eq(products.status, 'published'))
-    .orderBy(desc(products.publishedAt))
+    .where(and(
+      eq(products.status, 'published'),
+      eq(products.excludeFromNewArrivals, false)
+    ))
+    .orderBy(desc(products.newArrivalPinned), desc(products.publishedAt))
     .limit(limit);
 
   return items.map(mapProduct);

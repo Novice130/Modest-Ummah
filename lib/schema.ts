@@ -95,6 +95,8 @@ export const products = pgTable(
     sizes: jsonb('sizes').$type<string[]>().default([]),
     tags: jsonb('tags').$type<string[]>().default([]),
     featured: boolean('featured').default(false),
+    newArrivalPinned: boolean('new_arrival_pinned').default(false),
+    excludeFromNewArrivals: boolean('exclude_from_new_arrivals').default(false),
     inStock: boolean('in_stock').default(true),
     stockQuantity: integer('stock_quantity').default(0),
     sku: text('sku').notNull().default(''),
@@ -134,6 +136,9 @@ export const products = pgTable(
     index('idx_products_featured').on(table.featured),
     index('idx_products_sku').on(table.sku),
     // New Arrivals: published rows ordered by the moment they went live.
+    // Pinned rows float to the top; excluded rows never appear.
+    index('idx_products_new_arrivals')
+      .on(table.excludeFromNewArrivals, table.newArrivalPinned, table.status, table.publishedAt),
     index('idx_products_status_published').on(table.status, table.publishedAt),
     index('idx_products_featured_published').on(table.featured, table.publishedAt),
   ]

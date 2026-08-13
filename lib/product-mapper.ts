@@ -23,6 +23,8 @@ export function mapProduct(p: any): Product {
     sizes: (p.sizes || []) as string[],
     tags: (p.tags || []) as string[],
     featured: p.featured ?? false,
+    newArrivalPinned: p.newArrivalPinned ?? false,
+    excludeFromNewArrivals: p.excludeFromNewArrivals ?? false,
     inStock: p.inStock ?? true,
     stockQuantity: p.stockQuantity ?? 0,
     sku: p.sku,

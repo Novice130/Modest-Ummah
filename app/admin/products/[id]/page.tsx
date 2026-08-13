@@ -1,5 +1,5 @@
-import { fetchProductBySlugOrId } from '@/lib/actions/product.actions';
-import ProductEditor from '@/components/admin/product-editor';
+import { fetchBuilderProduct } from '@/lib/actions/product.actions';
+import ProductBuilderClient from '@/components/admin/product-builder/product-builder-client';
 
 interface EditProductPageProps {
   params: Promise<{ id: string }>;
@@ -7,15 +7,10 @@ interface EditProductPageProps {
 
 export default async function EditProductPage({ params }: EditProductPageProps) {
   const { id } = await params;
-  
-  let product = null;
-  try {
-     product = await fetchProductBySlugOrId(id, true);
-  } catch(e) {
-     console.error(e);
-  }
 
-  if (!product) {
+  const data = await fetchBuilderProduct(id);
+
+  if (!data) {
     return (
       <div className="p-8 text-center text-muted-foreground">
         Product not found
@@ -23,5 +18,14 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
     );
   }
 
-  return <ProductEditor initialData={product} />;
+  return (
+    <ProductBuilderClient
+      init={{
+        productId: id,
+        product: data.product,
+        variants: data.variants as any,
+        attributes: data.attributes,
+      }}
+    />
+  );
 }

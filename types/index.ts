@@ -21,6 +21,8 @@ export interface Product {
   sizes: string[];
   tags: string[];
   featured: boolean;
+  newArrivalPinned: boolean;
+  excludeFromNewArrivals: boolean;
   inStock: boolean;
   stockQuantity: number;
   sku: string;
