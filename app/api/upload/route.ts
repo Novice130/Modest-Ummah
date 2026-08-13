@@ -14,6 +14,17 @@ const ALLOWED_TYPES: Record<string, string> = {
   'image/avif': '.avif',
 };
 
+/**
+ * Uploads live outside public/ so a redeploy never wipes them and the image
+ * build cannot shadow them. In production the Dokploy volume mounts at
+ * /app/uploads; locally the files land in ./uploads (gitignored).
+ */
+export function getUploadDir(): string {
+  if (process.env.UPLOAD_DIR) return process.env.UPLOAD_DIR;
+  if (process.env.NODE_ENV === 'production') return '/app/uploads';
+  return path.join(process.cwd(), 'uploads');
+}
+
 export async function POST(request: NextRequest) {
   // Admin-only endpoint
   const auth = await getAuthFromRequest(request, true);
@@ -35,7 +46,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const uploadDir = path.join(process.cwd(), 'public', 'images', 'products');
+  const uploadDir = getUploadDir();
   await mkdir(uploadDir, { recursive: true });
 
   const urls: string[] = [];
@@ -69,7 +80,8 @@ export async function POST(request: NextRequest) {
     const filePath = path.join(uploadDir, uniqueName);
 
     await writeFile(filePath, buffer);
-    urls.push(`/images/products/${uniqueName}`);
+    // Served by app/api/media/[...path]/route.ts — outside public/.
+    urls.push(`/api/media/${uniqueName}`);
   }
 
   return NextResponse.json({ urls });

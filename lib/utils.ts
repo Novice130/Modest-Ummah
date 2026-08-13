@@ -34,22 +34,40 @@ export function truncate(text: string, length: number): string {
   return text.substring(0, length) + '...';
 }
 
-export function getImageUrl(fileName: string): string {
+/**
+ * Single resolver for every product image URL in the app.
+ *
+ * Accepted inputs:
+ * - absolute URLs (http/https) and blob: pass through untouched
+ * - root-relative paths (/images/products/x.jpg seeded, /api/media/x
+ *   uploaded) pass through untouched
+ * - bare filenames resolve to /uploads/<name> (legacy fallback only —
+ *   nothing writes this shape anymore)
+ *
+ * Returns '' for empty input so callers can treat it as "no image".
+ */
+export function getImageUrl(fileName: string | null | undefined): string {
   if (!fileName) return '';
-  if (fileName.startsWith('http') || fileName.startsWith('/')) return fileName;
+  if (
+    fileName.startsWith('http://') ||
+    fileName.startsWith('https://') ||
+    fileName.startsWith('blob:') ||
+    fileName.startsWith('/')
+  ) {
+    return fileName;
+  }
   return `/uploads/${fileName}`;
 }
 
 /**
- * Validates if an image src is valid for next/image component.
- * Returns the src if valid, or null if invalid.
- * Valid sources must start with "/" or be an absolute URL (http:// or https://)
+ * Validates an image src for next/image. Returns the resolved URL when it
+ * can be rendered (same-origin path or absolute URL), null otherwise.
  */
-export function getValidImageSrc(src: string | undefined | null): string | null {
+export function getValidImageSrc(src: string | null | undefined): string | null {
   if (!src) return null;
-  if (src.startsWith('http://') || src.startsWith('https://') || src.startsWith('/')) {
-    return src;
-  }
+  if (src.startsWith('blob:')) return src;
+  if (src.startsWith('/')) return src;
+  if (src.startsWith('http://') || src.startsWith('https://')) return src;
   return null;
 }
 

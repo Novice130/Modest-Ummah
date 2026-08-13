@@ -57,3 +57,6 @@ logs
 
 # Internal planning docs — not for the public repo
 IMPLEMENTATION_PLAN.md
+
+# Local uploads (prod uses a Docker volume at /app/uploads)
+uploads/

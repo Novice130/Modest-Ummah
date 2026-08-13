@@ -10,19 +10,11 @@ import {
   DialogContent,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { cn } from '@/lib/utils';
+import { cn, getImageUrl } from '@/lib/utils';
 
 interface ProductGalleryProps {
   images: string[];
   name: string;
-}
-
-// Helper to resolve image URLs (images are now stored as full URLs)
-function resolveImageUrl(img: string): string {
-  if (img.startsWith('http') || img.startsWith('blob:') || img.startsWith('/')) {
-    return img;
-  }
-  return `/uploads/${img}`;
 }
 
 // Check if URL is a blob URL
@@ -56,7 +48,7 @@ export default function ProductGallery({ images, name }: ProductGalleryProps) {
   
   // Transform images to full URLs
   const displayImages = hasImages 
-    ? images.map(resolveImageUrl)
+    ? images.map(getImageUrl)
     : [];
 
 

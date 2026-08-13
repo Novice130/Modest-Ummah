@@ -18,9 +18,17 @@ services:
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - DATABASE_URL=${DATABASE_URL}
       - JWT_SECRET=${JWT_SECRET}
+      - UPLOAD_DIR=/app/uploads
+    volumes:
+      # Uploaded product images survive redeploys. Mount this on the
+      # Hetzner host (Dokploy volume) at the same path.
+      - uploads:/app/uploads
     networks:
       - modest-ummah-network
       - coolify
+
+volumes:
+  uploads:
 
 networks:
   modest-ummah-network:
