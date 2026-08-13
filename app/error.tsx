@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Home } from 'lucide-react';
 
@@ -11,6 +12,8 @@ export default function Error({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // Full error (message + stack) goes to the server console only — never
+  // to the shopper. The digest identifies the incident in the logs.
   useEffect(() => {
     console.error(error);
   }, [error]);
@@ -25,27 +28,21 @@ export default function Error({
         <p className="text-muted-foreground mb-6">
           We encountered an unexpected error. Please try again or return to the homepage.
         </p>
-        {/* Debug Info */}
-        <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-md mb-6 text-left overflow-auto max-h-40">
-           <p className="font-mono text-xs text-red-600 dark:text-red-400 break-all">
-             {error.message}
-           </p>
-           {error.digest && (
-             <p className="font-mono text-xs text-muted-foreground mt-2">
-               Digest: {error.digest}
-             </p>
-           )}
-        </div>
+        {error.digest && (
+          <p className="text-xs text-muted-foreground mb-6">
+            Reference: {error.digest}
+          </p>
+        )}
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Button onClick={reset}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Try Again
           </Button>
           <Button variant="outline" asChild>
-            <a href="/">
+            <Link href="/">
               <Home className="h-4 w-4 mr-2" />
               Go Home
-            </a>
+            </Link>
           </Button>
         </div>
       </div>

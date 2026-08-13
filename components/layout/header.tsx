@@ -27,11 +27,11 @@ const navigation = [
     href: '/shop/men',
     submenu: [
       { name: 'All Men', href: '/shop/men' },
-      { name: 'Thobes', href: '/shop/men/thobes' },
-      { name: 'Kurtas', href: '/shop/men/kurtas' },
-      { name: 'Jubbas', href: '/shop/men/jubbas' },
-      { name: 'Caps/Kufis', href: '/shop/men/kufis' },
-      { name: 'Pants', href: '/shop/men/pants' },
+      { name: 'Thobes', href: '/shop/men?subcategory=Thobes' },
+      { name: 'Kurtas', href: '/shop/men?subcategory=Kurtas' },
+      { name: 'Jubbas', href: '/shop/men?subcategory=Jubbas' },
+      { name: 'Caps/Kufis', href: '/shop/men?subcategory=Caps/Kufis' },
+      { name: 'Pants', href: '/shop/men?subcategory=Pants' },
     ],
   },
   {
@@ -39,11 +39,11 @@ const navigation = [
     href: '/shop/women',
     submenu: [
       { name: 'All Women', href: '/shop/women' },
-      { name: 'Abayas', href: '/shop/women/abayas' },
-      { name: 'Hijabs', href: '/shop/women/hijabs' },
-      { name: 'Khimars', href: '/shop/women/khimars' },
-      { name: 'Jilbabs', href: '/shop/women/jilbabs' },
-      { name: 'Dresses', href: '/shop/women/dresses' },
+      { name: 'Abayas', href: '/shop/women?subcategory=Abayas' },
+      { name: 'Hijabs', href: '/shop/women?subcategory=Hijabs' },
+      { name: 'Khimars', href: '/shop/women?subcategory=Khimars' },
+      { name: 'Jilbabs', href: '/shop/women?subcategory=Jilbabs' },
+      { name: 'Dresses', href: '/shop/women?subcategory=Dresses' },
     ],
   },
   {
@@ -51,11 +51,11 @@ const navigation = [
     href: '/shop/accessories',
     submenu: [
       { name: 'All Accessories', href: '/shop/accessories' },
-      { name: 'Miswak', href: '/shop/accessories/miswak' },
-      { name: 'Attar/Perfumes', href: '/shop/accessories/attar' },
-      { name: 'Prayer Mats', href: '/shop/accessories/prayer-mats' },
-      { name: 'Tasbeeh', href: '/shop/accessories/tasbeeh' },
-      { name: 'Bags', href: '/shop/accessories/bags' },
+      { name: 'Miswak', href: '/shop/accessories?subcategory=Miswak' },
+      { name: 'Attar/Perfumes', href: '/shop/accessories?subcategory=Attar/Perfumes' },
+      { name: 'Prayer Mats', href: '/shop/accessories?subcategory=Prayer Mats' },
+      { name: 'Tasbeeh', href: '/shop/accessories?subcategory=Tasbeeh' },
+      { name: 'Bags', href: '/shop/accessories?subcategory=Bags' },
     ],
   },
 ];
@@ -102,7 +102,7 @@ export default function Header() {
     >
       {/* Announcement Bar */}
       <div className="bg-navy-900 text-white text-center py-2 text-sm">
-        <p>Free Shipping on Orders Over $75 | Use Code: TAYYIB10 for 10% Off</p>
+        <p>Free Shipping on Orders Over $75</p>
       </div>
 
       <div className="container-custom">

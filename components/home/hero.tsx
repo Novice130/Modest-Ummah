@@ -78,16 +78,16 @@ export default function Hero() {
             className="flex gap-6 md:gap-12 mt-8 md:mt-12 pt-6 md:pt-8 border-t border-white/20"
           >
             <div>
-              <p className="text-2xl md:text-4xl font-heading font-bold text-white">500+</p>
-              <p className="text-white/60 text-sm">Products</p>
+              <p className="text-2xl md:text-4xl font-heading font-bold text-white">$75+</p>
+              <p className="text-white/60 text-sm">Free Shipping</p>
             </div>
             <div>
-              <p className="text-2xl md:text-4xl font-heading font-bold text-white">10K+</p>
-              <p className="text-white/60 text-sm">Happy Customers</p>
+              <p className="text-2xl md:text-4xl font-heading font-bold text-white">30 Day</p>
+              <p className="text-white/60 text-sm">Easy Returns</p>
             </div>
             <div>
-              <p className="text-2xl md:text-4xl font-heading font-bold text-white">4.9</p>
-              <p className="text-white/60 text-sm">Average Rating</p>
+              <p className="text-2xl md:text-4xl font-heading font-bold text-white">24/7</p>
+              <p className="text-white/60 text-sm">Support</p>
             </div>
           </motion.div>
         </div>

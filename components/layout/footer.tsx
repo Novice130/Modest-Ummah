@@ -1,7 +1,12 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
-import { Mail, Phone, MapPin, Facebook, Instagram, Twitter, Youtube } from 'lucide-react';
+import { Mail, MapPin, Facebook, Instagram, Twitter, Youtube, Loader2, Check } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/hooks/use-toast';
+import { subscribeNewsletterAction } from '@/lib/actions/newsletter.actions';
 
 const footerLinks = {
   shop: {
@@ -11,7 +16,6 @@ const footerLinks = {
       { name: 'Women', href: '/shop/women' },
       { name: 'Accessories', href: '/shop/accessories' },
       { name: 'New Arrivals', href: '/shop?sort=newest' },
-      { name: 'Sale', href: '/shop?sale=true' },
     ],
   },
   help: {
@@ -21,15 +25,12 @@ const footerLinks = {
       { name: 'FAQs', href: '/faq' },
       { name: 'Shipping Info', href: '/shipping' },
       { name: 'Returns & Exchanges', href: '/returns' },
-      { name: 'Size Guide', href: '/size-guide' },
     ],
   },
   about: {
     title: 'About',
     links: [
       { name: 'Our Story', href: '/about' },
-      { name: 'Blog', href: '/blog' },
-      { name: 'Careers', href: '/careers' },
       { name: 'Privacy Policy', href: '/privacy' },
       { name: 'Terms of Service', href: '/terms' },
     ],
@@ -44,6 +45,30 @@ const socialLinks = [
 ];
 
 export default function Footer() {
+  const { toast } = useToast();
+  const [email, setEmail] = useState('');
+  const [subscribing, setSubscribing] = useState(false);
+  const [subscribed, setSubscribed] = useState(false);
+
+  const handleSubscribe = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (subscribed) return;
+    setSubscribing(true);
+    try {
+      await subscribeNewsletterAction(email);
+      setSubscribed(true);
+      toast({ title: 'Subscribed!', description: 'You are on the list.' });
+    } catch (err: any) {
+      toast({
+        title: 'Subscription failed',
+        description: err?.message || 'Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSubscribing(false);
+    }
+  };
+
   return (
     <footer className="bg-navy-900 text-white">
       {/* Newsletter Section */}
@@ -56,14 +81,22 @@ export default function Footer() {
             <p className="text-white/70 mb-6">
               Subscribe to receive updates, access to exclusive deals, and more.
             </p>
-            <form className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
+            <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
               <Input
                 type="email"
                 placeholder="Enter your email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
                 className="bg-white/10 border-white/20 text-white placeholder:text-white/50 focus:ring-sage-300"
               />
-              <Button type="submit" variant="gold" className="shrink-0">
-                Subscribe
+              <Button type="submit" variant="gold" className="shrink-0" disabled={subscribing || subscribed}>
+                {subscribing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : subscribed ? (
+                  <Check className="h-4 w-4" />
+                ) : null}
+                {subscribed ? 'Subscribed' : 'Subscribe'}
               </Button>
             </form>
           </div>
@@ -85,19 +118,13 @@ export default function Footer() {
             <div className="space-y-2 text-sm text-white/70">
               <div className="flex items-center gap-2">
                 <Mail className="h-4 w-4" />
-                <a href="mailto:info@modestummah.com" className="hover:text-white">
-                  info@modestummah.com
-                </a>
-              </div>
-              <div className="flex items-center gap-2">
-                <Phone className="h-4 w-4" />
-                <a href="tel:+1234567890" className="hover:text-white">
-                  +1 (234) 567-890
+                <a href="mailto:support@modestummah.com" className="hover:text-white">
+                  support@modestummah.com
                 </a>
               </div>
               <div className="flex items-center gap-2">
                 <MapPin className="h-4 w-4" />
-                <span>New York, NY 10001</span>
+                <span>New York, NY</span>
               </div>
             </div>
           </div>

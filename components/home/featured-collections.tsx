@@ -89,7 +89,7 @@ export default function FeaturedCollections() {
                       {collection.name}
                     </h3>
                     <p className="text-white text-sm md:text-base mb-3 md:mb-4 drop-shadow-md">{collection.description}</p>
-                    <span className="inline-flex items-center text-xs md:text-sm font-semibold group-hover:gap-3 transition-all bg-yellow-600 hover:bg-yellow-700 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-md w-fit shadow-lg">
+                    <span className="inline-flex items-center text-xs md:text-sm font-semibold group-hover:gap-3 transition-all bg-navy-900 hover:bg-navy-800 text-white px-3 md:px-4 py-1.5 md:py-2 rounded-md w-fit shadow-lg">
                       Shop Now <ArrowRight className="ml-2 h-4 w-4" />
                     </span>
                   </div>
