@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { adminSignIn } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,8 +9,20 @@ import { Label } from '@/components/ui/label';
 import { Loader2, Lock } from 'lucide-react';
 import Link from 'next/link';
 
-export default function AdminLoginPage() {
+/**
+ * Only same-origin paths are honoured. An absolute URL here would turn the
+ * login page into an open redirect, and a signed-in admin is exactly the
+ * target worth aiming one at.
+ */
+function safeRedirect(value: string | null): string {
+  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/admin';
+  return value;
+}
+
+function AdminLoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = safeRedirect(searchParams.get('redirect'));
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -30,7 +42,7 @@ export default function AdminLoginPage() {
         return;
       }
 
-      router.push('/admin');
+      router.push(redirectTo);
     } catch (err) {
       console.error(err);
       setError('Something went wrong. Please try again.');
@@ -103,5 +115,15 @@ export default function AdminLoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+// useSearchParams needs a Suspense boundary to keep the route from opting the
+// whole page into client-side rendering.
+export default function AdminLoginPage() {
+  return (
+    <Suspense>
+      <AdminLoginForm />
+    </Suspense>
   );
 }

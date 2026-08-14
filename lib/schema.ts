@@ -43,6 +43,7 @@ export const productVisibilityEnum = pgEnum('product_visibility', [
 ]);
 export const backorderPolicyEnum = pgEnum('backorder_policy', ['no', 'notify', 'yes']);
 export const couponTypeEnum = pgEnum('coupon_type', ['percentage', 'fixed']);
+export const apiKeyPermissionEnum = pgEnum('api_key_permission', ['read', 'read_write']);
 
 // ─── Users ──────────────────────────────────────────────
 export const users = pgTable(
@@ -128,10 +129,15 @@ export const products = pgTable(
     upsellIds: jsonb('upsell_ids').$type<string[]>().default([]),
     crossSellIds: jsonb('cross_sell_ids').$type<string[]>().default([]),
     imageAlts: jsonb('image_alts').$type<Record<string, string>>().default({}),
+    // Integer surrogate key for the WooCommerce-compatible API. WooCommerce
+    // product IDs are ints; ours are uuid. Pirate Ship dereferences
+    // line_items[].product_id against /wp-json/wc/v3/products/{int}.
+    wooProductId: integer('woo_product_id').generatedByDefaultAsIdentity(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => [
+    uniqueIndex('idx_products_woo_id').on(table.wooProductId),
     uniqueIndex('idx_products_slug').on(table.slug),
     index('idx_products_category').on(table.category),
     index('idx_products_featured').on(table.featured),
@@ -264,10 +270,21 @@ export const orders = pgTable(
     trackingCarrier: text('tracking_carrier'),
     couponCode: text('coupon_code'),
     discount: decimal('discount', { precision: 10, scale: 2 }).notNull().default('0'),
+    // ─── Fulfillment / connector columns ────────────────
+    // wooId is the integer surrogate the WooCommerce-compatible API exposes.
+    // Pirate Ship reads GET /orders then writes back to PUT /orders/{wooId},
+    // so this is the join key for the whole integration.
+    wooId: integer('woo_id').generatedByDefaultAsIdentity(),
+    labelUrl: text('label_url'),
+    shipmentId: text('shipment_id'),
+    shippedAt: timestamp('shipped_at'),
+    deliveredAt: timestamp('delivered_at'),
+    externalSource: text('external_source'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
   (table) => [
+    uniqueIndex('idx_orders_woo_id').on(table.wooId),
     uniqueIndex('idx_orders_order_id').on(table.orderId),
     index('idx_orders_user_id').on(table.userId),
     index('idx_orders_status').on(table.status),
@@ -318,6 +335,102 @@ export const adminLoginAttempts = pgTable(
   ]
 );
 
+// ─── WooCommerce-compatible API keys ────────────────────
+// Mirrors WordPress's woocommerce_api_keys table. Consumer keys and secrets
+// are 40 hex chars of CSPRNG output, so SHA-256 is the correct digest here:
+// there is no low-entropy password to slow down, and bcrypt on every single
+// request would be a self-inflicted denial of service.
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    // WooCommerce's auth endpoint hands the requesting app an integer key_id
+    // in its callback payload; ours are uuid, so carry a surrogate like
+    // orders.wooId does.
+    wooKeyId: integer('woo_key_id').generatedByDefaultAsIdentity(),
+    description: text('description').notNull().default(''),
+    consumerKeyHash: text('consumer_key_hash').notNull(),
+    consumerSecretHash: text('consumer_secret_hash').notNull(),
+    // AES-256-GCM ciphertext of the same secret (lib/woo/secret-box.ts).
+    // OAuth 1.0a signs with the secret, so the digest above cannot serve it.
+    // Nullable: keys minted before this column existed can only use Basic auth.
+    consumerSecretEnc: text('consumer_secret_enc'),
+    truncatedKey: text('truncated_key').notNull().default(''),
+    permissions: apiKeyPermissionEnum('permissions').notNull().default('read'),
+    lastAccess: timestamp('last_access'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    revokedAt: timestamp('revoked_at'),
+  },
+  (table) => [
+    uniqueIndex('idx_api_keys_consumer_key').on(table.consumerKeyHash),
+  ]
+);
+
+// ─── OAuth 1.0a nonces ──────────────────────────────────
+// One-legged OAuth signatures are replayable until the nonce is remembered:
+// the signature is valid for anyone who observes it, for the whole timestamp
+// window. A unique (key, nonce) pair makes each signed request single-use.
+// Rows older than the window are pruned opportunistically on write.
+export const wooOauthNonces = pgTable(
+  'woo_oauth_nonces',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    keyId: uuid('key_id')
+      .notNull()
+      .references(() => apiKeys.id, { onDelete: 'cascade' }),
+    nonce: text('nonce').notNull(),
+    timestamp: integer('timestamp').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_woo_oauth_nonce').on(table.keyId, table.nonce),
+    index('idx_woo_oauth_nonce_time').on(table.createdAt),
+  ]
+);
+
+// ─── Order notes ────────────────────────────────────────
+// Pirate Ship posts the tracking number here after buying a label, mirroring
+// WooCommerce's order-note behaviour.
+export const orderNotes = pgTable(
+  'order_notes',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    orderId: uuid('order_id')
+      .notNull()
+      .references(() => orders.id, { onDelete: 'cascade' }),
+    note: text('note').notNull(),
+    customerNote: boolean('customer_note').notNull().default(false),
+    author: text('author').notNull().default('system'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('idx_order_notes_order').on(table.orderId, table.createdAt),
+  ]
+);
+
+// ─── Integration request log ────────────────────────────
+// Every inbound /wp-json request lands here. This is the discovery mechanism:
+// Pirate Ship's exact call sequence is undocumented, so any row with a 404
+// names an endpoint still to be implemented.
+export const integrationEvents = pgTable(
+  'integration_events',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    source: text('source').notNull().default('woo'),
+    method: text('method').notNull(),
+    path: text('path').notNull(),
+    statusCode: integer('status_code').notNull().default(0),
+    ip: text('ip'),
+    userAgent: text('user_agent'),
+    body: jsonb('body'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    index('idx_integration_events_time').on(table.createdAt),
+    index('idx_integration_events_status').on(table.statusCode, table.createdAt),
+  ]
+);
+
 // ─── TypeScript types for JSON columns ──────────────────
 
 export interface OrderItem {
@@ -330,6 +443,12 @@ export interface OrderItem {
   size?: string;
   image?: string;
   sku?: string;
+  /**
+   * Per-unit weight in ounces, snapshotted at checkout. Kept on the line item
+   * so an order still reports the weight it was actually priced and shipped
+   * at, even after the product record is edited later.
+   */
+  weightOz?: number;
 }
 
 export interface ShippingAddressDB {
@@ -377,3 +496,11 @@ export type SettingSelect = typeof settings.$inferSelect;
 export type SettingInsert = typeof settings.$inferInsert;
 export type CouponSelect = typeof coupons.$inferSelect;
 export type CouponInsert = typeof coupons.$inferInsert;
+export type ApiKeySelect = typeof apiKeys.$inferSelect;
+export type ApiKeyInsert = typeof apiKeys.$inferInsert;
+export type WooOauthNonceSelect = typeof wooOauthNonces.$inferSelect;
+export type WooOauthNonceInsert = typeof wooOauthNonces.$inferInsert;
+export type OrderNoteSelect = typeof orderNotes.$inferSelect;
+export type OrderNoteInsert = typeof orderNotes.$inferInsert;
+export type IntegrationEventSelect = typeof integrationEvents.$inferSelect;
+export type IntegrationEventInsert = typeof integrationEvents.$inferInsert;

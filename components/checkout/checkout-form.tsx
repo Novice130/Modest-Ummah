@@ -194,10 +194,13 @@ export default function CheckoutForm() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          // Weight is resolved server-side from the product/variant record —
+          // a client-supplied weight would let the browser quote itself a
+          // cheaper parcel.
           items: items.map(item => ({
             productId: item.productId,
+            variantId: item.variantId,
             quantity: item.quantity,
-            weight: 8, // Default weight in ounces
           })),
           shippingAddress: {
             firstName: data.firstName,

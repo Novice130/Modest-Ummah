@@ -2,6 +2,8 @@ import { getDb } from '@/lib/db';
 import { products, productVariants } from '@/lib/schema';
 import { inArray } from 'drizzle-orm';
 import { getShippingRates, getFreeShippingInfo } from '@/lib/shipping';
+import { computeParcelFromWeights, DEFAULT_ITEM_WEIGHT_OZ } from '@/lib/parcel';
+import { toCarrierAddress } from '@/lib/address';
 import { calculateTax } from '@/lib/taxcloud';
 import { evaluateCoupon } from '@/lib/coupons';
 import type { OrderItem, ShippingAddressDB } from '@/lib/schema';
@@ -124,6 +126,17 @@ export async function resolveCheckoutOrder(input: {
       sku = product.sku || undefined;
     }
 
+    // Snapshot the per-unit weight onto the line item so the order still
+    // reports what it was priced and shipped at after the product is edited.
+    const variantWeight = item.variantId
+      ? variantById.get(item.variantId)?.weight
+      : null;
+    const rawWeight = variantWeight ?? product.weight;
+    const parsedWeight = rawWeight != null ? parseFloat(rawWeight as string) : NaN;
+    const weightOz = Number.isFinite(parsedWeight) && parsedWeight > 0
+      ? parsedWeight
+      : DEFAULT_ITEM_WEIGHT_OZ;
+
     resolvedItems.push({
       productId: product.id,
       variantId,
@@ -134,6 +147,7 @@ export async function resolveCheckoutOrder(input: {
       size: item.size,
       image,
       sku,
+      weightOz,
     });
   }
 
@@ -165,27 +179,15 @@ export async function resolveCheckoutOrder(input: {
     throw new Error('Shipping address is incomplete');
   }
 
+  // Real weights from the snapshots taken above, via the shared calculator.
+  // Previously this hardcoded 8 oz/item and a 10x7x1 box while the client's
+  // /api/shipping/rates call used a different box, so the quote shown and the
+  // amount charged could diverge.
+  const parcel = computeParcelFromWeights(resolvedItems);
+
   const ratesResult = await getShippingRates({
-    destination: {
-      name: `${address.firstName || ''} ${address.lastName || ''}`.trim() || 'Customer',
-      street1: address.address1,
-      street2: address.address2 || '',
-      city: address.city,
-      state: address.state,
-      zip: address.postalCode,
-      country: address.country || 'US',
-      phone: address.phone,
-      email: address.email,
-    },
-    package: {
-      length: 10,
-      width: 7,
-      height: 1,
-      weight: Math.min(
-        resolvedItems.reduce((sum, item) => sum + 8 * item.quantity, 0) + 2,
-        64
-      ),
-    },
+    destination: toCarrierAddress(address),
+    package: parcel,
   });
 
   const selected =

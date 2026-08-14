@@ -18,6 +18,7 @@ import {
   fetchSettingsAction,
   saveSettingsAction,
 } from '@/lib/actions/settings.actions';
+import PirateShipConnector from '@/components/admin/pirate-ship-connector';
 
 export default function AdminSettingsPage() {
   const { toast } = useToast();
@@ -155,6 +156,8 @@ export default function AdminSettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      <PirateShipConnector />
 
       <div className="flex justify-end">
         <Button onClick={handleSave} disabled={saving}>
