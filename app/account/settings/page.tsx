@@ -15,6 +15,7 @@ import { Switch } from '@/components/ui/switch';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
+import { updateProfileAction, changePasswordAction } from '@/lib/actions/account.actions';
 
 const profileSchema = z.object({
   name: z.string().min(2, 'Name is required'),
@@ -80,8 +81,10 @@ export default function SettingsPage() {
 
   const onUpdateProfile = async (data: ProfileFormData) => {
     try {
-      // TODO: Replace with updateProfileAction(data) implementation
-      setUser({ ...user!, name: data.name });
+      // Only the name travels: the email input is disabled, and changing the
+      // login identity needs a verification flow that does not exist.
+      const saved = await updateProfileAction({ name: data.name });
+      setUser({ ...user!, name: saved.name });
 
       toast({
         title: 'Profile updated',
@@ -89,8 +92,8 @@ export default function SettingsPage() {
       });
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to update profile',
+        title: 'Could not update your profile',
+        description: error.message || 'Please try again.',
         variant: 'destructive',
       });
     }
@@ -98,17 +101,25 @@ export default function SettingsPage() {
 
   const onChangePassword = async (data: PasswordFormData) => {
     try {
-      // TODO: Replace with Native Server Action changePasswordAction(data)
+      await changePasswordAction({
+        currentPassword: data.currentPassword,
+        newPassword: data.newPassword,
+      });
       passwordForm.reset();
 
+      // Rotating the password retires every token issued against the old one,
+      // including this session's, so the only honest next step is a fresh
+      // sign-in.
       toast({
         title: 'Password changed',
-        description: 'Your password has been changed successfully.',
+        description: 'Sign in again with your new password.',
       });
+      setUser(null);
+      router.push('/auth/login?redirect=/account/settings');
     } catch (error: any) {
       toast({
-        title: 'Error',
-        description: error.message || 'Failed to change password',
+        title: 'Could not change your password',
+        description: error.message || 'Please try again.',
         variant: 'destructive',
       });
     }
