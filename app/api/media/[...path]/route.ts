@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { readFile, stat } from 'fs/promises';
 import path from 'path';
-import { getUploadDir } from '@/app/api/upload/route';
+import { getUploadDir } from '@/lib/uploads';
 
 const MIME_BY_EXT: Record<string, string> = {
   '.jpg': 'image/jpeg',

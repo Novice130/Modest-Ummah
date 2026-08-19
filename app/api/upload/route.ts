@@ -3,6 +3,7 @@ import { getAuthFromRequest } from '@/lib/auth';
 import { writeFile, mkdir } from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto';
+import { getUploadDir } from '@/lib/uploads';
 
 const MAX_FILES = 10;
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
@@ -38,19 +39,6 @@ function sniffImageType(buf: Buffer): string | null {
     return 'image/avif';
   }
   return null;
-}
-
-/**
- * Uploads live outside public/ so a redeploy never wipes them and the image
- * build cannot shadow them. In production the Dokploy volume mounts at
- * /app/uploads; locally the files land in ./uploads (gitignored).
- * The local path is statically scoped to the uploads subfolder so
- * Turbopack does not trace the whole project.
- */
-export function getUploadDir(): string {
-  if (process.env.UPLOAD_DIR) return process.env.UPLOAD_DIR;
-  if (process.env.NODE_ENV === 'production') return '/app/uploads';
-  return path.join(process.cwd(), 'uploads');
 }
 
 export async function POST(request: NextRequest) {

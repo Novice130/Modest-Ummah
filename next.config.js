@@ -23,6 +23,10 @@ const nextConfig = {
   // scopes may not call cookies()/headers(); those reads live in the
   // root layout and admin trees, which stay dynamic.
   cacheComponents: true,
+  // sharp is a native module: bundling it into the server build breaks the
+  // .node binding lookup. lib/image-meta.ts uses it inside a Server Action,
+  // so it has to stay external and be installed at runtime.
+  serverExternalPackages: ['sharp'],
   experimental: {
     // optimizeCss: true, // Disabled to fix missing 'critters' error
   },

@@ -24,6 +24,7 @@ import {
 import type { Product } from '@/types';
 import { productDocumentSchema, type ProductDocument } from '@/lib/product-builder-schema';
 import { stringifyCsv, parseList, joinList } from '@/lib/csv';
+import { resolveImageMeta, type ImageMetaEntry } from '@/lib/image-meta';
 import { getSession } from './auth.actions';
 import { setProductTags } from './tag.actions';
 
@@ -160,6 +161,23 @@ export async function saveProductAction(input: {
   const db = getDb();
   const productId = input.productId || null;
 
+  // Intrinsic size + LQIP for anything uploaded through the admin. Only URLs
+  // without an entry are read off disk, so the 1.5s autosave does not
+  // re-encode the gallery on every keystroke.
+  let existingMeta: Record<string, ImageMetaEntry> = {};
+  if (productId) {
+    const [row] = await db
+      .select({ imageMeta: products.imageMeta })
+      .from(products)
+      .where(eq(products.id, productId))
+      .limit(1);
+    existingMeta = (row?.imageMeta || {}) as Record<string, ImageMetaEntry>;
+  }
+  const imageMeta = await resolveImageMeta(
+    [...doc.images, ...doc.variants.map((v) => v.image)],
+    existingMeta
+  );
+
   // Autosave of a new row still creates a draft row on the server (the plan
   // replaces localStorage with server drafts); it must never publish.
   let status = doc.status;
@@ -206,6 +224,7 @@ export async function saveProductAction(input: {
     similarProducts: doc.similarProductIds,
     images: doc.images,
     imageAlts: doc.imageAlts,
+    imageMeta,
     status,
     publishedAt,
     updatedAt: new Date(),
@@ -337,6 +356,9 @@ export async function duplicateProductAction(id: string): Promise<{ id: string; 
       similarProducts: row.similarProducts,
       images: row.images,
       imageAlts: row.imageAlts,
+      // The copy points at the same files, so the resolved sizes and blur
+      // placeholders come with it rather than being recomputed.
+      imageMeta: row.imageMeta,
       // A copy is always a draft; publishing is a deliberate action.
       status: 'draft',
       publishedAt: null,
