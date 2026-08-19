@@ -99,14 +99,39 @@ export function getTokenFromCookies(
   return authCookie.split('=')[1] || null;
 }
 
+/**
+ * Reads a bearer token from the Authorization header.
+ *
+ * The mobile app has no cookie jar — it stores the JWT in the Keychain and
+ * sends it here. Same token, same verification; only the transport differs.
+ */
+export function getTokenFromAuthHeader(authHeader: string | null): string | null {
+  if (!authHeader) return null;
+  const match = /^Bearer\s+(.+)$/i.exec(authHeader.trim());
+  return match?.[1]?.trim() || null;
+}
+
 // ─── Request Auth Helpers ───────────────────────────────
 
 export async function getAuthFromRequest(
   request: Request,
   isAdmin = false
 ): Promise<TokenPayload | null> {
-  const cookieHeader = request.headers.get('cookie');
-  const token = getTokenFromCookies(cookieHeader, isAdmin);
+  // Cookie first so browser behaviour is unchanged; the bearer header is the
+  // fallback for non-browser clients.
+  const token =
+    getTokenFromCookies(request.headers.get('cookie'), isAdmin) ??
+    getTokenFromAuthHeader(request.headers.get('authorization'));
   if (!token) return null;
-  return verifyToken(token);
+
+  const payload = await verifyToken(token);
+  if (!payload) return null;
+
+  // A bearer token carries no cookie-name distinction, so the audience check
+  // has to happen here — otherwise a customer token would satisfy an admin
+  // route simply by being valid.
+  const wantedType = isAdmin ? 'admin' : 'user';
+  if (payload.type !== wantedType) return null;
+
+  return payload;
 }
