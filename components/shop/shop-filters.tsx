@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { ChevronDown, X, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -20,8 +20,10 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
-import { CATEGORIES, COLORS, SIZES } from '@/lib/utils';
+import { COLORS, SIZES } from '@/lib/utils';
 import { cn } from '@/lib/utils';
+import { fetchCategoryTree } from '@/lib/actions/category.actions';
+import type { CategoryNode } from '@/types';
 
 const priceRanges = [
   { label: 'Under $25', min: 0, max: 25 },
@@ -61,6 +63,21 @@ export default function ShopFilters() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [categoryTree, setCategoryTree] = useState<CategoryNode[]>([]);
+
+  // The tree is admin-editable, so it cannot be a build-time constant.
+  // Failure leaves the section empty rather than breaking the whole sidebar.
+  useEffect(() => {
+    let cancelled = false;
+    fetchCategoryTree()
+      .then((tree) => {
+        if (!cancelled) setCategoryTree(tree);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const createQueryString = useCallback(
     (name: string, value: string) => {
@@ -125,40 +142,46 @@ export default function ShopFilters() {
 
       {/* Category Filter */}
       <FilterSection title="Category">
-        {Object.entries(CATEGORIES).map(([key, category]) => (
-          <div key={key} className="space-y-1">
-            <div className="flex items-center space-x-2">
-              <Checkbox
-                id={`category-${key}`}
-                checked={searchParams.get('category') === key}
-                onCheckedChange={(checked) =>
-                  handleFilterChange('category', checked ? key : '')
-                }
-              />
-              <Label htmlFor={`category-${key}`} className="text-sm cursor-pointer">
-                {category.label}
-              </Label>
-            </div>
-            {searchParams.get('category') === key && (
-              <div className="pl-6 space-y-1">
-                {category.subcategories.map((sub) => (
-                  <div key={sub} className="flex items-center space-x-2">
-                    <Checkbox
-                      id={`sub-${sub}`}
-                      checked={searchParams.get('subcategory') === sub}
-                      onCheckedChange={(checked) =>
-                        handleFilterChange('subcategory', checked ? sub : '')
-                      }
-                    />
-                    <Label htmlFor={`sub-${sub}`} className="text-xs cursor-pointer">
-                      {sub}
-                    </Label>
-                  </div>
-                ))}
+        {categoryTree.map((parent) => {
+          const activeSlug = searchParams.get('category');
+          const parentActive =
+            activeSlug === parent.slug ||
+            parent.children.some((c) => c.slug === activeSlug);
+          return (
+            <div key={parent.id} className="space-y-1">
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id={`category-${parent.slug}`}
+                  checked={activeSlug === parent.slug}
+                  onCheckedChange={(checked) =>
+                    handleFilterChange('category', checked ? parent.slug : '')
+                  }
+                />
+                <Label htmlFor={`category-${parent.slug}`} className="text-sm cursor-pointer">
+                  {parent.name}
+                </Label>
               </div>
-            )}
-          </div>
-        ))}
+              {parentActive && parent.children.length > 0 && (
+                <div className="pl-6 space-y-1">
+                  {parent.children.map((child) => (
+                    <div key={child.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`category-${child.slug}`}
+                        checked={activeSlug === child.slug}
+                        onCheckedChange={(checked) =>
+                          handleFilterChange('category', checked ? child.slug : parent.slug)
+                        }
+                      />
+                      <Label htmlFor={`category-${child.slug}`} className="text-xs cursor-pointer">
+                        {child.name}
+                      </Label>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </FilterSection>
 
       {/* Price Filter */}

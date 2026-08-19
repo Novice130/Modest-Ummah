@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -19,48 +19,41 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useCartStore, useUIStore, useAuthStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
+import type { CategoryNode } from '@/types';
 
-const navigation = [
-  { name: 'Home', href: '/' },
-  {
-    name: 'Men',
-    href: '/shop/men',
-    submenu: [
-      { name: 'All Men', href: '/shop/men' },
-      { name: 'Thobes', href: '/shop/men?subcategory=Thobes' },
-      { name: 'Kurtas', href: '/shop/men?subcategory=Kurtas' },
-      { name: 'Jubbas', href: '/shop/men?subcategory=Jubbas' },
-      { name: 'Caps/Kufis', href: '/shop/men?subcategory=Caps/Kufis' },
-      { name: 'Pants', href: '/shop/men?subcategory=Pants' },
-    ],
-  },
-  {
-    name: 'Women',
-    href: '/shop/women',
-    submenu: [
-      { name: 'All Women', href: '/shop/women' },
-      { name: 'Abayas', href: '/shop/women?subcategory=Abayas' },
-      { name: 'Hijabs', href: '/shop/women?subcategory=Hijabs' },
-      { name: 'Khimars', href: '/shop/women?subcategory=Khimars' },
-      { name: 'Jilbabs', href: '/shop/women?subcategory=Jilbabs' },
-      { name: 'Dresses', href: '/shop/women?subcategory=Dresses' },
-    ],
-  },
-  {
-    name: 'Accessories',
-    href: '/shop/accessories',
-    submenu: [
-      { name: 'All Accessories', href: '/shop/accessories' },
-      { name: 'Miswak', href: '/shop/accessories?subcategory=Miswak' },
-      { name: 'Attar/Perfumes', href: '/shop/accessories?subcategory=Attar/Perfumes' },
-      { name: 'Prayer Mats', href: '/shop/accessories?subcategory=Prayer Mats' },
-      { name: 'Tasbeeh', href: '/shop/accessories?subcategory=Tasbeeh' },
-      { name: 'Bags', href: '/shop/accessories?subcategory=Bags' },
-    ],
-  },
-];
+interface NavItem {
+  name: string;
+  href: string;
+  submenu?: Array<{ name: string; href: string }>;
+}
 
-export default function Header() {
+/**
+ * Builds the nav from the editable category tree. Top-level categories become
+ * nav items and their children become the submenu, so adding a category in
+ * the admin puts it in the header without a deploy.
+ */
+function buildNavigation(categories: CategoryNode[]): NavItem[] {
+  return [
+    { name: 'Home', href: '/' },
+    ...categories.map((parent) => ({
+      name: parent.name,
+      href: `/shop/${parent.slug}`,
+      submenu:
+        parent.children.length > 0
+          ? [
+              { name: `All ${parent.name}`, href: `/shop/${parent.slug}` },
+              ...parent.children.map((child) => ({
+                name: child.name,
+                href: `/shop/${child.slug}`,
+              })),
+            ]
+          : undefined,
+    })),
+  ];
+}
+
+export default function Header({ categories = [] }: { categories?: CategoryNode[] }) {
+  const navigation = useMemo(() => buildNavigation(categories), [categories]);
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const { getItemCount, openCart } = useCartStore();

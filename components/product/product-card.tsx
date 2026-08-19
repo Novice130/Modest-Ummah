@@ -143,7 +143,7 @@ export default function ProductCard({ product, index = 0 }: ProductCardProps) {
         {/* Product Info */}
         <div className="space-y-1">
           <p className="text-xs text-muted-foreground uppercase tracking-wide">
-            {product.subcategory}
+            {product.category?.name ?? ''}
           </p>
           <h3 className="font-medium text-sm md:text-base line-clamp-2 group-hover:text-sage-600 transition-colors">
             {product.name}

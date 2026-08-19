@@ -86,8 +86,8 @@ export async function calculateTax(params: {
     id: string;
     price: number;
     quantity: number;
-    category: 'men' | 'women' | 'accessories';
-    subcategory?: string;
+    /** Category slug, e.g. 'rings' or 'abayas'. Empty when uncategorised. */
+    category: string;
   }>;
   shippingAddress: {
     address1: string;
@@ -126,7 +126,7 @@ export async function calculateTax(params: {
   const cartItems: TaxCloudCartItem[] = params.items.map((item, index) => ({
     index,
     itemId: item.id,
-    tic: getTICForProduct(item.category, item.subcategory),
+    tic: getTICForProduct(item.category),
     price: item.price,
     qty: item.quantity,
   }));
@@ -303,35 +303,53 @@ export async function returnTax(params: {
 }
 
 /**
- * Get TIC code based on product category
+ * Maps a category slug to a TaxCloud TIC.
+ *
+ * The distinction that matters is clothing vs everything else: several states
+ * exempt or reduce tax on apparel, and none of them extend that to jewellery.
+ * Filing jewellery as CLOTHING would under-collect, so anything not explicitly
+ * apparel falls through to general merchandise.
+ *
+ * Categories are admin-editable, so this cannot be exhaustive — it matches on
+ * slug fragments and defaults safely.
  */
-function getTICForProduct(category: string, subcategory?: string): string {
-  // Map subcategories to specific TICs
-  const subcategoryMap: Record<string, string> = {
-    'attar': TaxCloudTICs.COSMETICS,
-    'perfumes': TaxCloudTICs.COSMETICS,
-    'miswak': TaxCloudTICs.HEALTH_PRODUCTS,
-  };
+const APPAREL_SLUGS = [
+  'abaya',
+  'hijab',
+  'khimar',
+  'jilbab',
+  'dress',
+  'thobe',
+  'kurta',
+  'jubba',
+  'apparel',
+  'clothing',
+];
 
-  if (subcategory) {
-    const lowerSub = subcategory.toLowerCase();
-    for (const [key, tic] of Object.entries(subcategoryMap)) {
-      if (lowerSub.includes(key)) {
-        return tic;
-      }
-    }
+const SLUG_TIC_OVERRIDES: Array<[string, string]> = [
+  ['attar', TaxCloudTICs.COSMETICS],
+  ['perfume', TaxCloudTICs.COSMETICS],
+  ['miswak', TaxCloudTICs.HEALTH_PRODUCTS],
+  ['prayer-mat', TaxCloudTICs.RELIGIOUS_ITEMS],
+  ['tasbeeh', TaxCloudTICs.RELIGIOUS_ITEMS],
+  ['cap', TaxCloudTICs.CLOTHING_ACCESSORIES],
+  ['kufi', TaxCloudTICs.CLOTHING_ACCESSORIES],
+];
+
+function getTICForProduct(category: string): string {
+  const slug = (category || '').toLowerCase();
+  if (!slug) return TaxCloudTICs.GENERAL_MERCHANDISE;
+
+  for (const [fragment, tic] of SLUG_TIC_OVERRIDES) {
+    if (slug.includes(fragment)) return tic;
   }
 
-  // Map main categories
-  switch (category) {
-    case 'men':
-    case 'women':
-      return TaxCloudTICs.CLOTHING;
-    case 'accessories':
-      return TaxCloudTICs.CLOTHING_ACCESSORIES;
-    default:
-      return TaxCloudTICs.GENERAL_MERCHANDISE;
+  if (APPAREL_SLUGS.some((fragment) => slug.includes(fragment))) {
+    return TaxCloudTICs.CLOTHING;
   }
+
+  // Jewellery and anything else the admin invents.
+  return TaxCloudTICs.GENERAL_MERCHANDISE;
 }
 
 /**

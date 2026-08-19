@@ -480,7 +480,7 @@ export default function AdminProductsPage() {
                     </div>
                   </TableCell>
                   <TableCell className="font-medium">{product.name}</TableCell>
-                  <TableCell className="capitalize">{product.category}</TableCell>
+                  <TableCell>{product.category?.name ?? '—'}</TableCell>
                   <TableCell>{formatPrice(product.price)}</TableCell>
                   <TableCell>{product.stockQuantity || 0}</TableCell>
                   <TableCell>

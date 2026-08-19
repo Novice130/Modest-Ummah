@@ -9,7 +9,7 @@ import type { Product } from '@/types';
 interface ShopContentProps {
   searchParams: {
     category?: string;
-    subcategory?: string;
+    tag?: string;
     color?: string;
     size?: string;
     minPrice?: string;
@@ -41,7 +41,7 @@ export default async function ShopContent({ searchParams }: ShopContentProps) {
       page,
       limit,
       category: searchParams.category,
-      subcategory: searchParams.subcategory,
+      tag: searchParams.tag,
       search: searchParams.search,
       minPrice,
       maxPrice,

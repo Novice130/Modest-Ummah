@@ -1,4 +1,4 @@
-import { Suspense } from 'react';
+import { Fragment, Suspense } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import ProductGallery from '@/components/product/product-gallery';
@@ -91,8 +91,16 @@ export default async function ProductPage({ params }: ProductPageProps) {
             <li>/</li>
             <li><a href="/shop" className="hover:text-foreground">Shop</a></li>
             <li>/</li>
-            <li><a href={`/shop/${product.category}`} className="hover:text-foreground capitalize">{product.category}</a></li>
-            <li>/</li>
+            {(product.category?.path ?? []).map((crumb) => (
+              <Fragment key={crumb.id}>
+                <li>
+                  <a href={`/shop/${crumb.slug}`} className="hover:text-foreground">
+                    {crumb.name}
+                  </a>
+                </li>
+                <li>/</li>
+              </Fragment>
+            ))}
             <li className="text-foreground">{product.name}</li>
           </ol>
         </nav>

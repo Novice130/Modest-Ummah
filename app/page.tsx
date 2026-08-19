@@ -7,6 +7,7 @@ import Testimonials from '@/components/home/testimonials';
 import Features from '@/components/home/features';
 import Newsletter from '@/components/home/newsletter';
 import { ProductCardSkeleton } from '@/components/product/product-card-skeleton';
+import { fetchCategoryTree } from '@/lib/actions/category.actions';
 
 /**
  * Grid shape matches the real sections (grid-cols-2 md:grid-cols-3
@@ -27,11 +28,23 @@ function ProductGridSkeleton({ title }: { title: string }) {
   );
 }
 
+/**
+ * The collections strip renders the editable category tree, so it is fetched
+ * here rather than hardcoded. It sits outside a Suspense boundary because it
+ * is above the fold — a cached read, so it does not block prerendering.
+ */
+async function CollectionsStrip() {
+  const categories = await fetchCategoryTree().catch(() => []);
+  return <FeaturedCollections categories={categories} />;
+}
+
 export default function HomePage() {
   return (
     <>
       <Hero />
-      <FeaturedCollections />
+      <Suspense fallback={null}>
+        <CollectionsStrip />
+      </Suspense>
       <Suspense fallback={<ProductGridSkeleton title="New Arrivals" />}>
         <NewArrivals />
       </Suspense>

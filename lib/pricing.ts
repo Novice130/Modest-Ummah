@@ -1,5 +1,5 @@
 import { getDb } from '@/lib/db';
-import { products, productVariants } from '@/lib/schema';
+import { categories, products, productVariants } from '@/lib/schema';
 import { inArray } from 'drizzle-orm';
 import { getShippingRates, getFreeShippingInfo } from '@/lib/shipping';
 import { computeParcelFromWeights, DEFAULT_ITEM_WEIGHT_OZ } from '@/lib/parcel';
@@ -77,6 +77,17 @@ export async function resolveCheckoutOrder(input: {
     .where(inArray(products.id, productIds));
 
   const byId = new Map(rows.map((r) => [r.id, r]));
+
+  // Coupon eligibility and the tax lookup both key off category SLUG, while
+  // the product row carries a uuid FK. Resolve once for the whole cart.
+  const categoryRows = await db
+    .select({ id: categories.id, slug: categories.slug })
+    .from(categories);
+  const categorySlug = new Map(categoryRows.map((c) => [c.id, c.slug]));
+  const slugFor = (productId: string) => {
+    const id = byId.get(productId)?.categoryId;
+    return id ? categorySlug.get(id) ?? '' : '';
+  };
 
   // Variant prices override the parent price. One query for all variants
   // referenced by this cart.
@@ -163,7 +174,7 @@ export async function resolveCheckoutOrder(input: {
     subtotal,
     resolvedItems.map((item) => ({
       productId: item.productId,
-      category: byId.get(item.productId)?.category || 'men',
+      category: slugFor(item.productId),
       price: item.price,
       quantity: item.quantity,
     }))
@@ -208,8 +219,7 @@ export async function resolveCheckoutOrder(input: {
         // lookup uses the true taxable price of each item.
         price: subtotal > 0 ? round2(item.price * (taxableSubtotal / subtotal)) : item.price,
         quantity: item.quantity,
-        category: product.category,
-        subcategory: product.subcategory,
+        category: slugFor(product.id),
       };
     }),
     shippingAddress: {

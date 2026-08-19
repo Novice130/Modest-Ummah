@@ -4,27 +4,33 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ArrowRight } from 'lucide-react';
+import type { CategoryNode } from '@/types';
 
-const collections = [
-  {
-    name: 'Men',
-    description: 'Thobes, Kurtas, Kufis & More',
-    href: '/shop/men',
-    image: '/images/collections/men.jpg',
-  },
-  {
-    name: 'Women',
-    description: 'Abayas, Hijabs, Jilbabs & More',
-    href: '/shop/women',
-    image: '/images/collections/women.jpg',
-  },
-  {
-    name: 'Accessories',
-    description: 'Miswak, Attar, Prayer Items & More',
-    href: '/shop/accessories',
-    image: '/images/collections/accessories.jpg',
-  },
-];
+interface Collection {
+  name: string;
+  description: string;
+  href: string;
+  image: string;
+}
+
+/**
+ * Top-level categories become the homepage collections. `image` is set per
+ * category in the admin; a category without one falls back to a placeholder
+ * rather than rendering a broken tile.
+ */
+function toCollections(categories: CategoryNode[]): Collection[] {
+  return categories.map((c) => ({
+    name: c.name,
+    description:
+      c.description ||
+      (c.children.length > 0
+        ? `${c.children.slice(0, 3).map((x) => x.name).join(', ')} & more`
+        : `Shop ${c.name.toLowerCase()}`),
+    href: `/shop/${c.slug}`,
+    image: c.image || '/images/collections/placeholder.jpg',
+  }));
+}
+
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -41,7 +47,14 @@ const itemVariants = {
   visible: { opacity: 1, y: 0 },
 };
 
-export default function FeaturedCollections() {
+export default function FeaturedCollections({
+  categories = [],
+}: {
+  categories?: CategoryNode[];
+}) {
+  const collections = toCollections(categories);
+  if (collections.length === 0) return null;
+
   return (
     <section className="py-12 md:py-24">
       <div className="container-custom">

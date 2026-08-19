@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
-import { coupons } from '@/lib/schema';
-import { ilike, sql } from 'drizzle-orm';
+import { categories, coupons } from '@/lib/schema';
+import { eq, ilike, sql } from 'drizzle-orm';
 
 /**
  * Coupon evaluation. The single source of truth for discounts — nothing
@@ -88,8 +88,17 @@ export async function evaluateCoupon(
         error: 'This coupon does not apply to any products in your cart',
       };
     }
-  } else if (coupon.category) {
-    eligible = items.filter((i) => i.category === coupon.category);
+  } else if (coupon.categoryId) {
+    // The cart carries category slugs; the coupon stores an id. One lookup
+    // rather than denormalizing the slug onto the coupon row, which would go
+    // stale the moment someone renames the category.
+    const [couponCategory] = await db
+      .select({ slug: categories.slug })
+      .from(categories)
+      .where(eq(categories.id, coupon.categoryId))
+      .limit(1);
+    const wanted = couponCategory?.slug;
+    eligible = wanted ? items.filter((i) => i.category === wanted) : [];
     if (eligible.length === 0) {
       return {
         ok: false,

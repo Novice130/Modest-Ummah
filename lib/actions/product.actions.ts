@@ -54,8 +54,12 @@ export async function fetchNewArrivals(limit = 8) {
   return getNewArrivalsCached(limit);
 }
 
-export async function fetchRelatedProducts(currentProductId: string, category: string, limit = 4) {
-  return getRelatedCached(currentProductId, category, limit);
+export async function fetchRelatedProducts(
+  currentProductId: string,
+  categoryId: string | null,
+  limit = 4
+) {
+  return getRelatedCached(currentProductId, categoryId, limit);
 }
 
 export async function fetchSearchProducts(query: string) {
@@ -538,6 +542,20 @@ export async function importProductsAction(input: {
   const dataRows = rows.slice(1);
   const results: ImportRowResult[] = [];
 
+  // The CSV addresses taxonomy by slug — a uuid would be unusable in a
+  // spreadsheet. Resolve the whole table once rather than per row. Unknown
+  // slugs are dropped rather than auto-created: silently inventing categories
+  // from a typo is how a catalogue rots.
+  const db0 = getDb();
+  const categoryBySlug = new Map(
+    (await db0.select({ id: categories.id, slug: categories.slug }).from(categories)).map(
+      (c) => [c.slug, c.id]
+    )
+  );
+  const tagBySlug = new Map(
+    (await db0.select({ id: tags.id, slug: tags.slug }).from(tags)).map((t) => [t.slug, t.id])
+  );
+
   const get = (row: string[], col: string) => {
     const idx = header.indexOf(col);
     return idx >= 0 ? row[idx]?.trim() : '';
@@ -560,9 +578,10 @@ export async function importProductsAction(input: {
       description: get(row, 'description'),
       images: parseList(get(row, 'images')),
       imageAlts: {},
-      category: get(row, 'category') || 'men',
-      subcategory: get(row, 'subcategory') || 'General',
-      tags: parseList(get(row, 'tags')),
+      categoryId: categoryBySlug.get(get(row, 'category')) ?? '',
+      tagIds: parseList(get(row, 'tags'))
+        .map((slug) => tagBySlug.get(slug))
+        .filter((id): id is string => Boolean(id)),
       featured: toBool(get(row, 'featured')),
       newArrivalPinned: toBool(get(row, 'new_arrival_pinned')),
       excludeFromNewArrivals: toBool(get(row, 'exclude_from_new_arrivals')),
@@ -802,9 +821,8 @@ export async function createProductAction(data: Record<string, any>) {
     description: data.description || '',
     images: parseJsonField(data.images, []),
     imageAlts: {},
-    category: data.category || 'men',
-    subcategory: data.subcategory || 'General',
-    tags: parseJsonField(data.tags, []),
+    categoryId: data.categoryId || '',
+    tagIds: parseJsonField(data.tagIds, []),
     featured: data.featured === true || data.featured === 'true',
     visibility: data.visibility || 'public',
     price: String(data.price || '0'),
@@ -870,7 +888,7 @@ function parseJsonField(value: any, fallback: any): any {
 
 function defaultDocument(): Record<string, any> {
   return {
-    tags: [],
+    tagIds: [],
     featured: false,
     newArrivalPinned: false,
     excludeFromNewArrivals: false,

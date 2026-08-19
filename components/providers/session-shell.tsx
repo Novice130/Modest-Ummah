@@ -1,6 +1,7 @@
 import { AuthProvider } from '@/components/providers/auth-provider';
 import { getSession } from '@/lib/actions/auth.actions';
 import AppShell from '@/components/layout/app-shell';
+import { fetchCategoryTree } from '@/lib/actions/category.actions';
 import { Toaster } from '@/components/ui/toaster';
 
 /**
@@ -10,11 +11,16 @@ import { Toaster } from '@/components/ui/toaster';
  * layout itself would block prerendering of every route.
  */
 export async function SessionShell({ children }: { children: React.ReactNode }) {
-  const session = await getSession();
+  // The nav is built from the editable category tree. Read here rather than
+  // in the client Header so the header renders complete on the server pass.
+  const [session, categories] = await Promise.all([
+    getSession(),
+    fetchCategoryTree().catch(() => []),
+  ]);
 
   return (
     <AuthProvider initialUser={session as any}>
-      <AppShell>{children}</AppShell>
+      <AppShell categories={categories}>{children}</AppShell>
       <Toaster />
     </AuthProvider>
   );

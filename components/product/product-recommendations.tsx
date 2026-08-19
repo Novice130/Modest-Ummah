@@ -10,7 +10,7 @@ export default async function ProductRecommendations({ product }: ProductRecomme
   let relatedProducts: Product[] = [];
 
   try {
-    relatedProducts = await fetchRelatedProducts(product.id, product.category, 4);
+    relatedProducts = await fetchRelatedProducts(product.id, product.category?.id ?? null, 4);
   } catch (error) {
     console.error('Failed to fetch related products:', error);
   }

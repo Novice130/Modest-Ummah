@@ -274,7 +274,12 @@ export function serializeOrder(
 
 export function serializeProduct(
   product: ProductSelect,
-  options: { storeUrl?: string } = {}
+  options: {
+    storeUrl?: string;
+    /** Resolved from categories/product_tags by the caller — see endpoints.ts. */
+    category?: { name: string; slug: string } | null;
+    tags?: Array<{ name: string; slug: string }>;
+  } = {}
 ): Record<string, unknown> {
   const created = wooDates(product.createdAt);
   const modified = wooDates(product.updatedAt);
@@ -332,10 +337,17 @@ export function serializeProduct(
     reviews_allowed: false,
     average_rating: '0.00',
     rating_count: 0,
-    categories: product.category
-      ? [{ id: 0, name: product.category, slug: product.category }]
+    // Woo wants integer ids; ours are uuids. The connector only ever reads
+    // these back as display strings, so a positional id is sufficient — same
+    // compromise the tags list has always made.
+    categories: options.category
+      ? [{ id: 0, name: options.category.name, slug: options.category.slug }]
       : [],
-    tags: (product.tags || []).map((tag, i) => ({ id: i + 1, name: tag, slug: tag })),
+    tags: (options.tags || []).map((tag, i) => ({
+      id: i + 1,
+      name: tag.name,
+      slug: tag.slug,
+    })),
     images: (product.images || []).map((src, i) => ({
       id: i + 1,
       src,

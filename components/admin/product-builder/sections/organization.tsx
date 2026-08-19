@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { X, Plus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,76 +12,138 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { CATEGORIES } from '@/lib/utils';
+import { fetchCategoryTree } from '@/lib/actions/category.actions';
+import { createTagAction, fetchTags } from '@/lib/actions/tag.actions';
+import { useToast } from '@/hooks/use-toast';
 import { Field } from '../field';
 import type { useProductBuilder } from '../use-product-builder';
+import type { CategoryNode, TagRef } from '@/types';
 
 type Builder = ReturnType<typeof useProductBuilder>;
 
+/**
+ * Flattens the tree into Select options. Parents render as disabled headers
+ * and leaves as selectable rows — products attach to leaves, because the
+ * ancestor chain is what produces the breadcrumb.
+ */
+function flattenForSelect(
+  nodes: CategoryNode[],
+  depth = 0
+): Array<{ id: string; label: string; depth: number; selectable: boolean }> {
+  const out: Array<{ id: string; label: string; depth: number; selectable: boolean }> = [];
+  for (const node of nodes) {
+    out.push({
+      id: node.id,
+      label: node.name,
+      depth,
+      selectable: node.children.length === 0,
+    });
+    if (node.children.length > 0) out.push(...flattenForSelect(node.children, depth + 1));
+  }
+  return out;
+}
+
 export default function OrganizationSection({ builder }: { builder: Builder }) {
   const { doc, update, errors } = builder;
+  const { toast } = useToast();
+
   const [tagInput, setTagInput] = useState('');
+  const [categoryTree, setCategoryTree] = useState<CategoryNode[]>([]);
+  const [allTags, setAllTags] = useState<TagRef[]>([]);
+  const [creatingTag, setCreatingTag] = useState(false);
 
-  const addTag = () => {
-    const tag = tagInput.trim();
-    if (!tag) return;
-    update((d) => {
-      if (!d.tags.includes(tag)) d.tags.push(tag);
-    });
-    setTagInput('');
-  };
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [tree, tags] = await Promise.all([fetchCategoryTree(), fetchTags()]);
+        if (cancelled) return;
+        setCategoryTree(tree);
+        setAllTags(tags);
+      } catch {
+        if (!cancelled) {
+          toast({
+            title: 'Could not load categories and tags',
+            description: 'Reload the page to try again.',
+            variant: 'destructive',
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [toast]);
 
-  const categoryOptions = Object.entries(CATEGORIES) as Array<
-    [string, { label: string; subcategories: readonly string[] }]
-  >;
-  const currentSubs: readonly string[] =
-    (CATEGORIES[doc.category as keyof typeof CATEGORIES]?.subcategories as readonly string[]) || [];
+  const categoryOptions = useMemo(() => flattenForSelect(categoryTree), [categoryTree]);
+  const tagsById = useMemo(() => new Map(allTags.map((t) => [t.id, t])), [allTags]);
+
+  /**
+   * Creates the tag up front rather than letting autosave do it. Autosave is
+   * debounced 1.5s, so deferring would race it and could produce duplicates.
+   */
+  const addTag = useCallback(async () => {
+    const name = tagInput.trim();
+    if (!name || creatingTag) return;
+
+    const existing = allTags.find(
+      (t) => t.name.toLowerCase() === name.toLowerCase()
+    );
+
+    setCreatingTag(true);
+    try {
+      const tag = existing ?? (await createTagAction({ name }));
+      if (!tag) return;
+      setAllTags((prev) => (prev.some((t) => t.id === tag.id) ? prev : [...prev, tag]));
+      update((d) => {
+        if (!d.tagIds.includes(tag.id)) d.tagIds.push(tag.id);
+      });
+      setTagInput('');
+    } catch (e: any) {
+      toast({
+        title: 'Could not add tag',
+        description: e?.message || 'Try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setCreatingTag(false);
+    }
+  }, [tagInput, creatingTag, allTags, update, toast]);
+
+  const suggestions = useMemo(() => {
+    const q = tagInput.trim().toLowerCase();
+    if (!q) return [];
+    return allTags
+      .filter((t) => t.name.toLowerCase().includes(q) && !doc.tagIds.includes(t.id))
+      .slice(0, 6);
+  }, [tagInput, allTags, doc.tagIds]);
 
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Category" htmlFor="pb-category" error={errors.category?.[0]}>
+        <Field label="Category" htmlFor="pb-category" error={errors.categoryId?.[0]}>
           <Select
-            value={doc.category}
-            onValueChange={(v) =>
-              update((d) => {
-                d.category = v as 'men' | 'women' | 'accessories';
-                // Reset subcategory when it no longer belongs.
-                const subs =
-                  CATEGORIES[v as keyof typeof CATEGORIES]?.subcategories ?? [];
-                if (!(subs as readonly string[]).includes(d.subcategory)) d.subcategory = '';
-              })
-            }
+            value={doc.categoryId}
+            onValueChange={(v) => update((d) => (d.categoryId = v))}
           >
             <SelectTrigger id="pb-category" className="w-full">
-              <SelectValue />
+              <SelectValue placeholder="Select a category" />
             </SelectTrigger>
             <SelectContent>
-              {categoryOptions.map(([key, cat]) => (
-                <SelectItem key={key} value={key}>
-                  {cat.label}
+              {categoryOptions.length === 0 && (
+                <SelectItem value="__none" disabled>
+                  No categories yet — add one under Categories
                 </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
-
-        <Field
-          label="Subcategory"
-          htmlFor="pb-subcategory"
-          error={errors.subcategory?.[0]}
-        >
-          <Select
-            value={doc.subcategory}
-            onValueChange={(v) => update((d) => (d.subcategory = v))}
-          >
-            <SelectTrigger id="pb-subcategory" className="w-full">
-              <SelectValue placeholder="Select subcategory" />
-            </SelectTrigger>
-            <SelectContent>
-              {currentSubs.map((sub: string) => (
-                <SelectItem key={sub} value={sub}>
-                  {sub}
+              )}
+              {categoryOptions.map((opt) => (
+                <SelectItem
+                  key={opt.id}
+                  value={opt.id}
+                  disabled={!opt.selectable}
+                  className={opt.selectable ? undefined : 'font-medium opacity-70'}
+                >
+                  {'\u00A0'.repeat(opt.depth * 3)}
+                  {opt.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -103,31 +165,61 @@ export default function OrganizationSection({ builder }: { builder: Builder }) {
             }}
             placeholder="Add a tag and press Enter"
           />
-          <Button type="button" size="icon" onClick={addTag} aria-label="Add tag">
+          <Button
+            type="button"
+            size="icon"
+            onClick={addTag}
+            disabled={creatingTag}
+            aria-label="Add tag"
+          >
             <Plus className="h-4 w-4" />
           </Button>
         </div>
-        {doc.tags.length > 0 && (
+
+        {suggestions.length > 0 && (
           <div className="flex flex-wrap gap-2 pt-1">
-            {doc.tags.map((tag) => (
-              <span
-                key={tag}
-                className="inline-flex items-center gap-1 bg-sage-100 dark:bg-sage-900/30 text-sage-700 dark:text-sage-300 px-2 py-1 rounded text-xs"
+            {suggestions.map((tag) => (
+              <button
+                key={tag.id}
+                type="button"
+                className="text-xs border rounded px-2 py-1 hover:bg-muted"
+                onClick={() => {
+                  update((d) => {
+                    if (!d.tagIds.includes(tag.id)) d.tagIds.push(tag.id);
+                  });
+                  setTagInput('');
+                }}
               >
-                {tag}
-                <button
-                  type="button"
-                  aria-label={`Remove tag ${tag}`}
-                  onClick={() =>
-                    update((d) => {
-                      d.tags = d.tags.filter((t) => t !== tag);
-                    })
-                  }
-                >
-                  <X className="h-3 w-3" />
-                </button>
-              </span>
+                {tag.name}
+              </button>
             ))}
+          </div>
+        )}
+
+        {doc.tagIds.length > 0 && (
+          <div className="flex flex-wrap gap-2 pt-1">
+            {doc.tagIds.map((tagId) => {
+              const tag = tagsById.get(tagId);
+              return (
+                <span
+                  key={tagId}
+                  className="inline-flex items-center gap-1 bg-sage-100 dark:bg-sage-900/30 text-sage-700 dark:text-sage-300 px-2 py-1 rounded text-xs"
+                >
+                  {tag?.name ?? '…'}
+                  <button
+                    type="button"
+                    aria-label={`Remove tag ${tag?.name ?? ''}`}
+                    onClick={() =>
+                      update((d) => {
+                        d.tagIds = d.tagIds.filter((t) => t !== tagId);
+                      })
+                    }
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </span>
+              );
+            })}
           </div>
         )}
       </Field>

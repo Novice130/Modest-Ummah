@@ -57,7 +57,7 @@ export default function ProductInfo({ product }: ProductInfoProps) {
     <div className="space-y-6">
       {/* Category & SKU */}
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
-        <span className="uppercase tracking-wide">{product.subcategory}</span>
+        <span className="uppercase tracking-wide">{product.category?.name ?? ''}</span>
         <span>|</span>
         <span>SKU: {product.sku}</span>
       </div>
@@ -227,9 +227,9 @@ export default function ProductInfo({ product }: ProductInfoProps) {
         <div className="pt-4 border-t">
           <span className="text-sm text-muted-foreground">Tags: </span>
           {product.tags.map((tag, index) => (
-            <span key={tag}>
-              <a href={`/shop?tag=${tag}`} className="text-sm text-sage-600 hover:underline">
-                {tag}
+            <span key={tag.id}>
+              <a href={`/shop?tag=${tag.slug}`} className="text-sm text-sage-600 hover:underline">
+                {tag.name}
               </a>
               {index < product.tags.length - 1 && ', '}
             </span>

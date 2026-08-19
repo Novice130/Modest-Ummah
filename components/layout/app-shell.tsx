@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation';
 import Header from '@/components/layout/header';
 import Footer from '@/components/layout/footer';
 import CartDrawer from '@/components/cart/cart-drawer';
+import type { CategoryNode } from '@/types';
 
 /**
  * One-time cleanup for the stale next-pwa service worker. Returning
@@ -27,7 +28,13 @@ function useUnregisterStaleServiceWorker() {
   }, []);
 }
 
-export default function AppShell({ children }: { children: React.ReactNode }) {
+export default function AppShell({
+  children,
+  categories = [],
+}: {
+  children: React.ReactNode;
+  categories?: CategoryNode[];
+}) {
   const pathname = usePathname();
   const isAdmin = pathname?.startsWith('/admin');
 
@@ -39,7 +46,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <Header />
+      <Header categories={categories} />
       <main className="flex-1">{children}</main>
       <Footer />
       <CartDrawer />

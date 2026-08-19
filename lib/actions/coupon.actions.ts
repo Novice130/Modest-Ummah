@@ -2,7 +2,7 @@
 
 import { getDb } from '@/lib/db';
 import { coupons } from '@/lib/schema';
-import { eq, ilike, or, and, desc, count, ne } from 'drizzle-orm';
+import { eq, ilike, or, and, desc, count, ne, sql } from 'drizzle-orm';
 import { getSession } from './auth.actions';
 
 /**
@@ -118,7 +118,13 @@ export async function fetchCouponsAdmin(
     conditions.push(
       or(
         ilike(coupons.code, `%${opts.search}%`),
-        ilike(coupons.category, `%${opts.search}%`)
+        // category is a uuid FK now; match on the category's name so the
+        // search box keeps behaving the way an admin expects.
+        sql`EXISTS (
+          SELECT 1 FROM categories c
+          WHERE c.id = ${coupons.categoryId}
+            AND c.name ILIKE ${`%${opts.search}%`}
+        )`
       )
     );
   }

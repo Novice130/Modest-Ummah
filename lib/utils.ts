@@ -41,7 +41,7 @@ export function truncate(text: string, length: number): string {
  * - absolute URLs (http/https) and blob: pass through untouched
  * - root-relative paths (/images/products/x.jpg seeded, /api/media/x
  *   uploaded) pass through untouched
- * - bare filenames resolve to /uploads/<name> (legacy fallback only —
+ * - bare filenames resolve to /api/media/<name> (legacy fallback only —
  *   nothing writes this shape anymore)
  *
  * Returns '' for empty input so callers can treat it as "no image".
@@ -56,7 +56,9 @@ export function getImageUrl(fileName: string | null | undefined): string {
   ) {
     return fileName;
   }
-  return `/uploads/${fileName}`;
+  // Bare filenames are a pre-Stage-2 shape that nothing writes any more.
+  // Uploads are served from /api/media/, outside public/.
+  return `/api/media/${fileName}`;
 }
 
 /**
@@ -87,21 +89,6 @@ export function generateOrderId(): string {
   const random = Math.random().toString(36).substring(2, 8);
   return `ORD-${timestamp}-${random}`.toUpperCase();
 }
-
-export const CATEGORIES = {
-  men: {
-    label: 'Men',
-    subcategories: ['Thobes', 'Kurtas', 'Jubbas', 'Caps/Kufis', 'Pants'],
-  },
-  women: {
-    label: 'Women',
-    subcategories: ['Abayas', 'Hijabs', 'Khimars', 'Jilbabs', 'Dresses'],
-  },
-  accessories: {
-    label: 'Accessories',
-    subcategories: ['Miswak', 'Attar/Perfumes', 'Prayer Mats', 'Tasbeeh', 'Bags'],
-  },
-} as const;
 
 export const COLORS = [
   { name: 'Black', value: '#000000' },
