@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ShoppingBag, Package, Users, Settings, LogOut, TicketPercent } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, Package, Users, Settings, LogOut, TicketPercent, FolderTree, Tags } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { clearSession } from '@/lib/actions/auth.actions';
@@ -18,6 +18,16 @@ const navItems = [
     title: 'Products',
     href: '/admin/products',
     icon: ShoppingBag,
+  },
+  {
+    title: 'Categories',
+    href: '/admin/categories',
+    icon: FolderTree,
+  },
+  {
+    title: 'Tags',
+    href: '/admin/tags',
+    icon: Tags,
   },
   {
     title: 'Orders',
