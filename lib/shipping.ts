@@ -59,19 +59,63 @@ export interface ShipmentLabel {
   refundable: boolean;
 }
 
-// Default origin address (your business)
-const ORIGIN_ADDRESS: ShippingAddress = {
-  name: process.env.PIRATESHIP_ORIGIN_NAME || 'Modest Ummah',
-  company: process.env.PIRATESHIP_ORIGIN_COMPANY || '',
-  street1: process.env.PIRATESHIP_ORIGIN_STREET1 || '123 Business St',
-  street2: process.env.PIRATESHIP_ORIGIN_STREET2 || '',
-  city: process.env.PIRATESHIP_ORIGIN_CITY || 'New York',
-  state: process.env.PIRATESHIP_ORIGIN_STATE || 'NY',
-  zip: process.env.PIRATESHIP_ORIGIN_ZIP || '10001',
-  country: 'US',
-  phone: process.env.PIRATESHIP_ORIGIN_PHONE || '',
-  email: process.env.PIRATESHIP_ORIGIN_EMAIL || '',
-};
+/**
+ * The address parcels ship from, read from the environment.
+ *
+ * There is deliberately no fallback for the street, city, state or zip. This
+ * used to default to "123 Business St, New York, NY 10001", which meant an
+ * unconfigured deployment would happily buy a real label — paid for, printed,
+ * and undeliverable — against an address nobody has ever occupied. Failing
+ * loudly is the only safe behaviour for a call that spends money.
+ *
+ * Resolved per call rather than at module load: `next build` imports this file
+ * while collecting page data, and these are runtime-only env vars.
+ */
+function getOriginAddress(): ShippingAddress {
+  const required = {
+    street1: process.env.PIRATESHIP_ORIGIN_STREET1,
+    city: process.env.PIRATESHIP_ORIGIN_CITY,
+    state: process.env.PIRATESHIP_ORIGIN_STATE,
+    zip: process.env.PIRATESHIP_ORIGIN_ZIP,
+  };
+
+  const missing = Object.entries(required)
+    .filter(([, value]) => !value)
+    .map(([key]) => `PIRATESHIP_ORIGIN_${key.toUpperCase()}`);
+
+  if (missing.length > 0) {
+    throw new Error(
+      `Shipping origin is not configured. Set ${missing.join(', ')} before buying labels.`
+    );
+  }
+
+  return {
+    name: process.env.PIRATESHIP_ORIGIN_NAME || 'Modest Ummah',
+    company: process.env.PIRATESHIP_ORIGIN_COMPANY || '',
+    street1: required.street1!,
+    street2: process.env.PIRATESHIP_ORIGIN_STREET2 || '',
+    city: required.city!,
+    state: required.state!,
+    zip: required.zip!,
+    country: 'US',
+    phone: process.env.PIRATESHIP_ORIGIN_PHONE || '',
+    email: process.env.PIRATESHIP_ORIGIN_EMAIL || '',
+  };
+}
+
+/**
+ * Same, but for the rate quote a customer sees at checkout: a missing origin
+ * must not break the cart. The caller falls back to the distance-free
+ * estimates it already uses when Pirate Ship is unconfigured.
+ */
+function tryGetOriginAddress(): ShippingAddress | null {
+  try {
+    return getOriginAddress();
+  } catch (error: any) {
+    console.warn(`Shipping rates: ${error.message} Falling back to estimates.`);
+    return null;
+  }
+}
 
 // Standard package sizes for products
 export const PACKAGE_PRESETS = {
@@ -120,12 +164,20 @@ export async function getShippingRates(params: {
     };
   }
 
+  const origin = params.origin || tryGetOriginAddress();
+  if (!origin) {
+    return {
+      success: true,
+      rates: getEstimatedRates(params.destination.state, params.package.weight),
+    };
+  }
+
   try {
     const response = await fetch(`${PIRATE_SHIP_API_URL}/rates`, {
       method: 'POST',
       headers: getAuthHeader(),
       body: JSON.stringify({
-        from_address: params.origin || ORIGIN_ADDRESS,
+        from_address: origin,
         to_address: params.destination,
         parcel: {
           length: params.package.length,
@@ -195,7 +247,7 @@ export async function createShipment(params: {
       method: 'POST',
       headers: getAuthHeader(),
       body: JSON.stringify({
-        from_address: params.origin || ORIGIN_ADDRESS,
+        from_address: params.origin || getOriginAddress(),
         to_address: params.destination,
         parcel: {
           length: params.package.length,
@@ -328,7 +380,7 @@ export async function schedulePickup(params: {
         total_weight: params.totalWeight,
         pickup_location: params.pickupLocation || 'front_door',
         special_instructions: params.instructions || '',
-        address: ORIGIN_ADDRESS,
+        address: getOriginAddress(),
       }),
     });
 
