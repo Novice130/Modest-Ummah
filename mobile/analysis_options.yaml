@@ -1,0 +1,7 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    # The constructor body builds Dio from the assigned field, so the field
+    # cannot be an initializing formal.
+    prefer_initializing_formals: false
