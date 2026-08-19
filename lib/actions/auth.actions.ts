@@ -34,6 +34,8 @@ export async function getSession(isAdmin = false) {
   } else if (!isAdmin && payload.type === 'user') {
     const [user] = await db.select().from(users).where(eq(users.id, payload.sub)).limit(1);
     if (!user) return null;
+    // Retired by a password change since this cookie was issued.
+    if (user.tokenVersion !== (payload.ver ?? 0)) return null;
     return {
       id: user.id,
       email: user.email,
@@ -86,6 +88,7 @@ export async function signInAction(email: string, password: string) {
       email: user.email,
       name: user.name || '',
       type: 'user',
+      ver: user.tokenVersion,
     });
 
     await setSession(token, false);
@@ -170,6 +173,7 @@ export async function signUpAction(email: string, password: string, name: string
       email: user.email,
       name: user.name || '',
       type: 'user',
+      ver: user.tokenVersion,
     });
 
     await setSession(token, false);

@@ -55,6 +55,11 @@ export const users = pgTable(
     passwordHash: text('password_hash').notNull(),
     avatar: text('avatar'),
     verified: boolean('verified').default(false),
+    // Stamped into every token as a `ver` claim and checked on each
+    // authenticated request. Bumping it retires every token issued before the
+    // bump — that is how a password change and an account deletion take
+    // effect immediately instead of at the 7-day expiry.
+    tokenVersion: integer('token_version').notNull().default(0),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

@@ -42,6 +42,7 @@ export async function POST(request: Request) {
       email: user.email,
       name: user.name || '',
       type: 'user',
+      ver: user.tokenVersion,
     });
 
     return json(

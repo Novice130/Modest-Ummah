@@ -47,6 +47,13 @@ export interface TokenPayload {
   email: string;
   name?: string;
   type: 'user' | 'admin';
+  /**
+   * users.token_version at the time the token was minted. A password change
+   * or an account deletion bumps the column, which retires every token
+   * carrying an older value. Optional because tokens issued before the column
+   * existed carry no claim; those are read as 0.
+   */
+  ver?: number;
 }
 
 export async function createToken(
@@ -133,5 +140,38 @@ export async function getAuthFromRequest(
   const wantedType = isAdmin ? 'admin' : 'user';
   if (payload.type !== wantedType) return null;
 
+  // A signature alone is not enough for a customer token: it stays valid for
+  // 7 days, so a token minted before the account was deleted or its password
+  // rotated would still open the account routes. One indexed lookup settles
+  // both — a deleted user has no row, and a rotation bumped token_version.
+  //
+  // Admin tokens are not checked here: the admins table has no counter, and
+  // they expire in 24h. getSession() already re-reads the admin row.
+  if (!isAdmin && !(await tokenVersionIsCurrent(payload))) return null;
+
   return payload;
+}
+
+/**
+ * Compares the token's `ver` claim with the user's current token_version.
+ *
+ * Imported lazily so a route that only needs hashPassword or createToken does
+ * not pull the Drizzle client and the whole schema in with it.
+ */
+async function tokenVersionIsCurrent(payload: TokenPayload): Promise<boolean> {
+  const [{ getDb }, { users }, { eq }] = await Promise.all([
+    import('./db'),
+    import('./schema'),
+    import('drizzle-orm'),
+  ]);
+
+  const db = getDb();
+  const [row] = await db
+    .select({ tokenVersion: users.tokenVersion })
+    .from(users)
+    .where(eq(users.id, payload.sub))
+    .limit(1);
+
+  if (!row) return false;
+  return row.tokenVersion === (payload.ver ?? 0);
 }
