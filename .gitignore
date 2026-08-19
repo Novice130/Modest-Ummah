@@ -68,3 +68,4 @@ IMPLEMENTATION_PLAN_APP.md
 # Local DB dumps taken before destructive migrations. May contain
 # customer-adjacent data; keep them off the remote.
 scripts/backups/
+PLAN_STAGE10_FINISH.md

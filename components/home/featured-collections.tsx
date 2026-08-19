@@ -10,13 +10,13 @@ interface Collection {
   name: string;
   description: string;
   href: string;
-  image: string;
+  image: string | null;
 }
 
 /**
  * Top-level categories become the homepage collections. `image` is set per
- * category in the admin; a category without one falls back to a placeholder
- * rather than rendering a broken tile.
+ * category in the admin; a category without one renders a gradient tile
+ * rather than a broken <Image>.
  */
 function toCollections(categories: CategoryNode[]): Collection[] {
   return categories.map((c) => ({
@@ -27,7 +27,7 @@ function toCollections(categories: CategoryNode[]): Collection[] {
         ? `${c.children.slice(0, 3).map((x) => x.name).join(', ')} & more`
         : `Shop ${c.name.toLowerCase()}`),
     href: `/shop/${c.slug}`,
-    image: c.image || '/images/collections/placeholder.jpg',
+    image: c.image || null,
   }));
 }
 
@@ -87,13 +87,17 @@ export default function FeaturedCollections({
             >
               <Link href={collection.href} className="block">
                 <div className="relative aspect-[4/3] sm:aspect-[3/4] rounded-xl overflow-hidden">
-                  <Image
-                    src={collection.image}
-                    alt={collection.name}
-                    fill
-                    className="object-cover transition-transform duration-500 group-hover:scale-105"
-                    sizes="(max-width: 768px) 100vw, 33vw"
-                  />
+                  {collection.image ? (
+                    <Image
+                      src={collection.image}
+                      alt={collection.name}
+                      fill
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
+                      sizes="(max-width: 768px) 100vw, 33vw"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 bg-gradient-to-br from-sage-600 to-sage-900" />
+                  )}
                   <div
                     className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"
                   />
