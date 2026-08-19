@@ -8,12 +8,12 @@ import {
   uuid,
   jsonb,
   pgEnum,
+  primaryKey,
   uniqueIndex,
   index,
 } from 'drizzle-orm/pg-core';
 
 // ─── Enums ──────────────────────────────────────────────
-export const categoryEnum = pgEnum('category', ['men', 'women', 'accessories']);
 export const orderStatusEnum = pgEnum('order_status', [
   'pending',
   'pending_payment',
@@ -80,6 +80,25 @@ export const admins = pgTable(
 );
 
 // ─── Products ───────────────────────────────────────────
+// ─── Categories (hierarchical; the catalogue taxonomy) ──
+export const categories = pgTable(
+  'categories',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    parentId: uuid('parent_id').references((): any => categories.id, { onDelete: 'cascade' }),
+    description: text('description').default(''),
+    image: text('image'),
+    position: integer('position').default(0),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_categories_slug').on(table.slug),
+    index('idx_categories_parent').on(table.parentId),
+  ]
+);
+
 export const products = pgTable(
   'products',
   {
@@ -90,12 +109,13 @@ export const products = pgTable(
     shortDescription: text('short_description').notNull().default(''),
     price: decimal('price', { precision: 10, scale: 2 }).notNull().default('0'),
     compareAtPrice: decimal('compare_at_price', { precision: 10, scale: 2 }),
-    category: categoryEnum('category').notNull().default('men'),
-    subcategory: text('subcategory').notNull().default(''),
+    // Points at the LEAF category. The parent_id chain on `categories`
+    // yields the top-level section, so one FK replaces the old
+    // category-enum + subcategory-text pair.
+    categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
     images: jsonb('images').$type<string[]>().default([]),
     colors: jsonb('colors').$type<{ name: string; value: string; image?: string }[]>().default([]),
     sizes: jsonb('sizes').$type<string[]>().default([]),
-    tags: jsonb('tags').$type<string[]>().default([]),
     featured: boolean('featured').default(false),
     newArrivalPinned: boolean('new_arrival_pinned').default(false),
     excludeFromNewArrivals: boolean('exclude_from_new_arrivals').default(false),
@@ -129,6 +149,11 @@ export const products = pgTable(
     upsellIds: jsonb('upsell_ids').$type<string[]>().default([]),
     crossSellIds: jsonb('cross_sell_ids').$type<string[]>().default([]),
     imageAlts: jsonb('image_alts').$type<Record<string, string>>().default({}),
+    // Keyed by image URL. Intrinsic size lets a client reserve layout space
+    // before the bytes land; lqip is a ~24px base64 blur placeholder.
+    imageMeta: jsonb('image_meta')
+      .$type<Record<string, { w: number; h: number; lqip: string }>>()
+      .default({}),
     // Integer surrogate key for the WooCommerce-compatible API. WooCommerce
     // product IDs are ints; ours are uuid. Pirate Ship dereferences
     // line_items[].product_id against /wp-json/wc/v3/products/{int}.
@@ -139,7 +164,7 @@ export const products = pgTable(
   (table) => [
     uniqueIndex('idx_products_woo_id').on(table.wooProductId),
     uniqueIndex('idx_products_slug').on(table.slug),
-    index('idx_products_category').on(table.category),
+    index('idx_products_category').on(table.categoryId),
     index('idx_products_featured').on(table.featured),
     index('idx_products_sku').on(table.sku),
     // New Arrivals: published rows ordered by the moment they went live.
@@ -175,25 +200,6 @@ export const productVariants = pgTable(
   ]
 );
 
-// ─── Categories (replaces the hardcoded 3-value enum) ────
-export const categories = pgTable(
-  'categories',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    name: text('name').notNull(),
-    slug: text('slug').notNull(),
-    parentId: uuid('parent_id').references((): any => categories.id, { onDelete: 'cascade' }),
-    description: text('description').default(''),
-    image: text('image'),
-    position: integer('position').default(0),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-  },
-  (table) => [
-    uniqueIndex('idx_categories_slug').on(table.slug),
-    index('idx_categories_parent').on(table.parentId),
-  ]
-);
-
 // ─── Product attributes ─────────────────────────────────
 export const productAttributes = pgTable(
   'product_attributes',
@@ -209,6 +215,37 @@ export const productAttributes = pgTable(
   },
   (table) => [
     index('idx_attributes_product').on(table.productId),
+  ]
+);
+
+// ─── Tags ───────────────────────────────────────────────
+// A registry, not free text: renaming or deleting a tag has to reach every
+// product that carries it, which a per-row jsonb array cannot do.
+export const tags = pgTable(
+  'tags',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    name: text('name').notNull(),
+    slug: text('slug').notNull(),
+    position: integer('position').default(0),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [uniqueIndex('idx_tags_slug').on(table.slug)]
+);
+
+export const productTags = pgTable(
+  'product_tags',
+  {
+    productId: uuid('product_id')
+      .notNull()
+      .references(() => products.id, { onDelete: 'cascade' }),
+    tagId: uuid('tag_id')
+      .notNull()
+      .references(() => tags.id, { onDelete: 'cascade' }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.productId, table.tagId] }),
+    index('idx_product_tags_tag').on(table.tagId),
   ]
 );
 
@@ -237,7 +274,7 @@ export const coupons = pgTable(
     startsAt: timestamp('starts_at'),
     enabled: boolean('enabled').notNull().default(true),
     productIds: jsonb('product_ids').$type<string[]>().default([]),
-    category: text('category'),
+    categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },

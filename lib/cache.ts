@@ -18,6 +18,15 @@ import { cacheTag, cacheLife } from 'next/cache';
 export const PRODUCTS_TAG = 'products';
 
 /**
+ * Taxonomy tags. Separate from PRODUCTS_TAG because the nav, filters and
+ * category pages read the tree without reading products — renaming a category
+ * has to refresh those without dumping the whole catalogue cache. Taxonomy
+ * writes invalidate both, since a product's serialized category embeds the name.
+ */
+export const CATEGORIES_TAG = 'categories';
+export const TAGS_TAG = 'tags';
+
+/**
  * The cacheLife profile for catalogue entries. revalidateTag in Next 16
  * requires a profile argument; keep it identical to what the cached reads
  * declare so invalidations land on the right entries.
@@ -35,6 +44,16 @@ export function productTag(id: string): string {
 export function tagProductCatalogue(id?: string) {
   cacheTag(PRODUCTS_TAG);
   if (id) cacheTag(productTag(id));
+}
+
+/**
+ * Product reads join the taxonomy tables, so they must also carry the taxonomy
+ * tags — otherwise a category rename leaves stale names embedded in cached
+ * product payloads.
+ */
+export function tagTaxonomy() {
+  cacheTag(CATEGORIES_TAG);
+  cacheTag(TAGS_TAG);
 }
 
 /**

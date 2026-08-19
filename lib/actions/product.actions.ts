@@ -6,12 +6,14 @@ import {
   products,
   productVariants,
   productAttributes,
+  productTags,
   categories,
+  tags,
   type ProductAttributeInsert,
 } from '@/lib/schema';
 import { eq, inArray, ilike, or, and, desc, ne, count, like } from 'drizzle-orm';
 import { PRODUCTS_TAG, productTag } from '@/lib/cache';
-import { mapProduct } from '@/lib/product-mapper';
+import { buildCategoryRef, mapProduct } from '@/lib/product-mapper';
 import {
   getProductsCached,
   getProductCached,
@@ -23,6 +25,7 @@ import type { Product } from '@/types';
 import { productDocumentSchema, type ProductDocument } from '@/lib/product-builder-schema';
 import { stringifyCsv, parseList, joinList } from '@/lib/csv';
 import { getSession } from './auth.actions';
+import { setProductTags } from './tag.actions';
 
 /**
  * Writes invalidate via updateTag — read-your-own-writes. The cached reads
@@ -173,9 +176,7 @@ export async function saveProductAction(input: {
     shortDescription: doc.shortDescription,
     price: doc.price,
     compareAtPrice: doc.compareAtPrice ?? null,
-    category: doc.category,
-    subcategory: doc.subcategory,
-    tags: doc.tags,
+    categoryId: doc.categoryId || null,
     featured: doc.featured,
     newArrivalPinned: doc.newArrivalPinned,
     excludeFromNewArrivals: doc.excludeFromNewArrivals,
@@ -232,6 +233,10 @@ export async function saveProductAction(input: {
         .returning({ id: products.id });
       id = created.id;
     }
+
+    // Tags live in product_tags now. Written AFTER the product row so a
+    // failure here leaves stale tags rather than an orphaned join row.
+    await setProductTags(id, doc.tagIds);
 
     if (doc.attributes.length > 0) {
       const attrRows: ProductAttributeInsert[] = doc.attributes.map((a, i) => ({
@@ -302,9 +307,7 @@ export async function duplicateProductAction(id: string): Promise<{ id: string; 
       shortDescription: row.shortDescription,
       price: row.price,
       compareAtPrice: row.compareAtPrice,
-      category: row.category,
-      subcategory: row.subcategory,
-      tags: row.tags,
+      categoryId: row.categoryId,
       featured: false,
       newArrivalPinned: false,
       excludeFromNewArrivals: row.excludeFromNewArrivals,
@@ -337,6 +340,18 @@ export async function duplicateProductAction(id: string): Promise<{ id: string; 
       updatedAt: new Date(),
     })
     .returning({ id: products.id });
+
+  // Carry the tag set across; the copy is otherwise identical.
+  const sourceTags = await db
+    .select({ tagId: productTags.tagId })
+    .from(productTags)
+    .where(eq(productTags.productId, id));
+  if (sourceTags.length > 0) {
+    await db
+      .insert(productTags)
+      .values(sourceTags.map((t) => ({ productId: created.id, tagId: t.tagId })))
+      .onConflictDoNothing();
+  }
 
   if (variants.length > 0) {
     await db.insert(productVariants).values(
@@ -387,6 +402,25 @@ export async function exportProductsCsv(): Promise<string> {
     .from(productAttributes)
     .where(inArray(productAttributes.productId, rows.map((r) => r.id)));
 
+  // The CSV carries slugs, not uuids — it has to stay hand-editable, and a
+  // uuid means nothing to whoever opens it in a spreadsheet.
+  const categoryRows = await db
+    .select({ id: categories.id, slug: categories.slug })
+    .from(categories);
+  const categorySlug = new Map(categoryRows.map((c) => [c.id, c.slug]));
+
+  const tagJoinRows = await db
+    .select({ productId: productTags.productId, slug: tags.slug })
+    .from(productTags)
+    .innerJoin(tags, eq(productTags.tagId, tags.id))
+    .where(inArray(productTags.productId, rows.map((r) => r.id)));
+  const tagSlugsByProduct = new Map<string, string[]>();
+  for (const t of tagJoinRows) {
+    const list = tagSlugsByProduct.get(t.productId) ?? [];
+    list.push(t.slug);
+    tagSlugsByProduct.set(t.productId, list);
+  }
+
   const variantsByProduct = new Map<string, typeof variantRows>();
   const attrsByProduct = new Map<string, typeof attrRows>();
   for (const v of variantRows) {
@@ -398,7 +432,7 @@ export async function exportProductsCsv(): Promise<string> {
 
   const header = [
     'name', 'slug', 'product_type', 'short_description', 'description',
-    'category', 'subcategory', 'tags', 'featured', 'new_arrival_pinned',
+    'category', 'tags', 'featured', 'new_arrival_pinned',
     'exclude_from_new_arrivals', 'visibility', 'price', 'compare_at_price',
     'sale_starts_at', 'sale_ends_at', 'tax_class', 'sku', 'manage_stock',
     'stock_quantity', 'backorder_policy', 'low_stock_threshold', 'weight',
@@ -426,9 +460,8 @@ export async function exportProductsCsv(): Promise<string> {
       p.productType,
       p.shortDescription,
       p.description,
-      p.category,
-      p.subcategory,
-      joinList(p.tags as string[]),
+      p.categoryId ? categorySlug.get(p.categoryId) ?? '' : '',
+      joinList(tagSlugsByProduct.get(p.id) ?? []),
       p.featured ? 'true' : 'false',
       p.newArrivalPinned ? 'true' : 'false',
       p.excludeFromNewArrivals ? 'true' : 'false',
@@ -653,8 +686,44 @@ export async function fetchAllProductsAdmin(
     .limit(limit)
     .offset(offset);
 
+  // Same two-query hydration the cached reader uses — the admin table shows
+  // category and tag chips, and a per-row lookup would be N+1.
+  const categoryRows = await db
+    .select({
+      id: categories.id,
+      name: categories.name,
+      slug: categories.slug,
+      parentId: categories.parentId,
+    })
+    .from(categories);
+  const categoryMap = new Map(categoryRows.map((c) => [c.id, c]));
+
+  const tagJoins = rows.length
+    ? await db
+        .select({
+          productId: productTags.productId,
+          id: tags.id,
+          name: tags.name,
+          slug: tags.slug,
+        })
+        .from(productTags)
+        .innerJoin(tags, eq(productTags.tagId, tags.id))
+        .where(inArray(productTags.productId, rows.map((r) => r.id)))
+    : [];
+  const tagsByProduct = new Map<string, Array<{ id: string; name: string; slug: string }>>();
+  for (const t of tagJoins) {
+    const list = tagsByProduct.get(t.productId) ?? [];
+    list.push({ id: t.id, name: t.name, slug: t.slug });
+    tagsByProduct.set(t.productId, list);
+  }
+
   return {
-    items: rows.map(mapProduct),
+    items: rows.map((r) =>
+      mapProduct(r, {
+        category: buildCategoryRef(categoryMap, r.categoryId),
+        tags: tagsByProduct.get(r.id) ?? [],
+      })
+    ),
     totalItems: countResult?.count || 0,
     totalPages: Math.ceil((countResult?.count || 0) / limit),
     page,
@@ -767,9 +836,11 @@ export async function updateProductAction(id: string, data: Record<string, any>)
     description: data.description ?? existing.description,
     images: data.images !== undefined ? parseJsonField(data.images, existing.images) : existing.images,
     imageAlts: existing.imageAlts || {},
-    category: data.category ?? existing.category,
-    subcategory: data.subcategory ?? existing.subcategory,
-    tags: data.tags !== undefined ? parseJsonField(data.tags, existing.tags) : existing.tags,
+    categoryId: (data.categoryId as string) ?? existing.category?.id ?? '',
+    tagIds:
+      data.tagIds !== undefined
+        ? parseJsonField(data.tagIds, [])
+        : (existing.tags || []).map((t) => t.id),
     featured: data.featured !== undefined ? data.featured === true || data.featured === 'true' : existing.featured,
     newArrivalPinned: existing.newArrivalPinned ?? false,
     excludeFromNewArrivals: existing.excludeFromNewArrivals ?? false,
@@ -834,9 +905,8 @@ function productToDocumentSafe(p: Product): Record<string, any> {
     description: p.description,
     images: p.images || [],
     imageAlts: p.imageAlts || {},
-    category: p.category,
-    subcategory: p.subcategory,
-    tags: p.tags || [],
+    categoryId: p.category?.id ?? '',
+    tagIds: (p.tags || []).map((t) => t.id),
     featured: p.featured,
     newArrivalPinned: p.newArrivalPinned ?? false,
     excludeFromNewArrivals: p.excludeFromNewArrivals ?? false,

@@ -4,6 +4,45 @@ export type ProductStatus = 'draft' | 'pending' | 'scheduled' | 'published';
 export type ProductVisibility = 'public' | 'hidden' | 'search_only';
 export type BackorderPolicy = 'no' | 'notify' | 'yes';
 
+/**
+ * A category as a product carries it. `path` runs root-first and includes the
+ * category itself, so a breadcrumb is `path.map(p => p.name).join(' / ')` and
+ * the top-level section is `path[0]`.
+ */
+export interface CategoryRef {
+  id: string;
+  name: string;
+  slug: string;
+  path: Array<{ id: string; name: string; slug: string }>;
+}
+
+export interface TagRef {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+/** A node in the editable category tree. */
+export interface CategoryNode {
+  id: string;
+  name: string;
+  slug: string;
+  parentId: string | null;
+  description: string;
+  image: string | null;
+  position: number;
+  children: CategoryNode[];
+  /** Products attached to this exact node. Only populated by admin reads. */
+  productCount?: number;
+}
+
+/** Per-image intrinsic size plus a base64 blur placeholder. */
+export interface ImageMeta {
+  w: number;
+  h: number;
+  lqip: string;
+}
+
 export interface Product {
   id: string;
   created: string;
@@ -14,12 +53,12 @@ export interface Product {
   shortDescription: string;
   price: number;
   compareAtPrice?: number;
-  category: 'men' | 'women' | 'accessories';
-  subcategory: string;
+  /** Null when the category was deleted out from under the product. */
+  category: CategoryRef | null;
   images: string[];
   colors: ProductColor[];
   sizes: string[];
-  tags: string[];
+  tags: TagRef[];
   featured: boolean;
   newArrivalPinned: boolean;
   excludeFromNewArrivals: boolean;
@@ -49,6 +88,8 @@ export interface Product {
   upsellIds: string[];
   crossSellIds: string[];
   imageAlts: Record<string, string>;
+  /** Keyed by image URL. Empty for images uploaded before this was tracked. */
+  imageMeta: Record<string, ImageMeta>;
 }
 
 export interface ProductColor {
@@ -147,8 +188,8 @@ export interface PaginatedResponse<T> {
 
 // Filter types
 export interface ProductFilters {
+  /** Category slug. Matches the category AND all of its descendants. */
   category?: string;
-  subcategory?: string;
   colors?: string[];
   sizes?: string[];
   minPrice?: number;

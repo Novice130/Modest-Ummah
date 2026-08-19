@@ -86,9 +86,10 @@ export const mediaSchema = z.object({
 
 /** Organization — section 3 */
 export const organizationSchema = z.object({
-  category: z.enum(['men', 'women', 'accessories']),
-  subcategory: z.string().min(1, 'Subcategory is required'),
-  tags: z.array(z.string()).default([]),
+  // The LEAF category id. Products attach to leaves; the ancestor chain is
+  // derived, so there is no separate subcategory field any more.
+  categoryId: z.string().uuid('Select a category'),
+  tagIds: z.array(z.string().uuid()).default([]),
   featured: z.boolean().default(false),
   newArrivalPinned: z.boolean().default(false),
   excludeFromNewArrivals: z.boolean().default(false),
@@ -218,9 +219,8 @@ export function defaultProductDocument(): ProductDocument {
     description: '',
     images: [],
     imageAlts: {},
-    category: 'men',
-    subcategory: '',
-    tags: [],
+    categoryId: '',
+    tagIds: [],
     featured: false,
     newArrivalPinned: false,
     excludeFromNewArrivals: false,
@@ -268,7 +268,6 @@ export const CSV_COLUMNS = [
   'short_description',
   'description',
   'category',
-  'subcategory',
   'tags',
   'featured',
   'new_arrival_pinned',
@@ -390,9 +389,8 @@ export function productToDocument(
     description: product.description,
     images: product.images || [],
     imageAlts: product.imageAlts || {},
-    category: product.category,
-    subcategory: product.subcategory,
-    tags: product.tags || [],
+    categoryId: product.category?.id ?? '',
+    tagIds: (product.tags || []).map((t) => t.id),
     featured: product.featured ?? false,
     newArrivalPinned: product.newArrivalPinned ?? false,
     excludeFromNewArrivals: product.excludeFromNewArrivals ?? false,
