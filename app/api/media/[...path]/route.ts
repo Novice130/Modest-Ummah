@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { readFile, stat } from 'fs/promises';
+import { readFile, stat, copyFile } from 'fs/promises';
 import path from 'path';
 import { getUploadDir } from '@/lib/uploads';
 
@@ -26,9 +26,9 @@ export async function GET(
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const uploadDir = path.resolve(getUploadDir());
+  const uploadDir = path.resolve(/*turbopackIgnore: true*/ getUploadDir());
   const relative = segments.join('/');
-  const filePath = path.resolve(uploadDir, relative);
+  const filePath = path.resolve(/*turbopackIgnore: true*/ uploadDir, relative);
 
   // Reject any path that escapes the upload dir (../, absolute segments,
   // symlinks resolved away from it are covered by the prefix check).
@@ -37,23 +37,37 @@ export async function GET(
   }
 
   let fileStats;
+  let targetFilePath = filePath;
   try {
     fileStats = await stat(filePath);
   } catch {
-    return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    // Fallback: check public/uploads/ for bundled seed catalog assets
+    const fallbackDir = path.resolve(/*turbopackIgnore: true*/ process.cwd(), 'public', 'uploads');
+    const fallbackPath = path.resolve(/*turbopackIgnore: true*/ fallbackDir, relative);
+    if (fallbackPath.startsWith(fallbackDir + path.sep)) {
+      try {
+        fileStats = await stat(fallbackPath);
+        targetFilePath = fallbackPath;
+        copyFile(fallbackPath, filePath).catch(() => {});
+      } catch {
+        return NextResponse.json({ error: 'Not found' }, { status: 404 });
+      }
+    } else {
+      return NextResponse.json({ error: 'Not found' }, { status: 404 });
+    }
   }
 
   if (!fileStats.isFile()) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const ext = path.extname(filePath).toLowerCase();
+  const ext = path.extname(targetFilePath).toLowerCase();
   const contentType = MIME_BY_EXT[ext];
   if (!contentType) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
 
-  const buffer = await readFile(filePath);
+  const buffer = await readFile(targetFilePath);
 
   return new NextResponse(new Uint8Array(buffer), {
     status: 200,

@@ -11,10 +11,11 @@
  * the route's handlers along with it.
  */
 import path from 'path';
+import { existsSync } from 'fs';
 
 export function getUploadDir(): string {
   if (process.env.UPLOAD_DIR) return process.env.UPLOAD_DIR;
-  if (process.env.NODE_ENV === 'production') return '/app/uploads';
+  if (process.env.NODE_ENV === 'production' && existsSync(/*turbopackIgnore: true*/ '/app/uploads')) return '/app/uploads';
   return path.join(process.cwd(), 'uploads');
 }
 
@@ -25,6 +26,7 @@ export function getUploadDir(): string {
  * /images/products/… path, or a traversal attempt. The prefix check mirrors
  * the one in app/api/media/[...path]/route.ts — a stored image URL is not
  * user input today, but it is the sort of value that becomes user input.
+ * Falls back to public/uploads/ for bundled seed catalog assets.
  */
 export function resolveUploadPath(url: string): string | null {
   const prefix = '/api/media/';
@@ -33,9 +35,18 @@ export function resolveUploadPath(url: string): string | null {
   const relative = url.slice(prefix.length);
   if (!relative) return null;
 
-  const uploadDir = path.resolve(getUploadDir());
-  const filePath = path.resolve(uploadDir, relative);
-  if (!filePath.startsWith(uploadDir + path.sep)) return null;
+  const uploadDir = path.resolve(/*turbopackIgnore: true*/ getUploadDir());
+  const filePath = path.resolve(/*turbopackIgnore: true*/ uploadDir, relative);
+  if (filePath.startsWith(uploadDir + path.sep) && existsSync(/*turbopackIgnore: true*/ filePath)) {
+    return filePath;
+  }
 
-  return filePath;
+  // Fallback to bundled seed uploads in public/uploads/
+  const fallbackDir = path.resolve(/*turbopackIgnore: true*/ process.cwd(), 'public', 'uploads');
+  const fallbackPath = path.resolve(/*turbopackIgnore: true*/ fallbackDir, relative);
+  if (fallbackPath.startsWith(fallbackDir + path.sep) && existsSync(/*turbopackIgnore: true*/ fallbackPath)) {
+    return fallbackPath;
+  }
+
+  return null;
 }

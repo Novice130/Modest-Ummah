@@ -60,12 +60,13 @@ logs
 
 # Internal planning docs — not for the public repo
 IMPLEMENTATION_PLAN.md
-
-# Local uploads (prod uses a Docker volume at /app/uploads)
-uploads/
 IMPLEMENTATION_PLAN_APP.md
+
+# Local uploads (prod uses a Docker volume at /app/uploads; bundled seed catalog assets live in public/uploads/)
+/uploads/
 
 # Local DB dumps taken before destructive migrations. May contain
 # customer-adjacent data; keep them off the remote.
 scripts/backups/
+!scripts/backups/photo-manifest.json
 PLAN_STAGE10_FINISH.md

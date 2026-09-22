@@ -28,6 +28,8 @@ export default function ProductCard({ product }: ProductCardProps) {
   const { toast } = useToast();
   const [mounted, setMounted] = useState(false);
 
+  const [imageError, setImageError] = useState(false);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -93,11 +95,12 @@ export default function ProductCard({ product }: ProductCardProps) {
       {/* Photo Container - 4:5 aspect ratio matching Etsy phone app */}
       <div className="relative aspect-[4/5] w-full overflow-hidden bg-muted/30">
         <Link href={`/product/${product.slug || product.id}`} className="absolute inset-0 block">
-          {imageSrc ? (
+          {imageSrc && !imageError ? (
             isBlobUrl ? (
               <img
                 src={imageSrc}
                 alt={product.name}
+                onError={() => setImageError(true)}
                 className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
               />
             ) : (
@@ -105,6 +108,7 @@ export default function ProductCard({ product }: ProductCardProps) {
                 src={imageSrc}
                 alt={product.name}
                 fill
+                onError={() => setImageError(true)}
                 className="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               />

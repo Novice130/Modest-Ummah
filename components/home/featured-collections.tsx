@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -52,6 +53,7 @@ export default function FeaturedCollections({
 }: {
   categories?: CategoryNode[];
 }) {
+  const [failedImages, setFailedImages] = useState<Record<string, boolean>>({});
   const collections = toCollections(categories);
   if (collections.length === 0) return null;
 
@@ -87,11 +89,12 @@ export default function FeaturedCollections({
             >
               <Link href={collection.href} className="block">
                 <div className="relative aspect-[4/3] sm:aspect-[3/4] rounded-xl overflow-hidden">
-                  {collection.image ? (
+                  {collection.image && !failedImages[collection.name] ? (
                     <Image
                       src={collection.image}
                       alt={collection.name}
                       fill
+                      onError={() => setFailedImages((prev) => ({ ...prev, [collection.name]: true }))}
                       className="object-cover transition-transform duration-500 group-hover:scale-105"
                       sizes="(max-width: 768px) 100vw, 33vw"
                     />
