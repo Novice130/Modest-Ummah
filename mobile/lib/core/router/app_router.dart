@@ -98,6 +98,7 @@ class _TabShell extends ConsumerWidget {
         children: [
           const Divider(height: 1),
           BottomNavigationBar(
+            backgroundColor: theme.colorScheme.surface,
             currentIndex: index < 0 ? 0 : index,
             onTap: (i) {
               HapticFeedback.selectionClick();

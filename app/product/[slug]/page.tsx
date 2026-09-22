@@ -83,13 +83,14 @@ export default async function ProductPage({ params }: ProductPageProps) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       
-      <div className="container-custom py-8">
-        {/* Breadcrumb */}
-        <nav className="text-sm mb-6">
-          <ol className="flex items-center gap-2 text-muted-foreground">
-            <li><a href="/" className="hover:text-foreground">Home</a></li>
-            <li>/</li>
-            <li><a href="/shop" className="hover:text-foreground">Shop</a></li>
+      <div className="min-h-screen bg-background py-6 md:py-10">
+        <div className="container-custom">
+          {/* Breadcrumb */}
+          <nav className="text-xs mb-6 overflow-x-auto scrollbar-hide py-1">
+            <ol className="flex items-center gap-2 text-muted-foreground whitespace-nowrap">
+              <li><a href="/" className="hover:text-foreground">Home</a></li>
+              <li>/</li>
+              <li><a href="/shop" className="hover:text-foreground">Shop</a></li>
             <li>/</li>
             {(product.category?.path ?? []).map((crumb) => (
               <Fragment key={crumb.id}>
@@ -118,6 +119,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
           <ProductRecommendations product={product} />
         </Suspense>
       </div>
-    </>
-  );
+    </div>
+  </>
+);
 }

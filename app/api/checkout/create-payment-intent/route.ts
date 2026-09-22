@@ -3,6 +3,8 @@ import { createPaymentIntent } from '@/lib/stripe';
 import { getDb } from '@/lib/db';
 import { orders } from '@/lib/schema';
 import { resolveCheckoutOrder, normalizeShippingAddress } from '@/lib/pricing';
+import { generateOrderId } from '@/lib/utils';
+import { getAuthFromRequest } from '@/lib/auth';
 import type { ShippingAddressDB } from '@/lib/schema';
 
 export async function POST(request: NextRequest) {
@@ -14,7 +16,6 @@ export async function POST(request: NextRequest) {
       customerEmail,
       shippingAddress,
       items,
-      userId,
       shipping,
       tax,
       discount,
@@ -34,12 +35,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!orderId) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      );
-    }
+    // The web checkout mints its own order id so the confirmation page can be
+    // addressed before the payment resolves. The mobile client has no such
+    // need, so an absent id is minted here rather than rejected — it only ever
+    // has to be unique and to match what goes into the Stripe metadata.
+    const resolvedOrderId =
+      typeof orderId === 'string' && orderId.trim() ? orderId.trim() : generateOrderId();
 
     const resolved = await resolveCheckoutOrder({
       items,
@@ -58,13 +59,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Whose order this is comes from the session or the bearer token, never
+    // from the body: a client-supplied `userId` would let anyone file an order
+    // under someone else's account. Cookie and bearer both resolve here, so
+    // the web and the app land on the same identity.
+    const auth = await getAuthFromRequest(request);
+    const ownerId = auth && auth.type === 'user' ? auth.sub : null;
+
     const db = getDb();
 
     // The order row is created before payment; if this insert fails, the
     // PaymentIntent must not be created (previously the failure was swallowed).
     await db.insert(orders).values({
-      orderId,
-      userId: userId || null,
+      orderId: resolvedOrderId,
+      userId: ownerId,
       email,
       items: resolved.items,
       shippingAddress: address as ShippingAddressDB,
@@ -84,8 +92,8 @@ export async function POST(request: NextRequest) {
       amount: resolved.total,
       customerEmail: email,
       metadata: {
-        orderId,
-        userId: userId || '',
+        orderId: resolvedOrderId,
+        userId: ownerId || '',
       },
       currency: 'usd',
     });

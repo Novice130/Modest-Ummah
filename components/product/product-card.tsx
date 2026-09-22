@@ -1,12 +1,12 @@
 'use client';
 
-import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Heart, ShoppingCart, Eye } from 'lucide-react';
+import { Heart, ShoppingBag } from 'lucide-react';
+import { SurfaceCard } from '@/components/ui/surface-card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { useCartStore } from '@/lib/store';
+import { useCartStore, useWishlistStore } from '@/lib/store';
 import { formatPrice, getImageUrl } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import type { Product } from '@/types';
@@ -16,23 +16,49 @@ interface ProductCardProps {
   index?: number;
 }
 
-// Helper to get the proper image src for display
 function getProductImageSrc(product: Product): string | null {
-  const firstImage = product.images?.[0];
+  const firstImage: any = product.images?.[0];
   if (!firstImage) return null;
   return getImageUrl(firstImage);
 }
 
-export default function ProductCard({ product, index = 0 }: ProductCardProps) {
+export default function ProductCard({ product }: ProductCardProps) {
   const { addItem, openCart } = useCartStore();
+  const { addToWishlist, removeFromWishlist, isInWishlist } = useWishlistStore();
   const { toast } = useToast();
+  const [mounted, setMounted] = useState(false);
 
-  const handleAddToCart = (e: React.MouseEvent) => {
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const isSaved = mounted ? isInWishlist(product.id) : false;
+
+  const handleToggleWishlist = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (isSaved) {
+      removeFromWishlist(product.id);
+      toast({
+        title: 'Removed from wishlist',
+        description: `${product.name} removed from your saved pieces.`,
+      });
+    } else {
+      addToWishlist(product.id);
+      toast({
+        title: 'Saved to wishlist',
+        description: `${product.name} has been added to your favorites.`,
+      });
+    }
+  };
+
+  const handleQuickAdd = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
     const imageSrc = getProductImageSrc(product);
-    
+
     addItem({
       productId: product.id,
       name: product.name,
@@ -45,140 +71,131 @@ export default function ProductCard({ product, index = 0 }: ProductCardProps) {
 
     toast({
       title: 'Added to cart',
-      description: `${product.name} has been added to your cart.`,
+      description: `${product.name} has been added to your bag.`,
     });
 
     openCart();
   };
 
-  const discount = product.compareAtPrice
-    ? Math.round(((product.compareAtPrice - product.price) / product.compareAtPrice) * 100)
-    : null;
+  const discount =
+    product.compareAtPrice && product.compareAtPrice > product.price
+      ? Math.round(((product.compareAtPrice - product.price) / product.compareAtPrice) * 100)
+      : null;
 
   const imageSrc = getProductImageSrc(product);
   const isBlobUrl = imageSrc?.startsWith('blob:');
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true }}
-      transition={{ duration: 0.4, delay: index * 0.05 }}
-      className="group"
+    <SurfaceCard
+      hoverEffect
+      className="group relative flex flex-col h-full bg-card transition-all duration-300"
     >
-      <Link href={`/product/${product.slug || product.id}`} className="block">
-        <div className="relative aspect-[3/4] rounded-lg overflow-hidden bg-muted mb-3">
-          {/* Image - use regular img for blob URLs, Next Image for others */}
+      {/* Photo Container - 4:5 aspect ratio matching Etsy phone app */}
+      <div className="relative aspect-[4/5] w-full overflow-hidden bg-muted/30">
+        <Link href={`/product/${product.slug || product.id}`} className="absolute inset-0 block">
           {imageSrc ? (
             isBlobUrl ? (
-              // Use regular img tag for blob URLs (preview mode)
               <img
                 src={imageSrc}
                 alt={product.name}
-                className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                className="w-full h-full object-cover transition-transform duration-500 ease-out group-hover:scale-105"
               />
             ) : (
-              // Use Next.js Image for regular URLs
               <Image
                 src={imageSrc}
                 alt={product.name}
                 fill
-                className="object-cover transition-transform duration-500 group-hover:scale-105"
+                className="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
                 sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
               />
             )
           ) : (
-            // Placeholder when no image
-            <div className="absolute inset-0 flex items-center justify-center text-muted-foreground bg-muted">
-              <span className="text-sm">No Image</span>
+            <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-muted/40">
+              <span className="text-xs">No image</span>
             </div>
           )}
+        </Link>
 
-          {/* Badges */}
-          <div className="absolute top-3 left-3 flex flex-col gap-2">
-            {discount && discount > 0 && (
-              <Badge variant="destructive" className="text-xs">
-                -{discount}%
-              </Badge>
-            )}
-            {!product.inStock && (
-              <Badge variant="secondary" className="text-xs">
-                Out of Stock
-              </Badge>
-            )}
+        {/* Floating Deal Badge (Etsy green) */}
+        {discount && discount > 0 && (
+          <div className="pointer-events-none absolute top-2.5 left-2.5 bg-[#2E7D5B] dark:bg-[#5FBE92] text-white px-2 py-0.5 rounded-[5px] text-[10px] sm:text-[11px] font-bold tracking-tight shadow-xs z-10">
+            {discount}% off
           </div>
+        )}
 
-          {/* Quick Actions */}
-          <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <Button
-              size="icon"
-              variant="secondary"
-              className="h-8 w-8 rounded-full bg-white/90 hover:bg-white text-foreground"
-            >
-              <Heart className="h-4 w-4" />
-            </Button>
-            <Button
-              size="icon"
-              variant="secondary"
-              className="h-8 w-8 rounded-full bg-white/90 hover:bg-white text-foreground"
-            >
-              <Eye className="h-4 w-4" />
-            </Button>
+        {/* Floating Save / Favorite Heart Button */}
+        <button
+          type="button"
+          onClick={handleToggleWishlist}
+          aria-label={isSaved ? 'Remove from wishlist' : 'Save to wishlist'}
+          className="absolute top-2.5 right-2.5 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/90 dark:bg-card/90 shadow-sm flex items-center justify-center text-foreground hover:text-red-500 transition-all hover:scale-110 active:scale-95 z-10"
+        >
+          <Heart
+            className={`w-3.5 h-3.5 sm:w-4 sm:h-4 transition-colors ${
+              isSaved ? 'fill-[#B3261E] text-[#B3261E]' : 'text-foreground'
+            }`}
+          />
+        </button>
+
+        {/* Floating Sold Out Badge */}
+        {!product.inStock && (
+          <div className="pointer-events-none absolute bottom-2.5 left-2.5 bg-white/90 dark:bg-card/90 text-foreground text-[10px] font-semibold px-2 py-0.5 rounded-[5px] shadow-xs z-10">
+            Sold out
           </div>
+        )}
 
-          {/* Add to Cart Button */}
-          <div className="absolute bottom-3 left-3 right-3 md:opacity-0 md:group-hover:opacity-100 transition-all md:translate-y-2 md:group-hover:translate-y-0">
+        {/* Quick Add Overlay on Desktop Hover */}
+        {product.inStock && (
+          <div className="absolute bottom-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity z-10 hidden sm:block">
             <Button
-              onClick={handleAddToCart}
-              className="w-full"
+              type="button"
               size="sm"
-              disabled={!product.inStock}
+              variant="secondary"
+              onClick={handleQuickAdd}
+              className="h-8 rounded-full px-3 shadow-md bg-white/95 dark:bg-card/95 hover:bg-white text-xs font-semibold"
             >
-              <ShoppingCart className="h-4 w-4 mr-2" />
-              Add to Cart
+              <ShoppingBag className="w-3.5 h-3.5 mr-1" />
+              Add
             </Button>
           </div>
-        </div>
+        )}
+      </div>
 
-        {/* Product Info */}
-        <div className="space-y-1">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">
-            {product.category?.name ?? ''}
-          </p>
-          <h3 className="font-medium text-sm md:text-base line-clamp-2 group-hover:text-sage-600 transition-colors">
-            {product.name}
-          </h3>
-          <div className="flex items-center gap-2">
-            <span className="font-semibold text-base">
+      {/* Product Details Body */}
+      <Link
+        href={`/product/${product.slug || product.id}`}
+        className="p-3 sm:p-3.5 flex flex-col flex-1 justify-between gap-1 block"
+      >
+        <div>
+          {/* Price Line (Bold price, green when on sale + strike-through compare price) */}
+          <div className="flex items-baseline gap-1.5">
+            <span
+              className={`text-base sm:text-[17px] font-bold tracking-tight ${
+                discount ? 'text-[#2E7D5B] dark:text-[#5FBE92]' : 'text-foreground'
+              }`}
+            >
               {formatPrice(product.price)}
             </span>
             {product.compareAtPrice && product.compareAtPrice > product.price && (
-              <span className="text-sm text-muted-foreground line-through">
+              <span className="text-xs text-muted-foreground line-through font-normal">
                 {formatPrice(product.compareAtPrice)}
               </span>
             )}
           </div>
 
-          {/* Color Swatches */}
-          {product.colors && product.colors.length > 1 && (
-            <div className="flex gap-1 pt-1">
-              {product.colors.slice(0, 4).map((color) => (
-                <div
-                  key={color.name}
-                  className="w-4 h-4 rounded-full border border-gray-300"
-                  style={{ backgroundColor: color.value }}
-                  title={color.name}
-                />
-              ))}
-              {product.colors.length > 4 && (
-                <span className="text-xs text-muted-foreground">
-                  +{product.colors.length - 4}
-                </span>
-              )}
-            </div>
-          )}
+          {/* Product Title */}
+          <h3 className="text-xs sm:text-sm font-normal text-foreground line-clamp-2 leading-snug mt-1 group-hover:opacity-80 transition-opacity">
+            {product.name}
+          </h3>
         </div>
+
+        {/* Category Overline */}
+        {product.category?.name && (
+          <p className="text-[10px] uppercase tracking-wider font-semibold text-muted-foreground mt-1 line-clamp-1">
+            {product.category.name}
+          </p>
+        )}
       </Link>
-    </motion.div>
+    </SurfaceCard>
   );
 }

@@ -179,6 +179,7 @@ export const useCartStore = create<CartState>()(
     {
       name: 'modest-ummah-cart',
       storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ items: state.items }),
     }
   )
 );

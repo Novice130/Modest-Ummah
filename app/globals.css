@@ -83,11 +83,29 @@
   --font-heading: var(--font-poppins), sans-serif;
   --font-body: var(--font-inter), sans-serif;
   
+  /* Etsy Marketplace Brand Colors */
+  --color-deal: #2E7D5B;
+  --color-deal-dark: #5FBE92;
+  --color-deal-tint: #E4F1EA;
+  --color-deal-tint-dark: rgba(95, 190, 146, 0.12);
+  --color-backdrop: #F0EDE8;
+  --color-backdrop-dark: #070707;
+  --color-ink: #141414;
+  --color-ink-muted: #6B6B6B;
+  --color-hairline: rgba(0, 0, 0, 0.08);
+  --color-hairline-dark: rgba(255, 255, 255, 0.12);
+  --color-brand-gold: #C9A227;
+  --color-brand-charcoal: #2D2D2D;
+  --color-brand-cream: #FAF8F5;
+
   /* Border Radius */
-  --radius: 0.5rem;
-  --radius-lg: 0.5rem;
-  --radius-md: calc(0.5rem - 2px);
-  --radius-sm: calc(0.5rem - 4px);
+  --radius: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-xl: 1.25rem;
+  --radius-lg: 1rem;
+  --radius-md: 0.75rem;
+  --radius-sm: 0.5rem;
+  --radius-full: 9999px;
   
   /* Animation - Shimmer */
   --animate-shimmer: shimmer 2s infinite;
@@ -158,49 +176,49 @@
   --color-card-foreground: hsl(var(--card-foreground));
 }
 
-/* CSS Variables for shadcn/ui theming */
+/* CSS Variables for shadcn/ui theming - Etsy Marketplace Theme */
 :root {
-  --background: 0 0% 100%;
-  --foreground: 215 45% 20%;
-  --card: 0 0% 100%;
-  --card-foreground: 215 45% 20%;
+  --background: 38 18% 93%; /* #F0EDE8 warm marketplace paper backdrop */
+  --foreground: 0 0% 8%;    /* #141414 crisp ink */
+  --card: 0 0% 100%;        /* #FFFFFF pure floating surface */
+  --card-foreground: 0 0% 8%;
   --popover: 0 0% 100%;
-  --popover-foreground: 215 45% 20%;
-  --primary: 85 25% 69%;
-  --primary-foreground: 215 45% 40%;
-  --secondary: 0 33% 74%;
-  --secondary-foreground: 0 0% 100%;
-  --muted: 85 15% 95%;
-  --muted-foreground: 215 20% 45%;
-  --accent: 43 62% 82%;
-  --accent-foreground: 20 25% 35%;
+  --popover-foreground: 0 0% 8%;
+  --primary: 0 0% 12%;      /* #1F1F1F sleek marketplace black */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 38 14% 88%;
+  --secondary-foreground: 0 0% 8%;
+  --muted: 38 14% 88%;
+  --muted-foreground: 0 0% 42%; /* #6B6B6B muted charcoal */
+  --accent: 148 31% 92%;        /* #E4F1EA Deal Tint */
+  --accent-foreground: 154 46% 34%; /* #2E7D5B Deal Green */
   --destructive: 0 84.2% 60.2%;
   --destructive-foreground: 0 0% 98%;
-  --border: 85 15% 85%;
-  --input: 85 15% 85%;
-  --ring: 85 25% 69%;
+  --border: 38 10% 84%;         /* subtle hairline border */
+  --input: 38 10% 84%;
+  --ring: 43 68% 47%;           /* #C9A227 Gold accent */
 }
 
 .dark {
-  --background: 215 45% 15%;
-  --foreground: 0 0% 95%;
-  --card: 215 45% 18%;
-  --card-foreground: 0 0% 95%;
-  --popover: 215 45% 18%;
-  --popover-foreground: 0 0% 95%;
-  --primary: 85 25% 69%;
-  --primary-foreground: 215 45% 20%;
-  --secondary: 0 33% 74%;
-  --secondary-foreground: 0 0% 100%;
-  --muted: 215 40% 25%;
-  --muted-foreground: 0 0% 70%;
-  --accent: 43 62% 82%;
-  --accent-foreground: 20 25% 25%;
+  --background: 0 0% 3%;    /* #070707 dark backdrop */
+  --foreground: 36 14% 94%; /* #F2F0ED light ink */
+  --card: 0 0% 10%;         /* #1A1A1A dark surface card */
+  --card-foreground: 36 14% 94%;
+  --popover: 0 0% 10%;
+  --popover-foreground: 36 14% 94%;
+  --primary: 43 68% 47%;    /* #C9A227 Gold accent */
+  --primary-foreground: 0 0% 100%;
+  --secondary: 0 0% 16%;
+  --secondary-foreground: 36 14% 94%;
+  --muted: 0 0% 16%;
+  --muted-foreground: 0 0% 60%; /* #9A9A9A */
+  --accent: 152 44% 16%;
+  --accent-foreground: 152 44% 56%; /* #5FBE92 Dark Deal Green */
   --destructive: 0 62.8% 30.6%;
   --destructive-foreground: 0 0% 98%;
-  --border: 215 35% 30%;
-  --input: 215 35% 30%;
-  --ring: 85 25% 69%;
+  --border: 0 0% 18%;           /* dark hairline border */
+  --input: 0 0% 18%;
+  --ring: 43 68% 47%;
 }
 
 /* Base styles */
@@ -245,29 +263,35 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .btn-primary {
-  background-color: var(--color-sage-300);
-  color: var(--color-navy-900);
-  transition: background-color 0.2s;
+  background-color: #141414;
+  color: #ffffff;
+  transition: all 0.2s ease;
   padding: 0.75rem 1.5rem;
-  border-radius: 0.375rem;
-  font-weight: 500;
+  border-radius: 9999px;
+  font-weight: 600;
+}
+
+.dark .btn-primary {
+  background-color: #FAF8F5;
+  color: #141414;
 }
 
 .btn-primary:hover {
-  background-color: var(--color-sage-400);
+  opacity: 0.9;
 }
 
 .btn-secondary {
-  background-color: var(--color-rose-300);
-  color: white;
-  transition: background-color 0.2s;
+  background-color: hsl(var(--card));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  transition: all 0.2s ease;
   padding: 0.75rem 1.5rem;
-  border-radius: 0.375rem;
-  font-weight: 500;
+  border-radius: 9999px;
+  font-weight: 600;
 }
 
 .btn-secondary:hover {
-  background-color: var(--color-rose-400);
+  background-color: hsl(var(--muted));
 }
 
 .link-hover:hover {

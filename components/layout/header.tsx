@@ -7,6 +7,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search,
   ShoppingBag,
+  Heart,
   User,
   Menu,
   X,
@@ -17,7 +18,7 @@ import {
 import { useTheme } from 'next-themes';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useCartStore, useUIStore, useAuthStore } from '@/lib/store';
+import { useCartStore, useUIStore, useAuthStore, useWishlistStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
 import type { CategoryNode } from '@/types';
 
@@ -57,14 +58,16 @@ export default function Header({ categories = [] }: { categories?: CategoryNode[
   const pathname = usePathname();
   const { theme, setTheme } = useTheme();
   const { getItemCount, openCart } = useCartStore();
+  const wishlistItems = useWishlistStore((state) => state.items);
   const { isMobileMenuOpen, toggleMobileMenu, closeMobileMenu, isSearchOpen, toggleSearch, closeSearch } = useUIStore();
   const { user } = useAuthStore();
   const [isScrolled, setIsScrolled] = useState(false);
   const [activeSubmenu, setActiveSubmenu] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
 
-  // Prevent hydration mismatch by only showing cart count after mount
+  // Prevent hydration mismatch by only showing counts after mount
   const itemCount = mounted ? getItemCount() : 0;
+  const wishlistCount = mounted ? wishlistItems.length : 0;
 
   // Set mounted state after hydration
   useEffect(() => {
@@ -87,35 +90,35 @@ export default function Header({ categories = [] }: { categories?: CategoryNode[
   return (
     <header
       className={cn(
-        'sticky top-0 z-50 w-full transition-all duration-300',
+        'sticky top-0 z-50 w-full transition-all duration-300 border-b border-black/[0.06] dark:border-white/[0.08]',
         isScrolled
-          ? 'bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm'
-          : 'bg-background'
+          ? 'bg-card/95 backdrop-blur-md shadow-xs'
+          : 'bg-card/85 backdrop-blur-xs'
       )}
     >
       {/* Announcement Bar */}
-      <div className="bg-navy-900 text-white text-center py-2 text-sm">
-        <p>Free Shipping on Orders Over $75</p>
+      <div className="bg-[#141414] dark:bg-[#1A1A1A] text-white text-center py-2 text-[11px] sm:text-xs tracking-wider uppercase font-medium">
+        <p>Free Shipping on Orders Over $75 • 30-Day Returns</p>
       </div>
 
       <div className="container-custom">
         <div className="flex items-center justify-between h-16 md:h-20">
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden p-2 hover:bg-muted rounded-md"
+            className="md:hidden p-2 hover:bg-muted rounded-full"
             onClick={toggleMobileMenu}
             aria-label="Toggle menu"
           >
             {isMobileMenuOpen ? (
-              <X className="h-6 w-6" />
+              <X className="h-5 w-5" />
             ) : (
-              <Menu className="h-6 w-6" />
+              <Menu className="h-5 w-5" />
             )}
           </button>
 
           {/* Logo */}
           <Link href="/" className="flex items-center space-x-2">
-            <img src="/images/logo.png" alt="Modest Ummah" className="h-8 md:h-10 w-auto" />
+            <img src="/images/logo.png" alt="Modest Ummah" className="h-7 sm:h-8 md:h-10 w-auto" />
           </Link>
 
           {/* Desktop Navigation */}
@@ -130,14 +133,14 @@ export default function Header({ categories = [] }: { categories?: CategoryNode[
                 <Link
                   href={item.href}
                   className={cn(
-                    'flex items-center space-x-1 py-2 text-sm font-medium transition-colors link-hover',
+                    'flex items-center space-x-1 py-2 text-xs uppercase tracking-wider font-semibold transition-colors',
                     pathname === item.href || pathname.startsWith(item.href + '/')
-                      ? 'text-sage-500'
-                      : 'text-foreground'
+                      ? 'text-foreground'
+                      : 'text-muted-foreground hover:text-foreground'
                   )}
                 >
                   <span>{item.name}</span>
-                  {item.submenu && <ChevronDown className="h-4 w-4" />}
+                  {item.submenu && <ChevronDown className="h-3.5 w-3.5 opacity-60" />}
                 </Link>
 
                 {/* Submenu */}
@@ -191,10 +194,27 @@ export default function Header({ categories = [] }: { categories?: CategoryNode[
               <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
             </Button>
 
+            {/* Wishlist */}
+            <Link href="/account/wishlist" className="relative">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="w-9 h-9 rounded-full hover:bg-muted"
+                aria-label="Wishlist"
+              >
+                <Heart className="h-4.5 w-4.5" />
+                {wishlistCount > 0 && (
+                  <span className="absolute 0 top-0.5 right-0.5 bg-[#B3261E] text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
+                    {wishlistCount}
+                  </span>
+                )}
+              </Button>
+            </Link>
+
             {/* User */}
             <Link href={user ? '/account' : '/auth/login'}>
-              <Button variant="ghost" size="icon" aria-label="Account">
-                <User className="h-5 w-5" />
+              <Button variant="ghost" size="icon" className="w-9 h-9 rounded-full hover:bg-muted" aria-label="Account">
+                <User className="h-4.5 w-4.5" />
               </Button>
             </Link>
 
@@ -202,13 +222,13 @@ export default function Header({ categories = [] }: { categories?: CategoryNode[
             <Button
               variant="ghost"
               size="icon"
-              className="relative"
+              className="relative w-9 h-9 rounded-full hover:bg-muted"
               onClick={openCart}
-              aria-label="Cart"
+              aria-label="Shopping Bag"
             >
-              <ShoppingBag className="h-5 w-5" />
+              <ShoppingBag className="h-4.5 w-4.5" />
               {itemCount > 0 && (
-                <span className="absolute -top-1 -right-1 bg-rose-300 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                <span className="absolute top-0.5 right-0.5 bg-foreground text-background text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center shadow-xs">
                   {itemCount}
                 </span>
               )}

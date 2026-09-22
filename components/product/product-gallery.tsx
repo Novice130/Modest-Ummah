@@ -5,6 +5,7 @@ import Image from 'next/image';
 import useEmblaCarousel from 'embla-carousel-react';
 import { ChevronLeft, ChevronRight, ZoomIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SurfaceCard } from '@/components/ui/surface-card';
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,6 @@ interface ProductGalleryProps {
   name: string;
 }
 
-// Check if URL is a blob URL
 function isBlobUrl(url: string): boolean {
   return url.startsWith('blob:');
 }
@@ -43,43 +43,34 @@ export default function ProductGallery({ images, name }: ProductGalleryProps) {
     setSelectedIndex(index);
   };
 
-  // Fallback to placeholder if no images
   const hasImages = images?.length > 0;
-  
-  // Transform images to full URLs
-  const displayImages = hasImages 
-    ? images.map(getImageUrl)
-    : [];
+  const displayImages = hasImages ? images.map(getImageUrl) : [];
 
-
-  // If no images, show placeholder
   if (displayImages.length === 0) {
     return (
-      <div className="space-y-4">
-        <div className="relative aspect-[3/4] bg-muted rounded-lg overflow-hidden flex items-center justify-center">
-          <span className="text-muted-foreground">No images available</span>
+      <SurfaceCard className="w-full">
+        <div className="relative aspect-[4/5] bg-muted/30 flex items-center justify-center">
+          <span className="text-sm text-muted-foreground">No images available</span>
         </div>
-      </div>
+      </SurfaceCard>
     );
   }
 
   return (
     <div className="space-y-4">
-      {/* Main Image */}
-      <div className="relative aspect-[3/4] bg-muted rounded-lg overflow-hidden group">
+      {/* Main Image in SurfaceCard */}
+      <SurfaceCard className="relative aspect-[4/5] w-full bg-card group shadow-xs">
         <div className="overflow-hidden h-full" ref={emblaRef}>
           <div className="flex h-full">
             {displayImages.map((image, index) => (
               <div key={index} className="flex-[0_0_100%] min-w-0 relative h-full">
                 {isBlobUrl(image) ? (
-                  // Use regular img for blob URLs
                   <img
                     src={image}
                     alt={`${name} - Image ${index + 1}`}
                     className="absolute inset-0 w-full h-full object-cover"
                   />
                 ) : (
-                  // Use Next.js Image for regular URLs
                   <Image
                     src={image}
                     alt={`${name} - Image ${index + 1}`}
@@ -94,41 +85,62 @@ export default function ProductGallery({ images, name }: ProductGalleryProps) {
           </div>
         </div>
 
-        {/* Navigation Arrows */}
+        {/* Carousel Navigation Arrows */}
         {displayImages.length > 1 && (
           <>
             <Button
               variant="ghost"
               size="icon"
-              className="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/80 dark:bg-card/80 backdrop-blur-xs hover:bg-white text-foreground shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
               onClick={scrollPrev}
+              aria-label="Previous image"
             >
               <ChevronLeft className="h-5 w-5" />
             </Button>
             <Button
               variant="ghost"
               size="icon"
-              className="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/80 dark:bg-card/80 backdrop-blur-xs hover:bg-white text-foreground shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
               onClick={scrollNext}
+              aria-label="Next image"
             >
               <ChevronRight className="h-5 w-5" />
             </Button>
           </>
         )}
 
-        {/* Zoom Button */}
+        {/* Floating Indicator Dots */}
+        {displayImages.length > 1 && (
+          <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 bg-black/40 backdrop-blur-xs px-2.5 py-1 rounded-full z-10">
+            {displayImages.map((_, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => scrollTo(idx)}
+                aria-label={`Go to slide ${idx + 1}`}
+                className={cn(
+                  'h-1.5 rounded-full transition-all',
+                  selectedIndex === idx ? 'w-4 bg-white' : 'w-1.5 bg-white/50'
+                )}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Zoom Lightbox Trigger */}
         <Dialog>
           <DialogTrigger asChild>
             <Button
               variant="ghost"
               size="icon"
-              className="absolute right-2 top-2 bg-white/80 hover:bg-white opacity-0 group-hover:opacity-100 transition-opacity"
+              className="absolute right-3 top-3 w-8 h-8 rounded-full bg-white/80 dark:bg-card/80 backdrop-blur-xs hover:bg-white text-foreground shadow-sm opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-label="Zoom photo"
             >
-              <ZoomIn className="h-5 w-5" />
+              <ZoomIn className="h-4 w-4" />
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-4xl p-0">
-            <div className="relative aspect-square">
+          <DialogContent className="max-w-4xl p-2 bg-card border border-black/[0.08] dark:border-white/[0.12] rounded-2xl overflow-hidden">
+            <div className="relative aspect-square w-full">
               {isBlobUrl(displayImages[selectedIndex]) ? (
                 <img
                   src={displayImages[selectedIndex]}
@@ -146,20 +158,21 @@ export default function ProductGallery({ images, name }: ProductGalleryProps) {
             </div>
           </DialogContent>
         </Dialog>
-      </div>
+      </SurfaceCard>
 
-      {/* Thumbnails */}
+      {/* Thumbnails Row */}
       {displayImages.length > 1 && (
-        <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+        <div className="flex gap-2.5 overflow-x-auto scrollbar-hide py-1">
           {displayImages.map((image, index) => (
             <button
               key={index}
+              type="button"
               onClick={() => scrollTo(index)}
               className={cn(
-                'relative w-20 h-24 rounded-md overflow-hidden shrink-0 border-2 transition-all',
+                'relative w-18 h-22 rounded-xl overflow-hidden shrink-0 border-2 transition-all',
                 selectedIndex === index
-                  ? 'border-sage-500'
-                  : 'border-transparent hover:border-sage-300'
+                  ? 'border-foreground ring-1 ring-foreground/20'
+                  : 'border-transparent hover:border-black/[0.15] dark:hover:border-white/[0.2]'
               )}
             >
               {isBlobUrl(image) ? (

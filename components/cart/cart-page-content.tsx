@@ -2,9 +2,9 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { Minus, Plus, Trash2, ArrowRight, ShoppingBag } from 'lucide-react';
+import { Minus, Plus, Trash2, ArrowRight, ShoppingBag, ShieldCheck, Truck } from 'lucide-react';
+import { SurfaceCard } from '@/components/ui/surface-card';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { useCartStore } from '@/lib/store';
 import { formatPrice, getValidImageSrc } from '@/lib/utils';
 
@@ -12,168 +12,204 @@ export default function CartPageContent() {
   const { items, removeItem, updateQuantity, getSubtotal } = useCartStore();
 
   const subtotal = getSubtotal();
-  const shipping = subtotal >= 75 ? 0 : 9.99;
-  const tax = subtotal * 0.08;
-  const total = subtotal + shipping + tax;
+  const freeShippingThreshold = 75;
+  const shipping = subtotal >= freeShippingThreshold ? 0 : 9.99;
+  const progressPercent = Math.min(100, Math.round((subtotal / freeShippingThreshold) * 100));
+  const amountToFree = (freeShippingThreshold - subtotal).toFixed(2);
 
   if (items.length === 0) {
     return (
-      <div className="text-center py-16">
-        <ShoppingBag className="h-20 w-20 mx-auto text-muted-foreground mb-6" />
-        <h2 className="font-heading text-2xl mb-2">Your cart is empty</h2>
-        <p className="text-muted-foreground mb-6">
-          Looks like you haven&apos;t added anything yet.
+      <SurfaceCard className="text-center py-16 px-4 max-w-md mx-auto bg-card">
+        <div className="w-16 h-16 rounded-full bg-muted/40 mx-auto flex items-center justify-center mb-4 text-muted-foreground">
+          <ShoppingBag className="h-8 w-8" />
+        </div>
+        <h2 className="font-heading text-xl font-semibold mb-1 text-foreground">Your bag is empty</h2>
+        <p className="text-xs text-muted-foreground mb-6">
+          Explore our pieces and save your favorites to your bag.
         </p>
-        <Button asChild size="lg">
+        <Button asChild className="rounded-full px-6 font-semibold bg-foreground text-background hover:bg-foreground/90">
           <Link href="/shop">Start Shopping</Link>
         </Button>
-      </div>
+      </SurfaceCard>
     );
   }
 
   return (
-    <div className="grid lg:grid-cols-3 gap-8">
-      {/* Cart Items */}
+    <div className="grid lg:grid-cols-3 gap-8 items-start">
+      {/* Cart Items List */}
       <div className="lg:col-span-2 space-y-4">
-        {items.map((item) => (
-          <Card key={`${item.productId}-${item.color}-${item.size}`}>
-            <CardContent className="p-4">
-              <div className="flex gap-4">
-                {/* Image */}
-                <div className="relative w-24 h-32 bg-muted rounded-md overflow-hidden shrink-0">
-                  {getValidImageSrc(item.image) ? (
-                    <Image
-                      src={getValidImageSrc(item.image)!}
-                      alt={item.name}
-                      fill
-                      className="object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <ShoppingBag className="h-8 w-8 text-muted-foreground" />
-                    </div>
-                  )}
-                </div>
+        {/* Free Shipping Progress Strip */}
+        <SurfaceCard className="p-4 bg-card border border-black/[0.08] dark:border-white/[0.12]">
+          <div className="flex items-center gap-2 text-xs font-semibold text-foreground mb-2">
+            <Truck className="w-4 h-4 text-[#2E7D5B] dark:text-[#5FBE92]" />
+            {subtotal >= freeShippingThreshold ? (
+              <span className="text-[#2E7D5B] dark:text-[#5FBE92]">
+                You&apos;ve unlocked free standard shipping!
+              </span>
+            ) : (
+              <span>
+                Add <span className="text-foreground font-bold">${amountToFree}</span> more for free shipping
+              </span>
+            )}
+          </div>
+          <div className="w-full bg-muted/60 h-2 rounded-full overflow-hidden">
+            <div
+              className="bg-[#2E7D5B] dark:bg-[#5FBE92] h-full rounded-full transition-all duration-500"
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+        </SurfaceCard>
 
-                {/* Details */}
-                <div className="flex-1 min-w-0">
-                  <Link
-                    href={`/product/${item.productId}`}
-                    className="font-medium hover:text-sage-600 transition-colors"
-                  >
-                    {item.name}
-                  </Link>
+        {/* Individual Item Panels */}
+        {items.map((item) => (
+          <SurfaceCard
+            key={`${item.productId}-${item.color}-${item.size}`}
+            className="p-4 bg-card border border-black/[0.08] dark:border-white/[0.12]"
+          >
+            <div className="flex gap-4">
+              {/* Product Thumbnail in 4:5 frame */}
+              <div className="relative w-20 sm:w-24 aspect-[4/5] bg-muted/30 rounded-xl overflow-hidden shrink-0 border border-black/[0.06] dark:border-white/[0.08]">
+                {getValidImageSrc(item.image) ? (
+                  <Image
+                    src={getValidImageSrc(item.image)!}
+                    alt={item.name}
+                    fill
+                    className="object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                    <ShoppingBag className="h-6 w-6" />
+                  </div>
+                )}
+              </div>
+
+              {/* Item Details */}
+              <div className="flex-1 min-w-0 flex flex-col justify-between">
+                <div>
+                  <div className="flex justify-between items-start gap-2">
+                    <Link
+                      href={`/product/${item.productId}`}
+                      className="font-medium text-sm sm:text-base text-foreground hover:opacity-80 transition-opacity line-clamp-2"
+                    >
+                      {item.name}
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => removeItem(item.productId, item.color, item.size)}
+                      className="text-muted-foreground hover:text-red-500 transition-colors p-1"
+                      aria-label="Remove item"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+
                   {(item.color || item.size) && (
-                    <p className="text-sm text-muted-foreground mt-1">
+                    <p className="text-xs text-muted-foreground mt-1">
                       {item.color && <span>{item.color}</span>}
-                      {item.color && item.size && <span> / </span>}
+                      {item.color && item.size && <span> • </span>}
                       {item.size && <span>{item.size}</span>}
                     </p>
                   )}
-                  <p className="font-semibold mt-2">{formatPrice(item.price)}</p>
+                </div>
 
-                  {/* Quantity and Remove */}
-                  <div className="flex items-center justify-between mt-4">
-                    <div className="flex items-center border rounded-md">
-                      <button
-                        onClick={() =>
-                          updateQuantity(
-                            item.productId,
-                            item.quantity - 1,
-                            item.color,
-                            item.size
-                          )
-                        }
-                        className="p-2 hover:bg-muted transition-colors"
-                      >
-                        <Minus className="h-4 w-4" />
-                      </button>
-                      <span className="w-12 text-center font-medium">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() =>
-                          updateQuantity(
-                            item.productId,
-                            item.quantity + 1,
-                            item.color,
-                            item.size
-                          )
-                        }
-                        className="p-2 hover:bg-muted transition-colors"
-                      >
-                        <Plus className="h-4 w-4" />
-                      </button>
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="sm"
+                <div className="flex items-center justify-between mt-3 pt-2 border-t border-black/[0.04] dark:border-white/[0.06]">
+                  {/* Quantity Stepper Pill */}
+                  <div className="flex items-center border border-black/[0.1] dark:border-white/[0.15] rounded-full bg-card px-1 py-0.5">
+                    <button
+                      type="button"
                       onClick={() =>
-                        removeItem(item.productId, item.color, item.size)
+                        updateQuantity(
+                          item.productId,
+                          item.quantity - 1,
+                          item.color,
+                          item.size
+                        )
                       }
-                      className="text-muted-foreground hover:text-destructive"
+                      className="p-1 hover:bg-muted rounded-full transition-colors"
+                      aria-label="Decrease quantity"
                     >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Remove
-                    </Button>
+                      <Minus className="h-3 w-3" />
+                    </button>
+                    <span className="w-8 text-center text-xs font-bold">
+                      {item.quantity}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateQuantity(
+                          item.productId,
+                          item.quantity + 1,
+                          item.color,
+                          item.size
+                        )
+                      }
+                      className="p-1 hover:bg-muted rounded-full transition-colors"
+                      aria-label="Increase quantity"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  </div>
+
+                  {/* Line Total */}
+                  <div className="text-right">
+                    <span className="font-bold text-sm sm:text-base text-foreground">
+                      {formatPrice(item.price * item.quantity)}
+                    </span>
                   </div>
                 </div>
-
-                {/* Item Total */}
-                <div className="text-right">
-                  <p className="font-semibold">
-                    {formatPrice(item.price * item.quantity)}
-                  </p>
-                </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </SurfaceCard>
         ))}
       </div>
 
-      {/* Order Summary */}
+      {/* Order Summary SurfaceCard */}
       <div className="lg:sticky lg:top-24 h-fit">
-        <Card>
-          <CardContent className="p-6 space-y-4">
-            <h2 className="font-heading text-xl">Order Summary</h2>
+        <SurfaceCard className="p-6 space-y-5 bg-card border border-black/[0.08] dark:border-white/[0.12]">
+          <h2 className="font-heading text-lg font-semibold text-foreground">
+            Order Summary
+          </h2>
 
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Subtotal</span>
-                <span>{formatPrice(subtotal)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Shipping</span>
-                <span>{shipping === 0 ? 'Free' : formatPrice(shipping)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-muted-foreground">Estimated Tax</span>
-                <span>{formatPrice(tax)}</span>
-              </div>
-              <div className="flex justify-between font-semibold text-lg pt-2 border-t">
-                <span>Total</span>
-                <span>{formatPrice(total)}</span>
-              </div>
+          <div className="space-y-3 text-xs sm:text-sm">
+            <div className="flex justify-between text-muted-foreground">
+              <span>Subtotal ({items.reduce((s, i) => s + i.quantity, 0)} items)</span>
+              <span className="font-medium text-foreground">{formatPrice(subtotal)}</span>
             </div>
 
-            {shipping > 0 && (
-              <p className="text-xs text-center text-muted-foreground bg-muted/50 p-2 rounded">
-                Add {formatPrice(75 - subtotal)} more for free shipping!
-              </p>
-            )}
+            <div className="flex justify-between text-muted-foreground">
+              <span>Shipping</span>
+              <span>
+                {shipping === 0 ? (
+                  <span className="text-[#2E7D5B] dark:text-[#5FBE92] font-semibold">FREE</span>
+                ) : (
+                  formatPrice(shipping)
+                )}
+              </span>
+            </div>
 
-            <Button asChild className="w-full" size="lg">
-              <Link href="/checkout">
-                Proceed to Checkout
-                <ArrowRight className="h-4 w-4 ml-2" />
-              </Link>
-            </Button>
+            <div className="pt-3 border-t border-black/[0.06] dark:border-white/[0.08] flex justify-between items-baseline">
+              <span className="font-bold text-base text-foreground">Estimated Total</span>
+              <span className="font-bold text-xl text-foreground">
+                {formatPrice(subtotal + shipping)}
+              </span>
+            </div>
+          </div>
 
-            <Button asChild variant="outline" className="w-full">
-              <Link href="/shop">Continue Shopping</Link>
-            </Button>
-          </CardContent>
-        </Card>
+          <Button
+            asChild
+            size="lg"
+            className="w-full rounded-full h-12 font-semibold bg-foreground text-background hover:bg-foreground/90 shadow-sm"
+          >
+            <Link href="/checkout">
+              Proceed to Checkout <ArrowRight className="ml-2 h-4 w-4" />
+            </Link>
+          </Button>
+
+          <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground pt-1">
+            <ShieldCheck className="h-3.5 w-3.5 text-[#2E7D5B] dark:text-[#5FBE92]" />
+            <span>Secure checkout encrypted with 256-bit SSL</span>
+          </div>
+        </SurfaceCard>
       </div>
     </div>
   );

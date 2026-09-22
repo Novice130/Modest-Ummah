@@ -5,9 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/theme/palette.dart';
 import '../../data/models/models.dart';
 import '../common/product_card.dart';
 import '../common/states.dart';
+import '../common/surface_card.dart';
 
 class ShopScreen extends ConsumerWidget {
   const ShopScreen({super.key});
@@ -19,11 +21,18 @@ class ShopScreen extends ConsumerWidget {
     final categories = ref.watch(categoriesProvider);
 
     return Scaffold(
+      backgroundColor: pageBackdrop(context),
       body: RefreshIndicator(
         onRefresh: () async => ref.refresh(shopProductsProvider.future),
         child: CustomScrollView(
           slivers: [
-            SliverAppBar.large(
+            // Compact, left-aligned: a large header spends half the fold on
+            // whitespace, and the grid is what the shopper came for.
+            SliverAppBar(
+              pinned: true,
+              backgroundColor: pageBackdrop(context),
+              centerTitle: false,
+              titleSpacing: ProductGrid.outerPadding,
               title: const Text('MODEST UMMAH'),
               titleTextStyle: AppText.overline.copyWith(
                 fontSize: 13,
@@ -109,15 +118,15 @@ class _CategoryRail extends ConsumerWidget {
     ];
 
     final theme = Theme.of(context);
-    final muted = theme.textTheme.bodySmall?.color;
+    final isDark = theme.brightness == Brightness.dark;
 
     return SizedBox(
-      height: 44,
+      height: 48,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 20),
+        padding: const EdgeInsets.symmetric(horizontal: ProductGrid.outerPadding),
         itemCount: entries.length + 1,
-        separatorBuilder: (_, __) => const SizedBox(width: 20),
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final isAll = index == 0;
           final category = isAll ? null : entries[index - 1];
@@ -134,11 +143,28 @@ class _CategoryRail extends ConsumerWidget {
                   );
             },
             child: Center(
-              child: Text(
-                (isAll ? 'All' : category!.name).toUpperCase(),
-                style: AppText.overline.copyWith(
-                  color: selected ? theme.colorScheme.onSurface : muted,
-                  fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                decoration: BoxDecoration(
+                  color: selected
+                      ? theme.colorScheme.onSurface
+                      : theme.colorScheme.surface,
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: selected
+                        ? theme.colorScheme.onSurface
+                        : (isDark ? Brand.hairlineDark : Brand.hairline),
+                  ),
+                ),
+                child: Text(
+                  isAll ? 'All' : category!.name,
+                  style: AppText.bodySmall.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: selected
+                        ? theme.colorScheme.surface
+                        : theme.colorScheme.onSurface,
+                  ),
                 ),
               ),
             ),
@@ -156,15 +182,9 @@ class _ProductGrid extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: ProductGrid.padding,
       sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          // Generous gutters; the whitespace is doing work.
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 32,
-          childAspectRatio: 0.52,
-        ),
+        gridDelegate: ProductGrid.delegate(context),
         delegate: SliverChildBuilderDelegate(
           (context, index) => ProductCard(product: products[index]),
           childCount: products.length,
@@ -180,14 +200,9 @@ class _ProductGridSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SliverPadding(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      padding: ProductGrid.padding,
       sliver: SliverGrid(
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 32,
-          childAspectRatio: 0.52,
-        ),
+        gridDelegate: ProductGrid.delegate(context),
         delegate: SliverChildBuilderDelegate(
           (_, __) => const ProductCardSkeleton(),
           childCount: 6,

@@ -1,122 +1,118 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Heart, ChevronLeft, Trash2, ShoppingCart, Loader2 } from 'lucide-react';
+import { Heart, ChevronLeft, Loader2, ShoppingBag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { SurfaceCard } from '@/components/ui/surface-card';
 import ProductCard from '@/components/product/product-card';
-import { useAuthStore, useCartStore } from '@/lib/store';
+import { useWishlistStore } from '@/lib/store';
 import type { Product } from '@/types';
 
 export default function WishlistPage() {
-  const router = useRouter();
-  const { user } = useAuthStore();
-  const { addItem, openCart } = useCartStore();
+  const { items: savedIds, clearWishlist } = useWishlistStore();
+  const [products, setProducts] = useState<Product[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [wishlist, setWishlist] = useState<Product[]>([]);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    // Rely exclusively on natively injected Next.js Server Sessions populated via Layout
-    if (!user) {
-      router.push('/auth/login?redirect=/account/wishlist');
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+
+    if (savedIds.length === 0) {
+      setProducts([]);
+      setIsLoading(false);
       return;
     }
 
-    try {
-      const savedWishlist = localStorage.getItem('modest-ummah-wishlist');
-      if (savedWishlist) {
-        setWishlist(JSON.parse(savedWishlist));
-      }
-    } catch (error) {
-      console.error('Error loading wishlist:', error);
-    }
-    
-    setIsLoading(false);
-  }, [user, router]);
+    let cancelled = false;
 
-  const removeFromWishlist = (productId: string) => {
-    const updated = wishlist.filter(p => p.id !== productId);
-    setWishlist(updated);
-    localStorage.setItem('modest-ummah-wishlist', JSON.stringify(updated));
-  };
+    // Fetch catalogue to filter down saved pieces
+    fetch('/api/v1/products?limit=100')
+      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
+      .then((data) => {
+        if (cancelled) return;
+        const allItems: Product[] = data.items || [];
+        const matched = allItems.filter((p) => savedIds.includes(p.id) || savedIds.includes(p.slug));
+        setProducts(matched);
+      })
+      .catch((err) => {
+        console.error('Failed to load wishlist products:', err);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
 
-  const addToCart = (product: Product) => {
-    addItem({
-      productId: product.id,
-      name: product.name,
-      price: product.price,
-      quantity: 1,
-      color: product.colors?.[0]?.name,
-      size: product.sizes?.[0],
-      image: product.images?.[0],
-    });
-    openCart();
-  };
+    return () => {
+      cancelled = true;
+    };
+  }, [savedIds, mounted]);
 
-  if (isLoading) {
+  if (!mounted || isLoading) {
     return (
-      <div className="min-h-screen bg-muted/30 flex items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-sage-600" />
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-foreground opacity-40" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-muted/30">
-      <div className="container-custom py-8">
-        <Link href="/account" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-6">
+    <div className="min-h-screen bg-background">
+      <div className="container-custom py-8 md:py-12">
+        <Link
+          href="/shop"
+          className="inline-flex items-center text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground mb-6"
+        >
           <ChevronLeft className="h-4 w-4 mr-1" />
-          Back to Account
+          Continue Shopping
         </Link>
 
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-end justify-between mb-8 pb-4 border-b border-black/[0.06] dark:border-white/[0.08]">
           <div>
-            <h1 className="font-heading text-3xl mb-2">My Wishlist</h1>
-            <p className="text-muted-foreground">
-              {wishlist.length} {wishlist.length === 1 ? 'item' : 'items'} saved
-            </p>
+            <span className="text-[11px] font-bold tracking-widest uppercase text-muted-foreground">
+              Saved Collection
+            </span>
+            <h1 className="font-heading text-2xl md:text-3xl text-foreground font-semibold mt-1">
+              My Favorites
+            </h1>
           </div>
+          {products.length > 0 && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearWishlist}
+              className="text-xs text-muted-foreground hover:text-red-500 rounded-full"
+            >
+              Clear All
+            </Button>
+          )}
         </div>
 
-        {wishlist.length === 0 ? (
-          <Card>
-            <CardContent className="py-12 text-center">
-              <Heart className="h-16 w-16 mx-auto text-muted-foreground mb-4" />
-              <h2 className="font-heading text-xl mb-2">Your wishlist is empty</h2>
-              <p className="text-muted-foreground mb-6">
-                Start adding items you love to your wishlist
-              </p>
-              <Button asChild>
-                <Link href="/shop">Browse Products</Link>
-              </Button>
-            </CardContent>
-          </Card>
+        {products.length === 0 ? (
+          <SurfaceCard className="py-16 px-4 text-center max-w-md mx-auto bg-card">
+            <div className="w-16 h-16 rounded-full bg-muted/40 mx-auto flex items-center justify-center mb-4 text-muted-foreground">
+              <Heart className="h-7 w-7" />
+            </div>
+            <h2 className="font-heading text-xl font-semibold mb-1 text-foreground">
+              Your wishlist is empty
+            </h2>
+            <p className="text-xs text-muted-foreground mb-6">
+              Tap the heart icon on any piece you love to save it here for later.
+            </p>
+            <Button
+              asChild
+              className="rounded-full px-6 font-semibold bg-foreground text-background hover:bg-foreground/90"
+            >
+              <Link href="/shop">Browse Catalogue</Link>
+            </Button>
+          </SurfaceCard>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-            {wishlist.map((product, index) => (
-              <div key={product.id} className="relative group">
-                <ProductCard product={product} index={index} />
-                <div className="absolute top-2 right-2 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    size="icon"
-                    variant="secondary"
-                    className="h-8 w-8"
-                    onClick={() => removeFromWishlist(product.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="secondary"
-                    className="h-8 w-8"
-                    onClick={() => addToCart(product)}
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-5">
+            {products.map((product, index) => (
+              <ProductCard key={product.id} product={product} index={index} />
             ))}
           </div>
         )}

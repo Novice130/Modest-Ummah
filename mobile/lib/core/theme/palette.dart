@@ -19,4 +19,13 @@ abstract final class Brand {
   static const hairlineDark = Color(0x1FFFFFFF);
 
   static const sale = Color(0xFFB3261E);
+
+  /// Marketplace chrome: the deal badge and the page backdrop the white
+  /// product cards sit on.
+  static const deal = Color(0xFF2E7D5B);
+  static const dealTint = Color(0xFFE4F1EA);
+  static const dealDark = Color(0xFF5FBE92);
+  static const dealTintDark = Color(0x1F5FBE92);
+  static const backdrop = Color(0xFFF0EDE8);
+  static const backdropDark = Color(0xFF070707);
 }

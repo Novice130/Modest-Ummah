@@ -4,6 +4,8 @@ import { notFound } from 'next/navigation';
 import ShopContent from '@/components/shop/shop-content';
 import ShopFilters from '@/components/shop/shop-filters';
 import { ProductCardSkeleton } from '@/components/product/product-card-skeleton';
+import { CategoryPills } from '@/components/shop/category-pills';
+import { SurfaceCard } from '@/components/ui/surface-card';
 import { fetchCategoryTree } from '@/lib/actions/category.actions';
 import type { CategoryNode } from '@/types';
 
@@ -51,26 +53,37 @@ export async function generateMetadata({ params }: CategoryPageProps): Promise<M
 
 export default async function CategoryPage({ params, searchParams }: CategoryPageProps) {
   const { category } = await params;
-  const search = await searchParams;
-  const node = findBySlug(await fetchCategoryTree(), category);
+  const [search, tree] = await Promise.all([
+    searchParams,
+    fetchCategoryTree().catch(() => []),
+  ]);
+  const node = findBySlug(tree, category);
 
-  // An unknown slug is a 404, not a soft "not found" page — it used to render
-  // a 200 with an error message, which let dead category URLs get indexed.
+  // An unknown slug is a 404, not a soft "not found" page
   if (!node) notFound();
 
   return (
-    <div className="min-h-screen">
-      {/* Page Header */}
-      <div className="bg-muted/30 py-12">
-        <div className="container-custom">
-          <h1 className="font-heading text-3xl md:text-4xl mb-2">{node.name}</h1>
-          {node.children.length > 0 && (
-            <p className="text-muted-foreground">
-              {node.children.map((c) => c.name).join(' • ')}
-            </p>
-          )}
-          {node.children.length === 0 && node.description && (
-            <p className="text-muted-foreground">{node.description}</p>
+    <div className="min-h-screen bg-background">
+      {/* Page Header with Etsy Marketplace Look */}
+      <div className="border-b border-black/[0.06] dark:border-white/[0.08] bg-card/60 backdrop-blur-xs py-8 md:py-10">
+        <div className="container-custom space-y-4">
+          <div>
+            <span className="text-[11px] font-bold tracking-widest uppercase text-muted-foreground">
+              Collection
+            </span>
+            <h1 className="font-heading text-2xl md:text-3xl lg:text-4xl text-foreground font-semibold mt-1">
+              {node.name}
+            </h1>
+            {node.description && (
+              <p className="text-sm text-muted-foreground mt-1 max-w-2xl">{node.description}</p>
+            )}
+          </div>
+
+          {/* Horizontal Category Pill Navigation */}
+          {tree.length > 0 && (
+            <div className="pt-2">
+              <CategoryPills categories={tree} activeSlug={category} />
+            </div>
           )}
         </div>
       </div>
@@ -79,14 +92,22 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Sidebar Filters */}
           <aside className="w-full lg:w-64 shrink-0">
-            <ShopFilters />
+            <SurfaceCard className="p-4 sm:p-5 sticky top-24 hidden lg:block bg-card">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-muted-foreground mb-4">
+                Filters
+              </h2>
+              <ShopFilters />
+            </SurfaceCard>
+            <div className="lg:hidden">
+              <ShopFilters />
+            </div>
           </aside>
 
           {/* Products Grid */}
           <main className="flex-1">
             <Suspense
               fallback={
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5 sm:gap-5">
                   {Array.from({ length: 12 }).map((_, i) => (
                     <ProductCardSkeleton key={i} />
                   ))}
@@ -102,11 +123,6 @@ export default async function CategoryPage({ params, searchParams }: CategoryPag
   );
 }
 
-/**
- * Every category, at any depth, gets a static entry — a shopper can land on
- * /shop/jewellery or /shop/rings and both must work. The catalogue read
- * filters by descendants, so a parent slug shows everything beneath it.
- */
 export async function generateStaticParams() {
   const tree = await fetchCategoryTree();
   return flatten(tree).map((node) => ({ category: node.slug }));

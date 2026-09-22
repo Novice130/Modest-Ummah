@@ -46,8 +46,11 @@ export function truncate(text: string, length: number): string {
  *
  * Returns '' for empty input so callers can treat it as "no image".
  */
-export function getImageUrl(fileName: string | null | undefined): string {
-  if (!fileName) return '';
+export function getImageUrl(input: string | { url?: string } | null | undefined): string {
+  if (!input) return '';
+  const fileName =
+    typeof input === 'object' && input !== null && 'url' in input ? (input as any).url : String(input);
+  if (!fileName || typeof fileName !== 'string' || fileName === '[object Object]') return '';
   if (
     fileName.startsWith('http://') ||
     fileName.startsWith('https://') ||

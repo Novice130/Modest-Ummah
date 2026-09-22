@@ -64,6 +64,11 @@ export async function proxy(request: NextRequest) {
   }
 
   // --- Protected user routes ---
+  // Wishlist is available to guest users via local state (matching Etsy behavior)
+  if (pathname === '/account/wishlist') {
+    return NextResponse.next();
+  }
+
   for (const route of protectedUserRoutes) {
     if (pathname.startsWith(route)) {
       const authToken = request.cookies.get('auth_token')?.value;

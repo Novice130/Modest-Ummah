@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers/providers.dart';
 import '../common/product_card.dart';
+import '../common/surface_card.dart';
 import '../common/states.dart';
 
 class SearchScreen extends ConsumerStatefulWidget {
@@ -39,11 +40,16 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final query = ref.watch(searchQueryProvider).trim();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('SEARCH')),
+      backgroundColor: pageBackdrop(context),
+      appBar: AppBar(
+        title: const Text('SEARCH'),
+        backgroundColor: pageBackdrop(context),
+      ),
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+            padding: const EdgeInsets.fromLTRB(
+                ProductGrid.outerPadding, 4, ProductGrid.outerPadding, 16),
             child: TextField(
               controller: _controller,
               onChanged: _onChanged,
@@ -85,14 +91,12 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                           body: 'Nothing found for “$query”.',
                         )
                       : GridView.builder(
-                          padding: const EdgeInsets.fromLTRB(20, 0, 20, 32),
-                          gridDelegate:
-                              const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 16,
-                            mainAxisSpacing: 32,
-                            childAspectRatio: 0.52,
-                          ),
+                          padding: const EdgeInsets.fromLTRB(
+                              ProductGrid.outerPadding,
+                              0,
+                              ProductGrid.outerPadding,
+                              32),
+                          gridDelegate: ProductGrid.delegate(context),
                           itemCount: items.length,
                           itemBuilder: (context, i) =>
                               ProductCard(product: items[i]),
