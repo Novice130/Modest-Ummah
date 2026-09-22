@@ -2,7 +2,7 @@
 FROM node:20-slim AS builder
 
 # Increase Node memory for build
-ENV NODE_OPTIONS="--max-old-space-size=4096"
+ENV NODE_OPTIONS="--max-old-space-size=2048"
 
 WORKDIR /app
 
