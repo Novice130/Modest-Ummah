@@ -57,9 +57,9 @@ function AdminLoginForm() {
     <div className="min-h-screen flex items-center justify-center bg-muted/30">
       <div className="w-full max-w-md p-8 bg-background border rounded-lg shadow-sm">
         <div className="text-center mb-8">
-          <div className="mx-auto w-12 h-12 bg-primary/10 flex items-center justify-center rounded-full mb-4">
-            <Lock className="h-6 w-6 text-primary" />
-          </div>
+          <Link href="/" className="inline-block mx-auto mb-3">
+            <img src="/images/logo.png" alt="Modest Ummah" className="w-16 h-16 mx-auto rounded-full shadow-md ring-1 ring-border/50" />
+          </Link>
           <h1 className="text-2xl font-bold font-heading">Admin Access</h1>
           <p className="text-muted-foreground text-sm mt-2">
             Secure login for Modest Ummah staff

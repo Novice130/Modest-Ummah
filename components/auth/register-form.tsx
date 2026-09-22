@@ -90,6 +90,9 @@ export default function RegisterForm() {
   return (
     <Card className="w-full max-w-md">
       <CardHeader className="text-center">
+        <Link href="/" className="inline-block mx-auto mb-2">
+          <img src="/images/logo.png" alt="Modest Ummah" className="w-16 h-16 mx-auto rounded-full shadow-md ring-1 ring-border/50" />
+        </Link>
         <CardTitle className="font-heading text-2xl">Create Account</CardTitle>
         <CardDescription>Join the Modest Ummah family</CardDescription>
       </CardHeader>

@@ -108,7 +108,8 @@ export default function Footer() {
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
           {/* Brand */}
           <div className="col-span-2 md:col-span-4 lg:col-span-1">
-            <Link href="/" className="inline-block mb-4">
+            <Link href="/" className="inline-flex items-center space-x-3 mb-4 group">
+              <img src="/images/logo.png" alt="Modest Ummah" className="h-9 w-9 rounded-full shadow-sm ring-1 ring-white/20 transition-transform group-hover:scale-105" />
               <span className="font-heading text-2xl font-bold">Modest Ummah</span>
             </Link>
             <p className="text-white/70 text-sm mb-4">

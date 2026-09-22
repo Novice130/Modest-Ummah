@@ -33,7 +33,21 @@ class ShopScreen extends ConsumerWidget {
               backgroundColor: pageBackdrop(context),
               centerTitle: false,
               titleSpacing: ProductGrid.outerPadding,
-              title: const Text('MODEST UMMAH'),
+              title: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipOval(
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 26,
+                      height: 26,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('MODEST UMMAH'),
+                ],
+              ),
               titleTextStyle: AppText.overline.copyWith(
                 fontSize: 13,
                 color: Theme.of(context).colorScheme.onSurface,

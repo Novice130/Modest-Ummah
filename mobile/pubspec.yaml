@@ -40,6 +40,7 @@ flutter:
   uses-material-design: true
   assets:
     - assets/
+    - assets/images/
   fonts:
     # Variable fonts — one file per family covers every weight the app uses,
     # which is smaller than shipping four static cuts each.

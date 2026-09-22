@@ -69,6 +69,19 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              Center(
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 24, top: 8),
+                  child: ClipOval(
+                    child: Image.asset(
+                      'assets/images/logo.png',
+                      width: 68,
+                      height: 68,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              ),
               if (_registering) ...[
                 TextFormField(
                   controller: _name,

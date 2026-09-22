@@ -117,8 +117,9 @@ export default function Header({ categories = [] }: { categories?: CategoryNode[
           </button>
 
           {/* Logo */}
-          <Link href="/" className="flex items-center space-x-2">
-            <img src="/images/logo.png" alt="Modest Ummah" className="h-7 sm:h-8 md:h-10 w-auto" />
+          <Link href="/" className="flex items-center space-x-2.5 group">
+            <img src="/images/logo.png" alt="Modest Ummah" className="h-8 sm:h-9 md:h-10 w-auto rounded-full shadow-sm transition-transform group-hover:scale-105" />
+            <span className="font-heading font-bold text-sm sm:text-base md:text-lg tracking-wider text-foreground">MODEST UMMAH</span>
           </Link>
 
           {/* Desktop Navigation */}
