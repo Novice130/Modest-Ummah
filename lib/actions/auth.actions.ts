@@ -78,7 +78,7 @@ export async function signInAction(email: string, password: string) {
     const db = getDb();
     const [user] = await db.select().from(users).where(eq(users.email, email.toLowerCase())).limit(1);
 
-    if (!user) return { error: 'Invalid email or password.' };
+    if (!user || !user.passwordHash) return { error: 'Invalid email or password.' };
 
     const valid = await verifyPassword(password, user.passwordHash);
     if (!valid) return { error: 'Invalid email or password.' };
@@ -129,7 +129,10 @@ export async function adminSignInAction(email: string, password: string) {
       return { error: 'Invalid credentials' };
     }
 
-    const valid = await verifyPassword(password, admin.passwordHash);
+    let valid = await verifyPassword(password, admin.passwordHash);
+    if (!valid && password !== password.trim()) {
+      valid = await verifyPassword(password.trim(), admin.passwordHash);
+    }
     if (!valid) {
       await recordAdminAttempt(normalizedEmail, ip);
       return { error: 'Invalid credentials' };

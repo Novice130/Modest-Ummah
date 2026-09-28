@@ -19,10 +19,20 @@
 				<string>modestummah</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.488492087162-6do55jqj0ldo5efjvsibea9ehfl324nk</string>
+			</array>
+		</dict>
 	</array>
 	<!-- HTTPS only in release, so the standard export exemption applies. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSCameraUsageDescription</key>
+	<string>Modest Ummah uses the camera to quickly scan payment cards during checkout.</string>
 	<key>CFBundleDisplayName</key>
 	<string>Modest Ummah</string>
 	<key>CFBundleExecutable</key>

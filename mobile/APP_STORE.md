@@ -215,33 +215,35 @@ Contact: modestummah.com/contact
 
 ---
 
-## 6. Screenshots
+## 6. Screenshots & App Preview Videos
 
-`mobile/screenshots/` holds the 6.9" set (iPhone 17 Pro Max, 1320 × 2868),
-captured from the simulator with `xcrun simctl io booted screenshot`:
+All screenshots and app preview videos have been captured on native simulators and formatted to strict App Store Connect pixel and duration dimensions (no alpha channels).
 
-| File | Screen |
-|---|---|
-| `69-01-shop.png` | Shop — collection grid |
-| `69-02-product.png` | Product detail |
-| `69-03-search.png` | Search results |
-| `69-04-bag.png` | Bag with items |
-| `69-05-checkout.png` | Checkout |
-| `69-06-account.png` | Account |
+### Screenshots
 
-All six are flattened to three channels: a simulator screenshot carries an alpha
-channel, and App Store Connect rejects those the same way it rejects a
-transparent icon. Re-flatten anything recaptured:
+1. **iPhone 6.5" Display (`1284 x 2778`)** — Located in `mobile/screenshots/iphone_6.5/`:
+   - `01_shop.png` (Shop / Collection view)
+   - `02_product.png` (Product detail & Add to Cart)
+   - `03_search.png` (Search experience)
+   - `04_bag.png` (Shopping bag)
+   - `05_checkout.png` (Checkout form)
+   - `06_account.png` (Account & order management)
 
-```bash
-node -e "require('sharp')('shot.png').flatten({background:'#ffffff'}).removeAlpha().png().toFile('out.png')"
-```
+2. **iPhone 6.9" Display (`1320 x 2868`)** — Located in `mobile/screenshots/iphone_6.9/`:
+   - `01_shop.png` through `06_account.png` (matching the modern iPhone 16/17 Pro Max dimensions)
 
-`icon-1024.png` in the same directory is the App Store icon (1024 × 1024, no
-alpha — Apple rejects an icon with an alpha channel).
+3. **iPad 13" Display (`2048 x 2732`)** — Located in `mobile/screenshots/ipad_13/`:
+   - `01_shop.png` through `06_account.png` (matching iPad Pro 13-inch M4/M5)
 
-6.5" is **not** supplied: no 6.5" simulator runtime is installed, and App Store
-Connect accepts a 6.9" set on its own, scaling it down for older devices.
+### App Preview Walkthrough Videos
+
+App Previews meet all App Store specifications (duration 15–30s, H.264, 30fps):
+- **iPhone App Preview**: `mobile/screenshots/videos/iphone_preview.mp4`
+  - Dimensions: **886 x 1920** (Apple's accepted resolution for iPhone 6.5" & 6.9")
+  - Duration: **26.5s**
+- **iPad App Preview**: `mobile/screenshots/videos/ipad_preview.mp4`
+  - Dimensions: **1200 x 1600** (Apple's accepted resolution for iPad Pro 13")
+  - Duration: **27.0s**
 
 ---
 

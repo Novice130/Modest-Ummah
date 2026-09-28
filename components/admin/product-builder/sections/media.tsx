@@ -124,8 +124,8 @@ export default function MediaSection({ builder }: { builder: Builder }) {
                   <Button
                     type="button"
                     size="sm"
-                    variant="secondary"
-                    className="flex-1 bg-white/90 hover:bg-white"
+                    variant="outline"
+                    className="flex-1 bg-white hover:bg-slate-100 text-navy-900 border-0 shadow-sm font-medium"
                     onClick={() => setPrimary(index)}
                   >
                     Make primary

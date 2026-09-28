@@ -14,6 +14,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore, useCartStore } from '@/lib/store';
 import { signInAction } from '@/lib/actions/auth.actions';
+import SocialAuth from '@/components/auth/social-auth';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -145,6 +146,7 @@ export default function LoginForm() {
             )}
           </Button>
         </form>
+        <SocialAuth />
       </CardContent>
       <CardFooter className="justify-center">
         <p className="text-sm text-muted-foreground">

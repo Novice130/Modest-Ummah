@@ -1,6 +1,9 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:sign_in_with_apple/sign_in_with_apple.dart';
 
 import '../../core/providers/providers.dart';
 
@@ -48,6 +51,36 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
       } else {
         await auth.signIn(_email.text.trim(), _password.text);
       }
+      if (mounted) context.pop();
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(authProvider.notifier).signInWithGoogle();
+      if (mounted) context.pop();
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _handleAppleSignIn() async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      await ref.read(authProvider.notifier).signInWithApple();
       if (mounted) context.pop();
     } catch (e) {
       if (mounted) setState(() => _error = '$e');
@@ -128,6 +161,52 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : Text(_registering ? 'CREATE ACCOUNT' : 'SIGN IN'),
+                ),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                children: [
+                  const Expanded(child: Divider()),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Text('OR',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                            color: theme.colorScheme.onSurface.withValues(alpha: 0.5))),
+                  ),
+                  const Expanded(child: Divider()),
+                ],
+              ),
+              const SizedBox(height: 20),
+              if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) ...[
+                SignInWithAppleButton(
+                  onPressed: _busy ? () {} : _handleAppleSignIn,
+                  height: 50,
+                  style: SignInWithAppleButtonStyle.black,
+                  borderRadius: const BorderRadius.all(Radius.circular(8)),
+                ),
+                const SizedBox(height: 12),
+              ],
+              OutlinedButton(
+                onPressed: _busy ? null : _handleGoogleSignIn,
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(50),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      'G',
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF4285F4),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    const Text('Continue with Google'),
+                  ],
                 ),
               ),
               const SizedBox(height: 16),

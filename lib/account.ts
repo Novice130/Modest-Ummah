@@ -75,7 +75,7 @@ export async function changeUserPassword(
 
   if (!user) throw new Error('Account not found');
 
-  if (!(await verifyPassword(currentPassword, user.passwordHash))) {
+  if (user.passwordHash && !(await verifyPassword(currentPassword, user.passwordHash))) {
     throw new Error('Your current password is incorrect');
   }
 

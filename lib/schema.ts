@@ -52,7 +52,9 @@ export const users = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     email: text('email').notNull(),
     name: text('name').default(''),
-    passwordHash: text('password_hash').notNull(),
+    passwordHash: text('password_hash'),
+    authProvider: text('auth_provider').default('email'),
+    providerId: text('provider_id'),
     avatar: text('avatar'),
     verified: boolean('verified').default(false),
     // Stamped into every token as a `ver` claim and checked on each

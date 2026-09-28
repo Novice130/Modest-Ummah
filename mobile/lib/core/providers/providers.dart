@@ -102,6 +102,28 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<void> signInWithGoogle() async {
+    state = state.copyWith(loading: true);
+    try {
+      final result = await _repo.signInWithGoogle();
+      await _store.writeToken(result.token);
+      state = AuthState(user: result.user, restored: true);
+    } finally {
+      state = state.copyWith(loading: false);
+    }
+  }
+
+  Future<void> signInWithApple() async {
+    state = state.copyWith(loading: true);
+    try {
+      final result = await _repo.signInWithApple();
+      await _store.writeToken(result.token);
+      state = AuthState(user: result.user, restored: true);
+    } finally {
+      state = state.copyWith(loading: false);
+    }
+  }
+
   Future<void> signOut() async {
     await _store.clearToken();
     state = const AuthState(restored: true);

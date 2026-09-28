@@ -15,6 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { useToast } from '@/hooks/use-toast';
 import { useAuthStore } from '@/lib/store';
 import { signUpAction } from '@/lib/actions/auth.actions';
+import SocialAuth from '@/components/auth/social-auth';
 
 const registerSchema = z.object({
   name: z.string().min(2, 'Name must be at least 2 characters'),
@@ -210,6 +211,7 @@ export default function RegisterForm() {
             )}
           </Button>
         </form>
+        <SocialAuth />
       </CardContent>
       <CardFooter className="justify-center">
         <p className="text-sm text-muted-foreground">

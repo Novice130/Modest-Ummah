@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
     // Same message for "no such user" and "wrong password" so the endpoint
     // cannot be used to enumerate registered addresses.
-    if (!user || !(await verifyPassword(password, user.passwordHash))) {
+    if (!user || !user.passwordHash || !(await verifyPassword(password, user.passwordHash))) {
       return apiError(401, 'Invalid email or password.', 'invalid_credentials');
     }
 

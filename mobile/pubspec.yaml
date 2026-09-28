@@ -1,7 +1,7 @@
 name: modest_ummah
 description: Modest Ummah — modest fashion and fine cubic-zirconia jewellery.
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.0.0+3
 
 environment:
   sdk: ^3.12.0
@@ -30,9 +30,13 @@ dependencies:
   flutter_stripe: ^14.0.0
 
   cupertino_icons: ^1.0.8
+  google_sign_in: ^6.2.2
+  sign_in_with_apple: ^6.1.4
 
 dev_dependencies:
   flutter_test:
+    sdk: flutter
+  integration_test:
     sdk: flutter
   flutter_lints: ^5.0.0
 

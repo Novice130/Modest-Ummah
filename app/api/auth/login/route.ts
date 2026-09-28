@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       .where(eq(users.email, email.toLowerCase()))
       .limit(1);
 
-    if (!user) {
+    if (!user || !user.passwordHash) {
       return NextResponse.json(
         { error: 'Invalid email or password.' },
         { status: 401 }
