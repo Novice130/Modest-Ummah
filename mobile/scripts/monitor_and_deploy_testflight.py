@@ -24,6 +24,8 @@ build_id = None
 attempts = 0
 max_attempts = 60 # 20 minutes
 
+TARGET_VERSION = sys.argv[1] if len(sys.argv) > 1 else "3"
+
 while attempts < max_attempts:
     attempts += 1
     headers = get_headers()
@@ -31,10 +33,10 @@ while attempts < max_attempts:
         r = requests.get(f"https://api.appstoreconnect.apple.com/v1/apps/{APP_ID}/builds", headers=headers)
         if r.status_code == 200:
             builds = r.json().get("data", [])
-            if builds:
-                b = builds[0]
-                build_id = b.get("id")
-                attrs = b.get("attributes", {})
+            target_build = next((b for b in builds if b.get("attributes", {}).get("version") == TARGET_VERSION), None)
+            if target_build:
+                build_id = target_build.get("id")
+                attrs = target_build.get("attributes", {})
                 state = attrs.get("processingState")
                 print(f"[{time.strftime('%H:%M:%S')}] Found build {build_id} (Version: {attrs.get('version')}, State: {state})")
                 
