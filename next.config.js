@@ -1,3 +1,5 @@
+const { withSentryConfig } = require('@sentry/nextjs/config');
+
 /** @type {import('next').NextConfig} */
 // NOTE: next-pwa is temporarily disabled for Next.js 16 compatibility
 // Next.js 16 has built-in PWA support - consider migrating
@@ -77,5 +79,21 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+// Source maps are uploaded only when SENTRY_AUTH_TOKEN is present (a BuildKit
+// secret in the Dockerfile); without it the build neither uploads nor fails.
+const sentryAuthToken = process.env.SENTRY_AUTH_TOKEN;
+
+module.exports = withSentryConfig(nextConfig, {
+  org: 'learnnovicecom',
+  project: process.env.SENTRY_PROJECT || 'modestummah-web',
+  authToken: sentryAuthToken,
+  silent: !process.env.CI,
+  telemetry: false,
+  release: { name: process.env.SENTRY_RELEASE || undefined },
+  sourcemaps: { disable: !sentryAuthToken },
+  // Browser events go through this same-origin route so ad blockers do not
+  // drop them. proxy.ts only matches /admin and /account, so it never sees
+  // /monitoring.
+  tunnelRoute: '/monitoring',
+});
 

@@ -1,0 +1,40 @@
+# Keeps secrets and bulk out of the build context (`COPY . .` in the Dockerfile).
+# Nothing here is read by `next build` or copied into the runner stage.
+
+# Secrets: never send env files into the build; the image gets its config from
+# build args, BuildKit secrets and runtime environment.
+.env
+.env.*
+!.env.example
+
+# VCS and tooling
+.git
+.github
+.claude
+.commandcode
+.crush
+.DS_Store
+**/.DS_Store
+
+# Installed / built by the Dockerfile itself
+node_modules
+.next
+out
+build
+dist
+*.tsbuildinfo
+npm-debug.log*
+
+# Local user uploads (root only). public/uploads holds the bundled seed assets
+# and must stay in the context: the runner copies /app/public.
+/uploads
+
+# Not part of the web app
+mobile
+loadtest
+Photos
+certs
+docker-compose.yml
+Dockerfile
+.dockerignore
+*.md
