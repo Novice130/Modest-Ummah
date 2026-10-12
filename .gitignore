@@ -71,3 +71,4 @@ IMPLEMENTATION_PLAN_APP.md
 scripts/backups/
 !scripts/backups/photo-manifest.json
 PLAN_STAGE10_FINISH.md
+loadtest/results/
