@@ -15,7 +15,8 @@ import Link from 'next/link';
  * target worth aiming one at.
  */
 function safeRedirect(value: string | null): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/admin';
+  // Browsers read "/\evil.com" like "//evil.com", so backslashes are refused too.
+  if (!value || !/^\/admin(\/|\?|$)/.test(value) || value.includes('\\')) return '/admin';
   return value;
 }
 

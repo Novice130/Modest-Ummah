@@ -23,13 +23,19 @@ export async function generateMetadata({ params }: ProductPageProps): Promise<Me
       };
     }
 
+    // SEO fields from the product builder win; the product's own copy is the fallback.
+    const title = product.metaTitle || product.name;
+    const description =
+      product.metaDescription || product.shortDescription || product.description?.substring(0, 160);
+    const image = product.ogImage || product.images?.[0];
+
     return {
-      title: product.name,
-      description: product.shortDescription || product.description?.substring(0, 160),
+      title,
+      description,
       openGraph: {
-        title: product.name,
-        description: product.shortDescription || product.description?.substring(0, 160),
-        images: product.images?.[0] ? [product.images[0]] : [],
+        title,
+        description,
+        images: image ? [image] : [],
       },
     };
   } catch {

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createPaymentIntent } from '@/lib/stripe';
 import { getDb } from '@/lib/db';
 import { orders } from '@/lib/schema';
+import { eq } from 'drizzle-orm';
 import { resolveCheckoutOrder, normalizeShippingAddress } from '@/lib/pricing';
 import { generateOrderId } from '@/lib/utils';
 import { getAuthFromRequest } from '@/lib/auth';
@@ -97,6 +98,13 @@ export async function POST(request: NextRequest) {
       },
       currency: 'usd',
     });
+
+    // Linked now rather than on payment success, so the admin can find an
+    // unpaid checkout's PaymentIntent in Stripe.
+    await db
+      .update(orders)
+      .set({ paymentIntentId: paymentIntent.id })
+      .where(eq(orders.orderId, resolvedOrderId));
 
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,

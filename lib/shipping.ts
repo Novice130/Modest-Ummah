@@ -1,20 +1,22 @@
 /**
- * Pirate Ship API Integration
- * USPS Commercial Rates, Free Pickup Scheduling, and Tracking
- * 
- * Documentation: https://docs.pirateship.com/
- * 
- * SETUP REQUIRED:
- * 1. Sign up at https://www.pirateship.com (free account)
- * 2. Go to Settings > API and generate an API key
- * 3. Add to your .env.local file
- * 
- * Features:
- * - USPS Commercial Plus pricing (cheapest rates)
- * - Free package pickup scheduling
- * - Real-time tracking
- * - Address verification
- * - Label generation
+ * Shipping rates and carrier helpers.
+ *
+ * IMPORTANT: Pirate Ship has no public REST API. The api.pirateship.com/v1
+ * calls below (rates, shipments, tracking, pickups, address verification)
+ * target endpoints that do not exist; PIRATESHIP_API_KEY is set in no
+ * environment, so every function here takes its "not configured" branch:
+ *
+ *  - getShippingRates() returns getEstimatedRates(), the zone table that
+ *    checkout actually charges from (see lib/pricing.ts).
+ *  - getTracking() reports "not configured"; /api/shipping/tracking falls
+ *    back to the carrier's public tracking page.
+ *  - createShipment / schedulePickup / cancelShipment / verifyAddress have
+ *    no callers.
+ *
+ * Labels are bought in Pirate Ship itself, which imports orders through the
+ * WooCommerce-compatible API in lib/woo and writes tracking back
+ * (lib/woo/writeback.ts). See CONNECTOR_IMPLEMENTATION_PIRATESHIP.md.
+ * Parcel weight/box: lib/parcel.ts (single source of truth).
  */
 
 const PIRATE_SHIP_API_URL = 'https://api.pirateship.com/v1';
@@ -482,32 +484,6 @@ export async function verifyAddress(address: ShippingAddress): Promise<{
   } catch (error: any) {
     console.error('Pirate Ship address verification error:', error);
     return { success: false, verified: false, error: error.message };
-  }
-}
-
-/**
- * Calculate package dimensions based on items
- */
-export function calculatePackageDimensions(items: Array<{
-  weight?: number; // ounces per item
-  quantity: number;
-}>): PackageDimensions {
-  const totalWeight = items.reduce((sum, item) => {
-    return sum + (item.weight || 8) * item.quantity; // Default 8oz per item
-  }, 0);
-
-  // Add 2oz for packaging
-  const packageWeight = totalWeight + 2;
-
-  // Select appropriate package size
-  if (packageWeight <= 16) {
-    return { ...PACKAGE_PRESETS.POLY_MAILER_SMALL, weight: packageWeight };
-  } else if (packageWeight <= 32) {
-    return { ...PACKAGE_PRESETS.POLY_MAILER_MEDIUM, weight: packageWeight };
-  } else if (packageWeight <= 48) {
-    return { ...PACKAGE_PRESETS.POLY_MAILER_LARGE, weight: packageWeight };
-  } else {
-    return { ...PACKAGE_PRESETS.MEDIUM_FLAT_RATE, weight: packageWeight };
   }
 }
 

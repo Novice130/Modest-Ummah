@@ -51,12 +51,27 @@ export function parseCsv(text: string): string[][] {
   return rows;
 }
 
-export function stringifyCsv(rows: Array<Array<string | number | boolean | null | undefined>>): string {
+/**
+ * Serialize rows as RFC 4180 CSV.
+ *
+ * `escapeFormulas` neutralises spreadsheet formula injection (a customer
+ * named `=HYPERLINK(...)` executing in Excel) by prefixing cells that start
+ * with = + - @ or a tab/CR with an apostrophe. Off by default because the
+ * product CSV round-trips through parseCsv and the prefix would corrupt it;
+ * turn it on for exports meant to be opened in a spreadsheet.
+ */
+export function stringifyCsv(
+  rows: Array<Array<string | number | boolean | null | undefined>>,
+  options: { escapeFormulas?: boolean; lineEnding?: '\n' | '\r\n' } = {}
+): string {
   return rows
     .map((row) =>
       row
         .map((cell) => {
-          const value = cell == null ? '' : String(cell);
+          let value = cell == null ? '' : String(cell);
+          if (options.escapeFormulas && typeof cell === 'string' && /^[=+\-@\t\r]/.test(value)) {
+            value = `'${value}`;
+          }
           if (/[",\n\r]/.test(value)) {
             return `"${value.replace(/"/g, '""')}"`;
           }
@@ -64,7 +79,7 @@ export function stringifyCsv(rows: Array<Array<string | number | boolean | null 
         })
         .join(',')
     )
-    .join('\n');
+    .join(options.lineEnding || '\n');
 }
 
 export function parseList(value: string | null | undefined): string[] {

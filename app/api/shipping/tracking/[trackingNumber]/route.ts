@@ -4,6 +4,7 @@ import { orders } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
 import { getTracking } from '@/lib/shipping';
 import { getAuthFromRequest } from '@/lib/auth';
+import { trackingUrl } from '@/lib/order-status';
 
 /**
  * Tracking lookup for a tracking number that belongs to one of our orders.
@@ -34,6 +35,7 @@ export async function GET(
       .select({
         userId: orders.userId,
         trackingNumber: orders.trackingNumber,
+        trackingCarrier: orders.trackingCarrier,
       })
       .from(orders)
       .where(eq(orders.trackingNumber, trackingNumber))
@@ -54,18 +56,27 @@ export async function GET(
       return NextResponse.json({ error: 'Not found' }, { status: 404 });
     }
 
+    const carrier = order.trackingCarrier || null;
+    const publicUrl = trackingUrl(carrier, trackingNumber);
     const result = await getTracking(trackingNumber);
 
+    // There is no live tracking feed (Pirate Ship has no public API; see
+    // lib/shipping.ts), so the useful answer is the carrier's own tracking
+    // page rather than a 502.
     if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || 'Failed to get tracking info' },
-        { status: 502 }
-      );
+      return NextResponse.json({
+        success: true,
+        tracking: null,
+        carrier,
+        trackingUrl: publicUrl,
+      });
     }
 
     return NextResponse.json({
       success: true,
       tracking: result.tracking,
+      carrier,
+      trackingUrl: publicUrl,
     });
   } catch (error: any) {
     console.error('Tracking error:', error);

@@ -31,8 +31,8 @@ export interface ParcelInput {
 }
 
 /**
- * Choose a box for a given weight. Mirrors the previous
- * calculatePackageDimensions ladder so quotes stay comparable.
+ * Choose a box for a given weight (the only box ladder in the codebase; the
+ * duplicate calculatePackageDimensions in lib/shipping.ts was removed).
  */
 function presetForWeight(weightOz: number): PackageDimensions {
   if (weightOz <= 16) return { ...PACKAGE_PRESETS.POLY_MAILER_SMALL, weight: weightOz };

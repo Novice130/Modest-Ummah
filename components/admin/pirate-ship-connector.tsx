@@ -45,6 +45,9 @@ export default function PirateShipConnector() {
   const [status, setStatus] = useState<ConnectorStatus | null>(null);
   const [events, setEvents] = useState<IntegrationEventSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState(false);
   const [creating, setCreating] = useState(false);
   const [description, setDescription] = useState('Pirate Ship');
   const [revokeTarget, setRevokeTarget] = useState<string | null>(null);
@@ -54,6 +57,7 @@ export default function PirateShipConnector() {
   } | null>(null);
 
   const load = useCallback(async () => {
+    setRefreshing(true);
     try {
       const [s, e] = await Promise.all([
         fetchConnectorStatusAction(),
@@ -61,7 +65,9 @@ export default function PirateShipConnector() {
       ]);
       setStatus(s);
       setEvents(e);
+      setLoadError(null);
     } catch (error: any) {
+      setLoadError(error?.message || 'Something went wrong.');
       toast({
         title: 'Failed to load integration status',
         description: error?.message || 'Something went wrong.',
@@ -69,6 +75,7 @@ export default function PirateShipConnector() {
       });
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [toast]);
 
@@ -109,6 +116,7 @@ export default function PirateShipConnector() {
 
   const handleRevoke = async () => {
     if (!revokeTarget) return;
+    setRevoking(true);
     try {
       await revokeApiKeyAction(revokeTarget);
       toast({ title: 'API key revoked' });
@@ -120,6 +128,7 @@ export default function PirateShipConnector() {
         variant: 'destructive',
       });
     } finally {
+      setRevoking(false);
       setRevokeTarget(null);
     }
   };
@@ -134,7 +143,32 @@ export default function PirateShipConnector() {
     );
   }
 
-  if (!status) return null;
+  if (!status) {
+    // Used to render nothing at all, so a failed load made the whole
+    // integration panel silently disappear from Settings.
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Pirate Ship</CardTitle>
+          <CardDescription className="text-destructive">
+            Could not load the integration status{loadError ? `: ${loadError}` : '.'}
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" onClick={load} disabled={refreshing}>
+            {refreshing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const lastSync = status.keys
+    .map((k) => k.lastAccess)
+    .filter((v): v is string => Boolean(v))
+    .sort()
+    .pop();
 
   return (
     <>
@@ -145,18 +179,30 @@ export default function PirateShipConnector() {
               <CardTitle className="flex items-center gap-2">
                 Pirate Ship
                 {status.enabled ? (
-                  <Badge variant="success">Connected surface live</Badge>
+                  <Badge variant="success">Endpoint enabled</Badge>
                 ) : (
                   <Badge variant="destructive">Disabled</Badge>
                 )}
               </CardTitle>
               <CardDescription>
                 Buy postage from your orders. Pirate Ship connects to this store
-                through its WooCommerce integration.
+                through its WooCommerce integration, imports paid orders and
+                writes tracking back, which marks the order shipped and emails
+                the customer.
+                {' '}
+                {lastSync
+                  ? `Last contact from Pirate Ship: ${new Date(lastSync).toLocaleString()}.`
+                  : 'Pirate Ship has not connected yet.'}
               </CardDescription>
             </div>
-            <Button variant="ghost" size="icon" onClick={load} aria-label="Refresh">
-              <RefreshCw className="h-4 w-4" />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={load}
+              disabled={refreshing}
+              aria-label="Refresh"
+            >
+              <RefreshCw className={`h-4 w-4${refreshing ? ' animate-spin' : ''}`} />
             </Button>
           </div>
         </CardHeader>
@@ -172,10 +218,12 @@ export default function PirateShipConnector() {
 
           {!status.originConfigured && (
             <Warning>
-              No ship-from address configured. Set the{' '}
-              <code className="font-mono">PIRATESHIP_ORIGIN_*</code> variables, or
-              labels will print the placeholder address{' '}
-              <span className="font-mono">123 Business St, New York, NY 10001</span>.
+              No store address configured. Set the{' '}
+              <code className="font-mono">PIRATESHIP_ORIGIN_*</code> variables
+              (street, city, state, zip). Without them the store reports no
+              address to Pirate Ship and checkout shipping quotes use the built-in
+              estimate table. The ship-from address printed on labels is the one
+              saved in your Pirate Ship account.
             </Warning>
           )}
 
@@ -301,7 +349,12 @@ export default function PirateShipConnector() {
                         {event.statusCode}
                       </Badge>
                       <span className="text-xs text-muted-foreground">
-                        {new Date(event.createdAt).toLocaleTimeString()}
+                        {new Date(event.createdAt).toLocaleString(undefined, {
+                          month: 'short',
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit',
+                        })}
                       </span>
                     </span>
                   </div>
@@ -375,8 +428,17 @@ export default function PirateShipConnector() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleRevoke}>Revoke</AlertDialogAction>
+            <AlertDialogCancel disabled={revoking}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={revoking}
+              onClick={(e) => {
+                e.preventDefault();
+                handleRevoke();
+              }}
+            >
+              {revoking ? 'Revoking…' : 'Revoke'}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

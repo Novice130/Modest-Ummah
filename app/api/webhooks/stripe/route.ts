@@ -4,10 +4,10 @@ import { verifyWebhookSignature } from '@/lib/stripe';
 import { sendOrderConfirmation } from '@/lib/email';
 import Stripe from 'stripe';
 import { getDb } from '@/lib/db';
-import { orders, carts, stripeEvents } from '@/lib/schema';
-import { eq } from 'drizzle-orm';
+import { orders, orderNotes, carts, coupons, stripeEvents } from '@/lib/schema';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import { decrementStock, restock } from '@/lib/inventory';
-import { recordCouponUsage } from '@/lib/coupons';
+import { normalizeCouponCode, recordCouponUsage } from '@/lib/coupons';
 import type { ShippingAddressDB, OrderItem } from '@/lib/schema';
 
 export async function POST(request: NextRequest) {
@@ -65,6 +65,17 @@ export async function POST(request: NextRequest) {
           .limit(1);
 
         if (existingOrder) {
+          // An order cancelled while unpaid can still be paid afterwards (the
+          // PaymentIntent stays open). The money is taken, so it reopens for
+          // fulfilment; the timeline says why.
+          if (existingOrder.status === 'cancelled') {
+            await db.insert(orderNotes).values({
+              orderId: existingOrder.id,
+              note: 'Payment received after the order was cancelled. Reopened as Processing: ship it or refund it.',
+              author: 'Stripe',
+            });
+          }
+
           await db
             .update(orders)
             .set({
@@ -160,15 +171,18 @@ export async function POST(request: NextRequest) {
           .limit(1);
 
         if (existingOrder) {
+          // The order stays awaiting payment: the customer can retry the card
+          // on the same PaymentIntent, and payment_intent.succeeded then
+          // moves it on. An abandoned one is cancelled from the admin.
           await db
             .update(orders)
-            .set({
-              paymentStatus: 'failed',
-              status: 'cancelled',
-              notes: `Payment failed: ${paymentIntent.last_payment_error?.message || 'Unknown error'}`,
-              updatedAt: new Date(),
-            })
-            .where(eq(orders.id, existingOrder.id));
+            .set({ paymentStatus: 'failed', updatedAt: new Date() })
+            .where(and(eq(orders.id, existingOrder.id), ne(orders.paymentStatus, 'paid')));
+          await db.insert(orderNotes).values({
+            orderId: existingOrder.id,
+            note: `Payment failed: ${paymentIntent.last_payment_error?.message || 'Unknown error'}`,
+            author: 'Stripe',
+          });
           console.log('Order marked as failed:', metaOrderId);
         }
       } catch (error) {
@@ -190,21 +204,42 @@ export async function POST(request: NextRequest) {
 
         if (existingOrder) {
           const refundStatus = charge.refunded ? 'refunded' : 'partial';
-          await db
+          // A shipped or delivered order keeps its status (a return); an
+          // unshipped one is cancelled by a full refund.
+          const shipped = existingOrder.status === 'shipped' || existingOrder.status === 'delivered';
+          const [flipped] = await db
             .update(orders)
             .set({
-              paymentStatus: refundStatus as any,
-              status: charge.refunded ? 'cancelled' : existingOrder.status,
-              notes: `Refund processed: ${charge.amount_refunded / 100} USD`,
+              paymentStatus: refundStatus,
+              status: charge.refunded && !shipped ? 'cancelled' : existingOrder.status,
               updatedAt: new Date(),
             })
-            .where(eq(orders.id, existingOrder.id));
+            .where(and(eq(orders.id, existingOrder.id), ne(orders.paymentStatus, 'refunded')))
+            .returning({ id: orders.id });
+          await db.insert(orderNotes).values({
+            orderId: existingOrder.id,
+            note: `Refund processed in Stripe: ${(charge.amount_refunded / 100).toFixed(2)} USD refunded in total.`,
+            author: 'Stripe',
+          });
           console.log('Order refund recorded');
 
-          // Full refunds restock. Partial refunds leave stock alone —
-          // without per-item refund quantities we cannot know what to
-          // restock safely.
-          if (charge.refunded) {
+          // A full refund gives the coupon use back. Only the first move into
+          // "refunded" counts: an admin refund (refundOrderAction) that got
+          // there first has already released it.
+          if (charge.refunded && flipped && existingOrder.couponCode) {
+            await db
+              .update(coupons)
+              .set({
+                usageCount: sql`GREATEST(${coupons.usageCount} - 1, 0)`,
+                updatedAt: new Date(),
+              })
+              .where(sql`upper(${coupons.code}) = ${normalizeCouponCode(existingOrder.couponCode)}`);
+          }
+
+          // Full refunds of unshipped orders restock. Partial refunds leave
+          // stock alone — without per-item refund quantities we cannot know
+          // what to restock safely — and returned goods are restocked by hand.
+          if (charge.refunded && !shipped) {
             const items = (existingOrder.items || []) as OrderItem[];
             await restock(items);
             console.log('Stock restocked for order:', existingOrder.orderId);

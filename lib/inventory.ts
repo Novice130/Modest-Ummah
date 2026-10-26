@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
 import { products, productVariants } from '@/lib/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { OrderItem } from '@/lib/schema';
 
 /**
@@ -8,12 +8,22 @@ import type { OrderItem } from '@/lib/schema';
  * stock drops when payment succeeds (not at order placement), and a
  * refund restocks. The webhook idempotency table (stripe_events) is the
  * only thing that prevents a Stripe retry from double-decrementing.
+ *
+ * Rules, matching the product builder's save path:
+ *  - a product with "Manage stock" off is never decremented, and its manual
+ *    in-stock flag is left alone (it used to flip to out-of-stock on the
+ *    first sale because its untracked quantity is 0);
+ *  - in_stock = quantity > 0, or backorders are allowed;
+ *  - the update is a single atomic statement, so two concurrent webhooks
+ *    cannot both read the same starting quantity;
+ *  - a variant sale also refreshes the parent's total and in-stock flag,
+ *    which the storefront reads.
  */
 
 /**
- * Decrement stock for each line item. `quantity` is signed: negative
- * values restock (used by charge.refunded). Returns the items that could
- * not be fully satisfied so the caller can log an oversell.
+ * Apply a stock change for each line item. `sign` 1 decrements (payment),
+ * -1 restocks (refund). Returns the items that could not be fully
+ * satisfied so the caller can log an oversell.
  */
 export async function applyStockDelta(
   items: OrderItem[],
@@ -24,61 +34,78 @@ export async function applyStockDelta(
 
   for (const item of items) {
     if (!item.productId) continue;
+    const delta = sign * item.quantity;
 
     try {
+      const [product] = await db
+        .select({
+          id: products.id,
+          manageStock: products.manageStock,
+          backorderPolicy: products.backorderPolicy,
+        })
+        .from(products)
+        .where(eq(products.id, item.productId))
+        .limit(1);
+
+      if (!product) {
+        oversold.push({ item, available: 0 });
+        continue;
+      }
+      if (product.manageStock === false) continue;
+
+      const backorders = (product.backorderPolicy ?? 'no') !== 'no';
+      const inStockExpr = (column: typeof products.stockQuantity | typeof productVariants.stockQuantity) =>
+        backorders
+          ? sql`true`
+          : sql`GREATEST(0, coalesce(${column}, 0) - ${delta}) > 0`;
+
       if (item.variantId) {
-        const [variant] = await db
-          .select()
+        const [before] = await db
+          .select({ qty: productVariants.stockQuantity })
           .from(productVariants)
           .where(eq(productVariants.id, item.variantId))
           .limit(1);
+        const [variant] = await db
+          .update(productVariants)
+          .set({
+            stockQuantity: sql`GREATEST(0, coalesce(${productVariants.stockQuantity}, 0) - ${delta})`,
+            inStock: inStockExpr(productVariants.stockQuantity),
+          })
+          .where(eq(productVariants.id, item.variantId))
+          .returning({ id: productVariants.id });
 
         if (!variant) {
           oversold.push({ item, available: 0 });
           continue;
         }
-
-        const newQty = Math.max(
-          0,
-          (variant.stockQuantity || 0) - sign * item.quantity
-        );
-        await db
-          .update(productVariants)
-          .set({
-            stockQuantity: newQty,
-            inStock: newQty > 0,
-          })
-          .where(eq(productVariants.id, variant.id));
-
-        if (sign === 1 && newQty < 0) {
-          oversold.push({ item, available: variant.stockQuantity || 0 });
-        }
-      } else {
-        const [product] = await db
-          .select()
-          .from(products)
-          .where(eq(products.id, item.productId))
-          .limit(1);
-
-        if (!product) {
-          oversold.push({ item, available: 0 });
-          continue;
+        if (sign === 1 && !backorders && (before?.qty ?? 0) < item.quantity) {
+          oversold.push({ item, available: before?.qty ?? 0 });
         }
 
-        const newQty = Math.max(
-          0,
-          (product.stockQuantity || 0) - sign * item.quantity
-        );
+        // The parent row carries the total the storefront shows.
         await db
           .update(products)
           .set({
-            stockQuantity: newQty,
-            inStock: newQty > 0,
+            stockQuantity: sql`(SELECT coalesce(sum(${productVariants.stockQuantity}), 0) FROM ${productVariants} WHERE ${productVariants.productId} = ${product.id})`,
+            inStock: sql`EXISTS (SELECT 1 FROM ${productVariants} WHERE ${productVariants.productId} = ${product.id} AND ${productVariants.inStock} = true)`,
+          })
+          .where(eq(products.id, product.id));
+      } else {
+        const [before] = await db
+          .select({ qty: products.stockQuantity })
+          .from(products)
+          .where(eq(products.id, product.id))
+          .limit(1);
+        await db
+          .update(products)
+          .set({
+            stockQuantity: sql`GREATEST(0, coalesce(${products.stockQuantity}, 0) - ${delta})`,
+            inStock: inStockExpr(products.stockQuantity),
           })
           .where(eq(products.id, product.id));
 
-        if (sign === 1 && newQty < 0) {
-          oversold.push({ item, available: product.stockQuantity || 0 });
+        if (sign === 1 && !backorders && (before?.qty ?? 0) < item.quantity) {
+          oversold.push({ item, available: before?.qty ?? 0 });
         }
       }
     } catch (error) {

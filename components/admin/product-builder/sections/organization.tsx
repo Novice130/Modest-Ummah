@@ -121,7 +121,12 @@ export default function OrganizationSection({ builder }: { builder: Builder }) {
   return (
     <div className="space-y-6">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <Field label="Category" htmlFor="pb-category" error={errors.categoryId?.[0]}>
+        <Field
+          label="Category"
+          htmlFor="pb-category"
+          error={errors.categoryId?.[0]}
+          hint="Products attach to the most specific category; the parent comes with it."
+        >
           <Select
             value={doc.categoryId}
             onValueChange={(v) => update((d) => (d.categoryId = v))}
@@ -151,7 +156,7 @@ export default function OrganizationSection({ builder }: { builder: Builder }) {
         </Field>
       </div>
 
-      <Field label="Tags" htmlFor="pb-tags">
+      <Field label="Tags" htmlFor="pb-tags" hint="Used for shop filters. Pick an existing tag or type a new one.">
         <div className="flex gap-2">
           <Input
             id="pb-tags"
@@ -234,18 +239,29 @@ export default function OrganizationSection({ builder }: { builder: Builder }) {
         <ToggleRow
           title="Pin to top of New Arrivals"
           description="Float this product above newer arrivals."
-          checked={doc.newArrivalPinned}
+          checked={doc.newArrivalPinned && !doc.excludeFromNewArrivals}
+          disabled={doc.excludeFromNewArrivals}
           onCheckedChange={(v) => update((d) => (d.newArrivalPinned = v))}
         />
         <ToggleRow
           title="Exclude from New Arrivals"
           description="Hide this product from the New Arrivals section entirely."
           checked={doc.excludeFromNewArrivals}
-          onCheckedChange={(v) => update((d) => (d.excludeFromNewArrivals = v))}
+          onCheckedChange={(v) =>
+            update((d) => {
+              d.excludeFromNewArrivals = v;
+              // Pinned and excluded at once is contradictory.
+              if (v) d.newArrivalPinned = false;
+            })
+          }
         />
       </div>
 
-      <Field label="Visibility" htmlFor="pb-visibility">
+      <Field
+        label="Catalog visibility"
+        htmlFor="pb-visibility"
+        hint="Where a live product is listed. Hidden and search-only products still open from their direct link; to take a product off the store entirely, set its status to Draft."
+      >
         <Select
           value={doc.visibility}
           onValueChange={(v) =>
@@ -270,11 +286,13 @@ function ToggleRow({
   title,
   description,
   checked,
+  disabled,
   onCheckedChange,
 }: {
   title: string;
   description: string;
   checked: boolean;
+  disabled?: boolean;
   onCheckedChange: (v: boolean) => void;
 }) {
   return (
@@ -283,7 +301,12 @@ function ToggleRow({
         <p className="font-medium text-sm">{title}</p>
         <p className="text-sm text-muted-foreground">{description}</p>
       </div>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} aria-label={title} />
+      <Switch
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onCheckedChange}
+        aria-label={title}
+      />
     </div>
   );
 }

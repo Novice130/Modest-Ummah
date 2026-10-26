@@ -53,7 +53,13 @@ export default function ProductBuilder({ builder, isNew, title }: ProductBuilder
     save,
     saving,
     saveStatus,
+    saveError,
     lastSavedAt,
+    dirty,
+    autosaveEnabled,
+    persistedStatus,
+    productId,
+    discardLocalDraft,
     previewProduct,
     previewOpen,
     setPreviewOpen,
@@ -92,14 +98,38 @@ export default function ProductBuilder({ builder, isNew, title }: ProductBuilder
   };
 
   const saveButtonLabel =
-    doc.status === 'published' ? 'Save & publish' : 'Save changes';
+    doc.status === 'published' && persistedStatus !== 'published'
+      ? 'Save & publish'
+      : doc.status === 'scheduled' && persistedStatus !== 'scheduled'
+        ? 'Save & schedule'
+        : 'Save';
+
+  const statusLine = (() => {
+    if (saveStatus === 'saving') return 'Saving…';
+    if (saveStatus === 'error') return saveError || 'Save failed';
+    if (!dirty) {
+      return lastSavedAt ? `All changes saved · ${lastSavedAt.toLocaleTimeString()}` : 'No unsaved changes';
+    }
+    if (!autosaveEnabled) return 'Unsaved changes — click Save';
+    if (saveStatus === 'incomplete') {
+      return productId
+        ? 'Draft not autosaved — fix the highlighted fields'
+        : 'Kept in this browser until the required fields are filled';
+    }
+    return 'Unsaved changes — autosaving draft…';
+  })();
+
+  const leave = () => {
+    if (dirty && !window.confirm('Leave without saving? Your unsaved changes will be lost.')) return;
+    router.push('/admin/products');
+  };
 
   return (
     <div className="flex h-[calc(100vh-4rem)] -m-4 md:-m-8 flex-col lg:flex-row">
       {/* ─── Left nav (sticky sections) ─────────────────── */}
       <div className="hidden lg:flex w-64 shrink-0 flex-col border-r bg-background">
         <div className="p-4 border-b">
-          <Button variant="ghost" size="sm" onClick={() => router.push('/admin/products')}>
+          <Button variant="ghost" size="sm" onClick={leave}>
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to products
           </Button>
         </div>
@@ -136,15 +166,27 @@ export default function ProductBuilder({ builder, isNew, title }: ProductBuilder
             )}
             {saveButtonLabel}
           </Button>
-          <p className="text-xs text-muted-foreground text-center">
-            {saveStatus === 'saved'
-              ? `Draft saved${lastSavedAt ? ` · ${lastSavedAt.toLocaleTimeString()}` : ''}`
-              : saveStatus === 'saving'
-                ? 'Saving…'
-                : saveStatus === 'error'
-                  ? 'Autosave failed — check your connection'
-                  : 'Autosaves as you type'}
+          <p
+            className={cn(
+              'text-xs text-center',
+              saveStatus === 'error' ? 'text-destructive' : 'text-muted-foreground'
+            )}
+            role="status"
+          >
+            {statusLine}
           </p>
+          {!productId && dirty && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="w-full text-muted-foreground"
+              onClick={() => {
+                if (window.confirm('Discard this unsaved product?')) discardLocalDraft();
+              }}
+            >
+              Discard draft
+            </Button>
+          )}
         </div>
       </div>
 
@@ -183,10 +225,11 @@ export default function ProductBuilder({ builder, isNew, title }: ProductBuilder
             </div>
             <h2 className="font-semibold truncate">
               {doc.name || 'New product'}
-              {doc.status !== 'published' && (
-                <Badge variant="outline" className="ml-2">
-                  {doc.status}
-                </Badge>
+              <Badge variant="outline" className="ml-2 capitalize">
+                {productId ? persistedStatus ?? doc.status : 'not saved'}
+              </Badge>
+              {dirty && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">Unsaved changes</span>
               )}
             </h2>
           </div>

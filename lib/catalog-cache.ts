@@ -2,10 +2,40 @@
 
 import { getDb } from '@/lib/db';
 import { categories, productTags, products, tags } from '@/lib/schema';
-import { eq, inArray, like, or, desc, asc, and, count, sql } from 'drizzle-orm';
+import { eq, ne, inArray, like, or, desc, asc, and, count, sql } from 'drizzle-orm';
 import { tagProductCatalogue, productCacheProfile, tagTaxonomy } from '@/lib/cache';
 import { buildCategoryRef, mapProduct } from '@/lib/product-mapper';
 import type { CategoryNode, Product, TagRef } from '@/types';
+
+/**
+ * "Live on the storefront": published, or scheduled with a publish time that
+ * has passed. Nothing flips scheduled rows on a timer any more (the publish
+ * cron kept Neon awake), so every storefront read applies the schedule
+ * itself. published_at is a UTC wall-clock `timestamp` (Drizzle writes
+ * toISOString), hence the explicit UTC conversion of now().
+ *
+ * Cached entries evaluate now() when they are filled, so a scheduled product
+ * appears once its entry next revalidates: at most PRODUCT_CACHE_PROFILE
+ * .revalidate (15 min) after the publish time.
+ */
+function liveCondition() {
+  return or(
+    eq(products.status, 'published'),
+    and(
+      eq(products.status, 'scheduled'),
+      sql`${products.publishedAt} <= (now() AT TIME ZONE 'UTC')`
+    )
+  )!;
+}
+
+/**
+ * Catalogue visibility, as in WooCommerce: "public" shows everywhere,
+ * "search_only" only in search results, "hidden" in neither (still reachable
+ * by its URL, so getProductCached does not filter on it).
+ */
+function listedCondition(inSearch: boolean) {
+  return inSearch ? ne(products.visibility, 'hidden') : eq(products.visibility, 'public');
+}
 
 /**
  * Cached catalogue reads. Lives in its own file because 'use cache' and
@@ -126,7 +156,7 @@ export async function getProductsCached({
   const offset = (page - 1) * limit;
 
   const conditions = [];
-  if (!includeUnpublished) conditions.push(eq(products.status, 'published'));
+  if (!includeUnpublished) conditions.push(liveCondition(), listedCondition(Boolean(search)));
 
   if (category) {
     const ids = await descendantCategoryIds(category);
@@ -184,7 +214,7 @@ export async function getProductCached(idOrSlug: string, includeUnpublished = fa
   const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
 
   const conditions: any[] = [];
-  if (!includeUnpublished) conditions.push(eq(products.status, 'published'));
+  if (!includeUnpublished) conditions.push(liveCondition());
 
   let result;
   if (isUUID) {
@@ -211,7 +241,8 @@ export async function getNewArrivalsCached(limit = 8) {
     .select()
     .from(products)
     .where(and(
-      eq(products.status, 'published'),
+      liveCondition(),
+      listedCondition(false),
       eq(products.excludeFromNewArrivals, false)
     ))
     .orderBy(desc(products.newArrivalPinned), desc(products.publishedAt))
@@ -241,7 +272,8 @@ export async function getRelatedCached(
     .from(products)
     .where(and(
       eq(products.categoryId, categoryId),
-      eq(products.status, 'published'),
+      liveCondition(),
+      listedCondition(false),
       sql`${products.id} != ${currentProductId}`
     ))
     .orderBy(desc(products.publishedAt))
@@ -261,7 +293,8 @@ export async function getSearchCached(query: string) {
     .select()
     .from(products)
     .where(and(
-      eq(products.status, 'published'),
+      liveCondition(),
+      listedCondition(true),
       or(like(products.name, searchPattern), like(products.description, searchPattern))
     ))
     .orderBy(desc(products.publishedAt))

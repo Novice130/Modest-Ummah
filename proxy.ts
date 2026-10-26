@@ -47,15 +47,19 @@ export async function proxy(request: NextRequest) {
   // --- Admin routes ---
   if (pathname.startsWith('/admin') && pathname !== adminLoginRoute) {
     const adminToken = request.cookies.get('admin_token')?.value;
+    // Back to the page that was asked for after signing in; the login page
+    // only follows same-origin /admin paths.
+    const loginUrl = new URL('/admin/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname + request.nextUrl.search);
 
     if (!adminToken) {
-      return NextResponse.redirect(new URL('/admin/login', request.url));
+      return NextResponse.redirect(loginUrl);
     }
 
     const payload = await verifyJWT(adminToken);
     if (!payload || payload.type !== 'admin') {
       // Clear invalid cookie and redirect
-      const response = NextResponse.redirect(new URL('/admin/login', request.url));
+      const response = NextResponse.redirect(loginUrl);
       response.cookies.delete('admin_token');
       return response;
     }

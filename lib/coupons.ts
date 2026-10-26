@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
 import { categories, coupons } from '@/lib/schema';
-import { eq, ilike, sql } from 'drizzle-orm';
+import { sql } from 'drizzle-orm';
 
 /**
  * Coupon evaluation. The single source of truth for discounts — nothing
@@ -27,6 +27,49 @@ function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
+/**
+ * Codes are stored upper-case by the admin. Matching is an exact,
+ * case-insensitive equality — never ILIKE, where a customer typing "%" or
+ * "_" would match (and redeem) an arbitrary coupon.
+ */
+export function normalizeCouponCode(code: string): string {
+  return code.trim().toUpperCase();
+}
+
+function codeEquals(code: string) {
+  return sql`upper(${coupons.code}) = ${normalizeCouponCode(code)}`;
+}
+
+/**
+ * Slugs of the category and every category beneath it. Products attach to
+ * leaf categories, so a coupon for "Women" has to cover "Women > Abayas" —
+ * the same way the storefront's /shop/women page shows the whole subtree.
+ */
+async function subtreeSlugs(categoryId: string): Promise<Set<string>> {
+  const db = getDb();
+  const rows = await db
+    .select({ id: categories.id, slug: categories.slug, parentId: categories.parentId })
+    .from(categories);
+  const childrenOf = new Map<string, typeof rows>();
+  for (const r of rows) {
+    if (!r.parentId) continue;
+    const list = childrenOf.get(r.parentId) ?? [];
+    list.push(r);
+    childrenOf.set(r.parentId, list);
+  }
+  const out = new Set<string>();
+  const seen = new Set<string>();
+  const stack = rows.filter((r) => r.id === categoryId);
+  while (stack.length) {
+    const node = stack.pop()!;
+    if (seen.has(node.id)) continue; // guards against a parent_id cycle
+    seen.add(node.id);
+    out.add(node.slug);
+    stack.push(...(childrenOf.get(node.id) ?? []));
+  }
+  return out;
+}
+
 export async function evaluateCoupon(
   code: string | null | undefined,
   subtotal: number,
@@ -40,7 +83,7 @@ export async function evaluateCoupon(
   const [coupon] = await db
     .select()
     .from(coupons)
-    .where(ilike(coupons.code, code.trim()))
+    .where(codeEquals(code))
     .limit(1);
 
   if (!coupon) {
@@ -89,16 +132,11 @@ export async function evaluateCoupon(
       };
     }
   } else if (coupon.categoryId) {
-    // The cart carries category slugs; the coupon stores an id. One lookup
-    // rather than denormalizing the slug onto the coupon row, which would go
-    // stale the moment someone renames the category.
-    const [couponCategory] = await db
-      .select({ slug: categories.slug })
-      .from(categories)
-      .where(eq(categories.id, coupon.categoryId))
-      .limit(1);
-    const wanted = couponCategory?.slug;
-    eligible = wanted ? items.filter((i) => i.category === wanted) : [];
+    // The cart carries leaf category slugs; the coupon stores an id. Resolve
+    // the id to its whole subtree rather than denormalizing a slug onto the
+    // coupon row, which would go stale the moment someone renames it.
+    const wanted = await subtreeSlugs(coupon.categoryId);
+    eligible = items.filter((i) => i.category && wanted.has(i.category));
     if (eligible.length === 0) {
       return {
         ok: false,
@@ -131,6 +169,6 @@ export async function recordCouponUsage(code: string | null | undefined) {
   const db = getDb();
   await db
     .update(coupons)
-    .set({ usageCount: sql`${coupons.usageCount} + 1` })
-    .where(ilike(coupons.code, code));
+    .set({ usageCount: sql`${coupons.usageCount} + 1`, updatedAt: new Date() })
+    .where(codeEquals(code));
 }
