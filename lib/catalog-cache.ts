@@ -224,7 +224,9 @@ export async function getProductCached(idOrSlug: string, includeUnpublished = fa
     [result] = await db.select().from(products).where(and(eq(products.slug, idOrSlug), ...conditions)).limit(1);
   }
 
-  if (result) tagProductCatalogue(result.id);
+  // A miss is tagged too: otherwise the cached null for a draft or
+  // not-yet-due product's URL survives the publish that should replace it.
+  tagProductCatalogue(result?.id);
   tagTaxonomy();
   if (!result) return null;
   const [hydrated] = await hydrate([result]);

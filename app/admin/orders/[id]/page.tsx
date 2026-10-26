@@ -377,7 +377,7 @@ th,td{text-align:left;border-bottom:1px solid #ddd;padding:8px 4px;vertical-alig
                 setConfirm({
                   title: `Refund order ${order.orderId}?`,
                   description: isShipped
-                    ? `Stripe refunds everything not yet refunded of the ${formatPrice(order.total)} charge. This order has already shipped: stock is still returned to inventory by the Stripe webhook, so adjust stock if the items are not coming back. This cannot be undone.`
+                    ? `Stripe refunds everything not yet refunded of the ${formatPrice(order.total)} charge. This order has already shipped, so it keeps its status and stock is not returned automatically: restock by hand if the items come back. This cannot be undone.`
                     : `Stripe refunds everything not yet refunded of the ${formatPrice(order.total)} charge, the order is cancelled and its items are restocked. This cannot be undone.`,
                   confirmLabel: 'Issue refund',
                   destructive: true,

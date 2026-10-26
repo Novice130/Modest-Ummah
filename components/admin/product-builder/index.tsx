@@ -108,6 +108,11 @@ export default function ProductBuilder({ builder, isNew, title }: ProductBuilder
     if (saveStatus === 'saving') return 'Saving…';
     if (saveStatus === 'error') return saveError || 'Save failed';
     if (!dirty) {
+      // Autosave stores a draft even when Published/Scheduled is picked, and
+      // then reports nothing unsaved; say that the status step is still open.
+      if (productId && persistedStatus === 'draft' && doc.status !== 'draft') {
+        return `Saved as a draft — click “${saveButtonLabel}” to finish`;
+      }
       return lastSavedAt ? `All changes saved · ${lastSavedAt.toLocaleTimeString()}` : 'No unsaved changes';
     }
     if (!autosaveEnabled) return 'Unsaved changes — click Save';
@@ -121,6 +126,15 @@ export default function ProductBuilder({ builder, isNew, title }: ProductBuilder
 
   const leave = () => {
     if (dirty && !window.confirm('Leave without saving? Your unsaved changes will be lost.')) return;
+    if (
+      !dirty &&
+      productId &&
+      persistedStatus === 'draft' &&
+      doc.status !== 'draft' &&
+      !window.confirm(`This product is still a draft. Leave without clicking “${saveButtonLabel}”?`)
+    ) {
+      return;
+    }
     router.push('/admin/products');
   };
 

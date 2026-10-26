@@ -353,7 +353,7 @@ export function useProductBuilder(init: BuilderInit) {
       setSaveStatus('error');
       setSaveError('Autosave failed — check your connection.');
     } finally {
-      inFlight.current = null;
+      if (inFlight.current === request) inFlight.current = null;
     }
   }, [applySaved]);
 
@@ -421,10 +421,20 @@ export function useProductBuilder(init: BuilderInit) {
       }
 
       setSaveStatus('saving');
-      const result = await saveProductAction({
+      const request = saveProductAction({
         productId: productIdRef.current,
         document: parsed.data,
       });
+      // Registered so an autosave timer that fires mid-save (the admin kept
+      // typing) skips instead of creating a second product or writing 'draft'
+      // over the publish.
+      inFlight.current = request;
+      let result: SaveResult;
+      try {
+        result = await request;
+      } finally {
+        if (inFlight.current === request) inFlight.current = null;
+      }
       if (!result.ok) {
         setSaveStatus('error');
         setSaveError(result.error);

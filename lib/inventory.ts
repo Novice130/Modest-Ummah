@@ -2,6 +2,7 @@ import { getDb } from '@/lib/db';
 import { products, productVariants } from '@/lib/schema';
 import { eq, sql } from 'drizzle-orm';
 import type { OrderItem } from '@/lib/schema';
+import { optionKind } from '@/lib/product-builder-schema';
 
 /**
  * Inventory mutations on payment. WooCommerce's defining behavior:
@@ -19,6 +20,31 @@ import type { OrderItem } from '@/lib/schema';
  *  - a variant sale also refreshes the parent's total and in-stock flag,
  *    which the storefront reads.
  */
+
+/**
+ * The web shop sells a variable product with Size/Color pickers and no
+ * variant id on the line. Find the one variant those picks name, so the sale
+ * lands on the variant: the parent total is re-derived from the variants on
+ * every save and variant sale, which would otherwise undo it.
+ */
+async function matchVariantByOptions(productId: string, item: OrderItem): Promise<string | undefined> {
+  const db = getDb();
+  const rows = await db
+    .select({ id: productVariants.id, attributes: productVariants.attributes })
+    .from(productVariants)
+    .where(eq(productVariants.productId, productId));
+  const matches = rows.filter((v) => {
+    const entries = Object.entries(v.attributes || {});
+    return (
+      entries.length > 0 &&
+      entries.every(([name, value]) => {
+        const kind = optionKind(name);
+        return kind === 'size' ? value === item.size : kind === 'color' ? value === item.color : false;
+      })
+    );
+  });
+  return matches.length === 1 ? matches[0].id : undefined;
+}
 
 /**
  * Apply a stock change for each line item. `sign` 1 decrements (payment),
@@ -42,6 +68,7 @@ export async function applyStockDelta(
           id: products.id,
           manageStock: products.manageStock,
           backorderPolicy: products.backorderPolicy,
+          productType: products.productType,
         })
         .from(products)
         .where(eq(products.id, item.productId))
@@ -59,11 +86,15 @@ export async function applyStockDelta(
           ? sql`true`
           : sql`GREATEST(0, coalesce(${column}, 0) - ${delta}) > 0`;
 
-      if (item.variantId) {
+      const variantId =
+        item.variantId ||
+        (product.productType === 'variable' ? await matchVariantByOptions(product.id, item) : undefined);
+
+      if (variantId) {
         const [before] = await db
           .select({ qty: productVariants.stockQuantity })
           .from(productVariants)
-          .where(eq(productVariants.id, item.variantId))
+          .where(eq(productVariants.id, variantId))
           .limit(1);
         const [variant] = await db
           .update(productVariants)
@@ -71,7 +102,7 @@ export async function applyStockDelta(
             stockQuantity: sql`GREATEST(0, coalesce(${productVariants.stockQuantity}, 0) - ${delta})`,
             inStock: inStockExpr(productVariants.stockQuantity),
           })
-          .where(eq(productVariants.id, item.variantId))
+          .where(eq(productVariants.id, variantId))
           .returning({ id: productVariants.id });
 
         if (!variant) {

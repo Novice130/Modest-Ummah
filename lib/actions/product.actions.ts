@@ -1013,10 +1013,14 @@ export async function fetchAllProductsAdmin(
   // Scheduled products go live by time alone (storefront reads treat a due
   // schedule as published; there is no cron). Settle the stored status here,
   // on an admin read rather than a timer, so the list shows what is live.
-  await db
+  const settled = await db
     .update(products)
     .set({ status: 'published', updatedAt: new Date() })
-    .where(and(eq(products.status, 'scheduled'), lte(products.publishedAt, new Date())));
+    .where(and(eq(products.status, 'scheduled'), lte(products.publishedAt, new Date())))
+    .returning({ id: products.id });
+  // Cached storefront reads filled before the publish time still hold the
+  // old answer (a 404 for the product page) until they revalidate.
+  if (settled.length > 0) invalidateProductCaches();
 
   const categoryRows = await db
     .select({

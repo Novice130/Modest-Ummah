@@ -168,7 +168,8 @@ function appliesTo(coupon: AdminCoupon): string {
 
 /** Mirrors cleanInput() in coupon.actions.ts so mistakes show before the round trip. */
 function validate(form: CouponFormState): string | null {
-  const code = form.code.trim();
+  // Legacy codes may be stored lower/mixed case; the server upper-cases on save.
+  const code = form.code.trim().toUpperCase();
   if (!code) return 'Enter a coupon code.';
   if (!/^[A-Z0-9-]+$/.test(code)) return 'Codes may only contain letters, numbers, and dashes.';
   const amount = Number(form.amount);

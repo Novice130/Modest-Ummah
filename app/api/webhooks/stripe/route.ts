@@ -5,7 +5,7 @@ import { sendOrderConfirmation } from '@/lib/email';
 import Stripe from 'stripe';
 import { getDb } from '@/lib/db';
 import { orders, orderNotes, carts, coupons, stripeEvents } from '@/lib/schema';
-import { and, eq, ne, sql } from 'drizzle-orm';
+import { and, eq, inArray, ne, sql } from 'drizzle-orm';
 import { decrementStock, restock } from '@/lib/inventory';
 import { normalizeCouponCode, recordCouponUsage } from '@/lib/coupons';
 import type { ShippingAddressDB, OrderItem } from '@/lib/schema';
@@ -177,7 +177,9 @@ export async function POST(request: NextRequest) {
           await db
             .update(orders)
             .set({ paymentStatus: 'failed', updatedAt: new Date() })
-            .where(and(eq(orders.id, existingOrder.id), ne(orders.paymentStatus, 'paid')));
+            // Stripe retries can deliver a failure after the success or a
+            // refund; only an unpaid order may be marked failed.
+            .where(and(eq(orders.id, existingOrder.id), inArray(orders.paymentStatus, ['pending', 'failed'])));
           await db.insert(orderNotes).values({
             orderId: existingOrder.id,
             note: `Payment failed: ${paymentIntent.last_payment_error?.message || 'Unknown error'}`,
