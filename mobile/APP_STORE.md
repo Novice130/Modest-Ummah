@@ -6,7 +6,7 @@ memory: a mismatch between the manifests and the answers is a guaranteed
 rejection.
 
 Bundle id: `com.modestummah.modestUmmah` (already set in `project.pbxproj`)
-Version / build: `1.0.0` / `1` (`pubspec.yaml:4` → `FLUTTER_BUILD_NAME` /
+Version / build: `1.0.0` / `3` (`pubspec.yaml:4` → `FLUTTER_BUILD_NAME` /
 `FLUTTER_BUILD_NUMBER`)
 SKU: `MODESTUMMAH-IOS-001`
 Primary language: English (U.S.)
