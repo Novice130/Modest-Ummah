@@ -179,6 +179,7 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
               const SizedBox(height: 20),
               if (!kIsWeb && (Platform.isIOS || Platform.isMacOS)) ...[
                 SignInWithAppleButton(
+                  text: 'Continue with Apple',
                   onPressed: _busy ? () {} : _handleAppleSignIn,
                   height: 50,
                   style: SignInWithAppleButtonStyle.black,
@@ -186,27 +187,29 @@ class _AuthScreenState extends ConsumerState<AuthScreen> {
                 ),
                 const SizedBox(height: 12),
               ],
-              OutlinedButton(
-                onPressed: _busy ? null : _handleGoogleSignIn,
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(50),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'G',
-                      style: theme.textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: const Color(0xFF4285F4),
-                      ),
+              SizedBox(
+                height: 50,
+                child: OutlinedButton(
+                  onPressed: _busy ? null : _handleGoogleSignIn,
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
                     ),
-                    const SizedBox(width: 10),
-                    const Text('Continue with Google'),
-                  ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        'G',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF4285F4),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      const Text('Continue with Google'),
+                    ],
+                  ),
                 ),
               ),
               const SizedBox(height: 16),
