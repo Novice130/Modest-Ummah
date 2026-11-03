@@ -47,11 +47,11 @@ export function loadExpected() {
       target: ts.ScriptTarget.ES2022,
     },
   });
-  const module = { exports: {} };
-  new Function('require', 'module', 'exports', outputText)(require, module, module.exports);
+  const schemaModule = { exports: {} };
+  new Function('require', 'module', 'exports', outputText)(require, schemaModule, schemaModule.exports);
 
   const expected = {};
-  for (const value of Object.values(module.exports)) {
+  for (const value of Object.values(schemaModule.exports)) {
     if (!is(value, PgTable)) continue;
     const config = getTableConfig(value);
     const columns = {};
