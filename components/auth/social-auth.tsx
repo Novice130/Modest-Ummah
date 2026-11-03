@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore, useCartStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
@@ -20,6 +20,7 @@ export default function SocialAuth() {
   const { setUser } = useAuthStore();
   const { syncWithServer } = useCartStore();
   const [loadingProvider, setLoadingProvider] = useState<'google' | 'apple' | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const googleClientId =
     process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
@@ -117,23 +118,27 @@ export default function SocialAuth() {
   };
 
   const setupGoogle = () => {
-    if (window.google?.accounts?.id) {
-      window.google.accounts.id.initialize({
-        client_id: googleClientId,
-        callback: handleGoogleSuccess,
-      });
+    if (typeof window === 'undefined' || !window.google?.accounts?.id) return;
 
-      const btnContainer = document.getElementById('google-btn-wrapper');
-      if (btnContainer) {
-        btnContainer.innerHTML = '';
-        window.google.accounts.id.renderButton(btnContainer, {
-          theme: 'outline',
-          size: 'large',
-          width: '100%',
-          text: 'continue_with',
-          shape: 'rectangular',
-        });
-      }
+    window.google.accounts.id.initialize({
+      client_id: googleClientId,
+      callback: handleGoogleSuccess,
+    });
+
+    const btnContainer = containerRef.current || document.getElementById('google-btn-wrapper');
+    if (btnContainer) {
+      btnContainer.innerHTML = '';
+      const containerWidth =
+        btnContainer.offsetWidth || btnContainer.parentElement?.offsetWidth || 398;
+      const btnWidth = Math.min(400, Math.max(200, Math.floor(containerWidth)));
+
+      window.google.accounts.id.renderButton(btnContainer, {
+        theme: 'outline',
+        size: 'large',
+        width: btnWidth,
+        text: 'continue_with',
+        shape: 'rectangular',
+      });
     }
   };
 
@@ -153,8 +158,20 @@ export default function SocialAuth() {
   };
 
   useEffect(() => {
-    setupGoogle();
-    setupApple();
+    const timer = setTimeout(() => {
+      setupGoogle();
+      setupApple();
+    }, 50);
+
+    const handleResize = () => {
+      setupGoogle();
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   return (
@@ -179,8 +196,12 @@ export default function SocialAuth() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-2.5">
-        <div id="google-btn-wrapper" className="w-full min-h-[40px] flex justify-center" />
+      <div className="flex flex-col gap-2.5 w-full max-w-[400px] mx-auto">
+        <div
+          ref={containerRef}
+          id="google-btn-wrapper"
+          className="w-full min-h-[40px] flex justify-center [&>div]:!w-full [&_iframe]:!w-full overflow-hidden"
+        />
 
         <button
           type="button"
