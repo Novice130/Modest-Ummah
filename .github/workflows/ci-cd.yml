@@ -1,7 +1,7 @@
 # ═══════════════════════════════════════════════════════
 # CI/CD — Lint, Build, Image & Deploy
 #
-#   pull_request      quality -> build
+#   pull_request      quality -> build, and mobile (Flutter, independent)
 #   push to main      quality -> build -> image -> deploy-staging
 #   workflow_dispatch deploy-production (promote an already-built image by SHA)
 #
@@ -74,10 +74,40 @@ jobs:
         run: npm install --legacy-peer-deps
 
       - name: Lint
-        run: npm run lint || true  # Don't block on lint warnings for now
+        run: npm run lint
 
       - name: Type Check
-        run: npx tsc --noEmit || true  # Report types but don't block
+        run: npx tsc --noEmit
+
+  # ─── Mobile: Flutter analyze & test (PRs only) ──────
+  # Nothing later depends on this job: image and deploys run on push to main.
+  # Tests that call the API skip unless API_BASE_URL is passed, so this job
+  # never touches production, which is the app's default API host.
+  mobile:
+    name: Mobile (Flutter)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.44.9'  # Dart 3.12.2; pubspec needs sdk ^3.12.0
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
 
   # ─── Step 2: Build ──────────────────────────────────
   build:

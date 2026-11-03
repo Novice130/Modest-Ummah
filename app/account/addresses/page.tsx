@@ -108,6 +108,7 @@ export default function AddressesPage() {
       // Add new
       const newAddress: SavedAddress = {
         ...data,
+        // eslint-disable-next-line react-hooks/purity -- runs in the submit handler, not during render
         id: `addr_${Date.now()}`,
         isDefault: addresses.length === 0 || data.isDefault,
       };
