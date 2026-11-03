@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,7 +29,23 @@ class FakeSecureStore extends SecureStore {
   Future<void> clearToken() async => _token = null;
 }
 
+/// Reason to skip tests that call the API, or null when they may run. They
+/// register users and create orders and PaymentIntents, and the app's default
+/// API host is production, so they need an explicit non-production host:
+/// `flutter test --dart-define=API_BASE_URL=https://staging.example`
+String? _liveApiSkipReason() {
+  const baseUrl = String.fromEnvironment('API_BASE_URL');
+  if (baseUrl.isEmpty) return 'API_BASE_URL is not set';
+  final host = Uri.parse(baseUrl).host.replaceAll(RegExp(r'\.+$'), '');
+  if (host == 'modestummah.com' || host == 'www.modestummah.com') {
+    return 'API_BASE_URL is production';
+  }
+  return null;
+}
+
 void main() {
+  final liveSkip = _liveApiSkipReason();
+
   SharedPreferences.setMockInitialValues({});
 
   group('End-to-End Live Workflow Verification', () {
@@ -59,7 +77,7 @@ void main() {
         expect(first.priceValue, greaterThan(0));
         print('✓ Verified product in catalogue: ${first.name} (\$${first.displayPrice})');
       }, RealHttpOverrides());
-    });
+    }, skip: liveSkip);
 
     test('2. Product Detail API: Fetch product by slug', () async {
       await HttpOverrides.runWithHttpOverrides(() async {
@@ -70,7 +88,7 @@ void main() {
         expect(product.images, isNotEmpty);
         print('✓ Verified product detail: ${product.name}, stock=${product.inStock}, images=${product.images.length}');
       }, RealHttpOverrides());
-    });
+    }, skip: liveSkip);
 
     test('3. User Authentication: Register new user and sign in', () async {
       await HttpOverrides.runWithHttpOverrides(() async {
@@ -93,7 +111,7 @@ void main() {
         expect(loginRes.user.email, equals(testEmail));
         print('✓ Successfully verified login with new credentials');
       }, RealHttpOverrides());
-    });
+    }, skip: liveSkip);
 
     test('4. Cart State Management: Add items, update quantities, calculate subtotal', () async {
       final cartNotifier = container.read(cartProvider.notifier);
@@ -180,6 +198,6 @@ void main() {
         print('  Client Secret: ${clientSecret.substring(0, 15)}...');
         print('  Total calculated: \$$total (Subtotal: \$${paymentRes['resolvedSubtotal']}, Shipping: \$${paymentRes['resolvedShipping']}, Tax: \$${paymentRes['resolvedTax']})');
       }, RealHttpOverrides());
-    });
+    }, skip: liveSkip);
   });
 }
