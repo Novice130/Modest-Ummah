@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { CartItem, User } from '@/types';
 import { saveCartAction, fetchUserCart } from '@/lib/actions/cart.actions';
+import { trackAddToCart } from '@/lib/analytics';
 
 interface CartState {
   items: CartItem[];
@@ -28,6 +29,7 @@ export const useCartStore = create<CartState>()(
       isSyncing: false,
 
       addItem: (item) => {
+        trackAddToCart(item.productId, item.price, item.quantity);
         set((state) => {
           const existingIndex = state.items.findIndex(
             (i) =>

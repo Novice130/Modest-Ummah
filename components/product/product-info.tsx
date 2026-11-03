@@ -25,6 +25,7 @@ import {
 import { useCartStore, useWishlistStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
 import { formatPrice, cn, getImageUrl } from '@/lib/utils';
+import { trackProductViewed } from '@/lib/analytics';
 import type { Product } from '@/types';
 
 interface ProductInfoProps {
@@ -48,6 +49,8 @@ export default function ProductInfo({ product }: ProductInfoProps) {
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => trackProductViewed(product.id, product.price), [product.id, product.price]);
 
   const isSaved = mounted ? isInWishlist(product.id) : false;
 

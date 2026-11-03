@@ -29,6 +29,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCartStore, useAuthStore } from '@/lib/store';
 import { formatPrice, generateOrderId, getValidImageSrc } from '@/lib/utils';
+import { markPaymentReady, trackCheckoutStarted } from '@/lib/analytics';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -174,6 +175,7 @@ export default function CheckoutForm() {
   // Wait for hydration before checking cart
   useEffect(() => {
     setMounted(true);
+    trackCheckoutStarted(useCartStore.getState().items);
   }, []);
 
   useEffect(() => {
@@ -341,6 +343,7 @@ export default function CheckoutForm() {
       if (typeof resolvedTax === 'number') setServerTax(resolvedTax);
 
       setClientSecret(clientSecret);
+      markPaymentReady(clientSecret, resolvedTotal, items);
       setStep('payment');
     } catch (error: any) {
       console.error('Error creating payment intent:', error);

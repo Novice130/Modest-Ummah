@@ -2,10 +2,12 @@ import Link from 'next/link';
 import { CheckCircle, Package, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
+import { PaymentSucceededTracker } from '@/components/analytics/payment-succeeded-tracker';
 
 export default function CheckoutSuccessPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-muted/30 py-12">
+      <PaymentSucceededTracker />
       <Card className="max-w-lg w-full mx-4">
         <CardContent className="pt-8 text-center">
           <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
