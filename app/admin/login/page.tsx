@@ -3,6 +3,7 @@
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { adminSignIn } from '@/lib/api';
+import { TotpEnrollForm, TotpVerifyForm } from '@/components/admin/two-factor';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -29,6 +30,7 @@ function AdminLoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [twoFactor, setTwoFactor] = useState<'verify' | 'enroll' | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,6 +42,13 @@ function AdminLoginForm() {
 
       if (result && 'error' in result) {
         setError(result.error);
+        setLoading(false);
+        return;
+      }
+
+      if (result && 'twoFactor' in result) {
+        setPassword('');
+        setTwoFactor(result.twoFactor);
         setLoading(false);
         return;
       }
@@ -68,6 +77,22 @@ function AdminLoginForm() {
           </p>
         </div>
 
+        {twoFactor === 'verify' ? (
+          <TotpVerifyForm
+            onVerified={(usedRecoveryCode) =>
+              // A used recovery code usually means a lost phone: go straight to
+              // the page that replaces the authenticator.
+              router.push(usedRecoveryCode ? '/admin/settings/security' : redirectTo)
+            }
+            onCancel={() => setTwoFactor(null)}
+          />
+        ) : twoFactor === 'enroll' ? (
+          <TotpEnrollForm
+            required
+            onDone={() => router.push(redirectTo)}
+            onCancel={() => setTwoFactor(null)}
+          />
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Admin Email</Label>
@@ -130,6 +155,7 @@ function AdminLoginForm() {
             )}
           </Button>
         </form>
+        )}
 
         <div className="mt-6 text-center">
           <Link href="/" className="text-sm text-muted-foreground hover:text-primary">

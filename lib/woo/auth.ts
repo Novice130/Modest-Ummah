@@ -3,6 +3,7 @@ import type { NextRequest } from 'next/server';
 import { getDb } from '@/lib/db';
 import { apiKeys, integrationEvents, type ApiKeySelect } from '@/lib/schema';
 import { and, eq, gte, isNull, sql } from 'drizzle-orm';
+import { clientIpFromHeaders } from '@/lib/client-ip';
 import { decryptSecret } from '@/lib/woo/secret-box';
 import {
   consumeNonce,
@@ -218,9 +219,7 @@ export function isShimEnabled(): boolean {
 // ─── Request metadata ───────────────────────────────────
 
 export function clientIp(request: NextRequest): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  if (forwarded) return forwarded.split(',')[0].trim();
-  return request.headers.get('x-real-ip') || 'unknown';
+  return clientIpFromHeaders(request.headers);
 }
 
 function isSecure(request: NextRequest): boolean {

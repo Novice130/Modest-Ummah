@@ -54,6 +54,8 @@ export interface TokenPayload {
    * existed carry no claim; those are read as 0.
    */
   ver?: number;
+  /** Admin tokens only: this session passed the second factor. See below. */
+  mfa?: boolean;
 }
 
 export async function createToken(
@@ -139,6 +141,7 @@ export async function getAuthFromRequest(
   // route simply by being valid.
   const wantedType = isAdmin ? 'admin' : 'user';
   if (payload.type !== wantedType) return null;
+  if (isAdmin && !adminTokenPasses2fa(payload)) return null;
 
   // A signature alone is not enough for a customer token: it stays valid for
   // 7 days, so a token minted before the account was deleted or its password
@@ -174,4 +177,50 @@ async function tokenVersionIsCurrent(payload: TokenPayload): Promise<boolean> {
 
   if (!row) return false;
   return row.tokenVersion === (payload.ver ?? 0);
+}
+
+// ─── Admin second factor ────────────────────────────────
+
+/**
+ * Off unless exactly "true". Only ever reads the environment, so with the flag
+ * off nothing about admin sign-in touches the admin_totp table.
+ */
+export function isAdmin2faRequired(): boolean {
+  return process.env.ADMIN_2FA_REQUIRED === 'true';
+}
+
+/**
+ * Enforced wherever an admin token is accepted, so a token minted before the
+ * flag was turned on stops working at once instead of lasting out its 24h, and
+ * no route can forget the check. proxy.ts repeats this one line.
+ */
+export function adminTokenPasses2fa(payload: TokenPayload): boolean {
+  return !isAdmin2faRequired() || payload.mfa === true;
+}
+
+export const ADMIN_PENDING_COOKIE = 'admin_2fa_pending';
+export const ADMIN_PENDING_MAX_AGE_SECONDS = 600;
+
+/**
+ * Proof that the password was right and nothing more. Its `type` matches no
+ * check in the app, so it opens no route, cookie or bearer; only
+ * lib/actions/admin-2fa.actions.ts reads it.
+ */
+export async function createAdminPendingToken(adminId: string): Promise<string> {
+  return new SignJWT({ type: 'admin_2fa_pending' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setSubject(adminId)
+    .setIssuedAt()
+    .setIssuer(JWT_ISSUER)
+    .setExpirationTime(`${ADMIN_PENDING_MAX_AGE_SECONDS}s`)
+    .sign(getJwtSecret());
+}
+
+export async function verifyAdminPendingToken(token: string): Promise<string | null> {
+  try {
+    const { payload } = await jwtVerify(token, getJwtSecret(), { issuer: JWT_ISSUER });
+    return payload.type === 'admin_2fa_pending' && payload.sub ? payload.sub : null;
+  } catch {
+    return null;
+  }
 }

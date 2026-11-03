@@ -3,6 +3,7 @@ import { getDb } from '@/lib/db';
 import { users } from '@/lib/schema';
 import { createToken, createAuthCookie } from '@/lib/auth';
 import { eq } from 'drizzle-orm';
+import { rateLimitRoute } from '@/lib/rate-limit-guards';
 
 const VALID_CLIENT_IDS = [
   process.env.GOOGLE_CLIENT_ID,
@@ -16,6 +17,8 @@ const VALID_CLIENT_IDS = [
 
 export async function POST(request: NextRequest) {
   try {
+    const limited = rateLimitRoute(request, 'social');
+    if (limited) return limited;
     const { idToken } = await request.json();
 
     if (!idToken) {

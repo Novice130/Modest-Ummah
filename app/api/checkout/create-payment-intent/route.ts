@@ -7,9 +7,12 @@ import { resolveCheckoutOrder, normalizeShippingAddress, CheckoutRejectedError }
 import { generateOrderId } from '@/lib/utils';
 import { getAuthFromRequest } from '@/lib/auth';
 import type { ShippingAddressDB } from '@/lib/schema';
+import { rateLimitRoute } from '@/lib/rate-limit-guards';
 
 export async function POST(request: NextRequest) {
   try {
+    const limited = rateLimitRoute(request, 'paymentIntent');
+    if (limited) return limited;
     const body = await request.json();
     const {
       amount,
