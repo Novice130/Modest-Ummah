@@ -237,6 +237,44 @@ export async function fetchUserOrders() {
 }
 
 /**
+ * One order for the customer's own order page. The ownership check is in the
+ * query, so another customer's order, a guest order and an unknown id all look
+ * the same (null, which the page renders as a 404). Selects only what a
+ * customer may see: no notes, payment intent or label data. Admins get no
+ * bypass here; they have the admin order page.
+ */
+export async function fetchCustomerOrder(orderId: string) {
+  const session = await getSession();
+  if (!session?.id || !orderId) return null;
+
+  const db = getDb();
+  const [order] = await db
+    .select({
+      orderId: orders.orderId,
+      items: orders.items,
+      subtotal: orders.subtotal,
+      discount: orders.discount,
+      couponCode: orders.couponCode,
+      shipping: orders.shipping,
+      tax: orders.tax,
+      total: orders.total,
+      status: orders.status,
+      paymentStatus: orders.paymentStatus,
+      shippingAddress: orders.shippingAddress,
+      trackingNumber: orders.trackingNumber,
+      trackingCarrier: orders.trackingCarrier,
+      shippedAt: orders.shippedAt,
+      deliveredAt: orders.deliveredAt,
+      createdAt: orders.createdAt,
+    })
+    .from(orders)
+    .where(and(eq(orders.userId, session.id), eq(orders.orderId, orderId)))
+    .limit(1);
+
+  return order ?? null;
+}
+
+/**
  * Accepts the uuid or the human order number. The uuid column used to be
  * queried with any string first, which made Postgres throw on "ORD-…" before
  * the order-number fallback ever ran.
