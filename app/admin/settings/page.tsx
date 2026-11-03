@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -168,6 +169,18 @@ export default function AdminSettingsPage() {
             ))}
           </dl>
         </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Sign-in security</CardTitle>
+          <CardDescription>
+            Two-factor sign-in for admin accounts.{' '}
+            <Link href="/admin/settings/security" className="underline">
+              Manage two-factor
+            </Link>
+          </CardDescription>
+        </CardHeader>
       </Card>
 
       <PirateShipConnector />

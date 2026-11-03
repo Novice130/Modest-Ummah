@@ -6,6 +6,7 @@ import {
   integer,
   decimal,
   uuid,
+  bigint,
   jsonb,
   pgEnum,
   primaryKey,
@@ -365,6 +366,27 @@ export const stripeEvents = pgTable(
 );
 
 // ─── Admin login rate limiting ──────────────────────────
+/**
+ * Second factor for admins. A table of its own, not columns on `admins`: code
+ * that does select() on admins would break in production if a column shipped
+ * before its migration. Forward and rollback SQL: docs/migrations/admin_totp.sql.
+ * Read only when ADMIN_2FA_REQUIRED=true or on /admin/settings/security.
+ */
+export const adminTotp = pgTable('admin_totp', {
+  adminId: uuid('admin_id')
+    .primaryKey()
+    .references(() => admins.id, { onDelete: 'cascade' }),
+  /** AES-256-GCM under ADMIN_TOTP_ENC_KEY, see lib/totp.ts. */
+  secretEnc: text('secret_enc').notNull(),
+  /** Null until the first code proves the authenticator was set up. */
+  confirmedAt: timestamp('confirmed_at'),
+  /** Highest time step accepted. A code at or below it is a replay. */
+  lastUsedStep: bigint('last_used_step', { mode: 'number' }),
+  recoveryCodeHashes: text('recovery_code_hashes').array().notNull().default([]),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const adminLoginAttempts = pgTable(
   'admin_login_attempts',
   {

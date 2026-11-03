@@ -32,10 +32,12 @@ const protectedAdminRoutes = ['/admin'];
 // Admin login is public
 const adminLoginRoute = '/admin/login';
 
-async function verifyJWT(token: string): Promise<{ sub: string; type: string } | null> {
+async function verifyJWT(
+  token: string
+): Promise<{ sub: string; type: string; mfa?: boolean } | null> {
   try {
     const { payload } = await jwtVerify(token, getJwtSecret(), { issuer: JWT_ISSUER });
-    return payload as unknown as { sub: string; type: string };
+    return payload as unknown as { sub: string; type: string; mfa?: boolean };
   } catch {
     return null;
   }
@@ -57,7 +59,9 @@ export async function proxy(request: NextRequest) {
     }
 
     const payload = await verifyJWT(adminToken);
-    if (!payload || payload.type !== 'admin') {
+    // Same rule as adminTokenPasses2fa in lib/auth.ts.
+    const passes2fa = process.env.ADMIN_2FA_REQUIRED !== 'true' || payload?.mfa === true;
+    if (!payload || payload.type !== 'admin' || !passes2fa) {
       // Clear invalid cookie and redirect
       const response = NextResponse.redirect(loginUrl);
       response.cookies.delete('admin_token');

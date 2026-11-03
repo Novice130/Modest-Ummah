@@ -3,10 +3,13 @@ import { getDb } from '@/lib/db';
 import { users } from '@/lib/schema';
 import { verifyPassword, createToken, createAuthCookie } from '@/lib/auth';
 import { eq } from 'drizzle-orm';
+import { rateLimitRoute } from '@/lib/rate-limit-guards';
 
 export async function POST(request: NextRequest) {
   try {
     const { email, password } = await request.json();
+    const limited = rateLimitRoute(request, 'login', email);
+    if (limited) return limited;
 
     if (!email || !password) {
       return NextResponse.json(

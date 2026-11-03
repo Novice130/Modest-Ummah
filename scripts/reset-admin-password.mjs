@@ -76,3 +76,4 @@ const cleared = await query(
 console.log(`Password reset for ${email}.`);
 console.log(`Cleared ${cleared.rows.length} failed login attempt(s) / lockout.`);
 console.log('\nSign in at /admin/login with that email and your new password.');
+console.log('Two-factor enrolment is unchanged. Lost the phone too? See scripts/reset-admin-2fa.mjs.');

@@ -4,6 +4,7 @@ import { users } from '@/lib/schema';
 import { createToken, createAuthCookie } from '@/lib/auth';
 import { eq, or } from 'drizzle-orm';
 import { jwtVerify, createRemoteJWKSet } from 'jose';
+import { rateLimitRoute } from '@/lib/rate-limit-guards';
 
 const APPLE_JWKS = createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
 
@@ -16,6 +17,8 @@ const VALID_AUDIENCES = [
 
 export async function POST(request: NextRequest) {
   try {
+    const limited = rateLimitRoute(request, 'social');
+    if (limited) return limited;
     const { identityToken, name } = await request.json();
 
     if (!identityToken) {

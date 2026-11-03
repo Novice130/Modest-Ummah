@@ -8,6 +8,9 @@ import { users, admins } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
 import type { TokenPayload } from '@/lib/auth';
 import { adminIsLocked, recordAdminAttempt } from '@/lib/admin-login-guard';
+import { clientIpFromHeaders, ipLimitKey } from '@/lib/client-ip';
+import { rateLimitAction } from '@/lib/rate-limit-guards';
+import { adminTotpStage, type AdminTotpStage } from '@/lib/admin-2fa';
 
 export async function getSession(isAdmin = false) {
   const cookieName = isAdmin ? 'admin_token' : 'auth_token';
@@ -23,6 +26,7 @@ export async function getSession(isAdmin = false) {
 
   // Validate existence in DB
   if (isAdmin && payload.type === 'admin') {
+    if (!adminTokenPasses2fa(payload)) return null;
     const [admin] = await db.select().from(admins).where(eq(admins.email, payload.email)).limit(1);
     if (!admin) return null;
     return {
@@ -69,10 +73,22 @@ export async function setSession(token: string, isAdmin = false) {
   });
 }
 
-import { verifyPassword, createToken, hashPassword } from '@/lib/auth';
+import {
+  verifyPassword,
+  createToken,
+  hashPassword,
+  adminTokenPasses2fa,
+  isAdmin2faRequired,
+  createAdminPendingToken,
+  ADMIN_PENDING_COOKIE,
+  ADMIN_PENDING_MAX_AGE_SECONDS,
+} from '@/lib/auth';
 
 export async function signInAction(email: string, password: string) {
   if (!email || !password) return { error: 'Email and password are required' };
+
+  const limited = await rateLimitAction('login', { email });
+  if (limited) return { error: limited };
 
   try {
     const db = getDb();
@@ -106,15 +122,24 @@ export async function signInAction(email: string, password: string) {
   }
 }
 
-export async function adminSignInAction(email: string, password: string) {
+export async function adminSignInAction(
+  email: string,
+  password: string
+): Promise<
+  | { id: string; email: string; name: string }
+  | { twoFactor: AdminTotpStage }
+  | { error: string }
+> {
   if (!email || !password) return { error: 'Email and password required' };
 
   const normalizedEmail = email.toLowerCase().trim();
   const headersList = await headers();
-  const ip =
-    headersList.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    headersList.get('x-real-ip') ||
-    'unknown';
+  const ip = ipLimitKey(clientIpFromHeaders(headersList));
+
+  // In memory, ahead of the guard's queries: a flood stops here without waking
+  // the database.
+  const limited = await rateLimitAction('adminLogin');
+  if (limited) return { error: limited };
 
   try {
     if (await adminIsLocked(normalizedEmail, ip)) {
@@ -138,6 +163,21 @@ export async function adminSignInAction(email: string, password: string) {
       return { error: 'Invalid credentials' };
     }
 
+    // Fails closed: if the table is missing the catch below refuses the sign-in.
+    // The way out is to unset ADMIN_2FA_REQUIRED, see docs/admin-2fa.md.
+    if (isAdmin2faRequired()) {
+      const stage = await adminTotpStage(admin.id);
+      const cookieStore = await cookies();
+      cookieStore.set(ADMIN_PENDING_COOKIE, await createAdminPendingToken(admin.id), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: ADMIN_PENDING_MAX_AGE_SECONDS,
+        path: '/',
+      });
+      return { twoFactor: stage };
+    }
+
     const token = await createToken({
       sub: admin.id,
       email: admin.email,
@@ -156,6 +196,9 @@ export async function adminSignInAction(email: string, password: string) {
 
 export async function signUpAction(email: string, password: string, name: string) {
   if (!email || !password || !name) return { error: 'All fields are required' };
+
+  const limited = await rateLimitAction('register', { email });
+  if (limited) return { error: limited };
 
   try {
     const db = getDb();
