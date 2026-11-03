@@ -119,6 +119,18 @@ export interface Admin {
   verified: boolean;
 }
 
+/** A variant as the storefront picker sees it. Null price inherits the product's. */
+export interface StorefrontVariant {
+  id: string;
+  sku: string;
+  attributes: Record<string, string>;
+  price: number | null;
+  compareAtPrice: number | null;
+  stockQuantity: number;
+  inStock: boolean;
+  image: string | null;
+}
+
 // Cart types
 export interface CartItem {
   productId: string;

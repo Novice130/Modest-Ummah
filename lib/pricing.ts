@@ -1,11 +1,13 @@
 import { getDb } from '@/lib/db';
 import { categories, products, productVariants } from '@/lib/schema';
-import { inArray } from 'drizzle-orm';
+import { getTableColumns, inArray, sql } from 'drizzle-orm';
 import { getShippingRates, getFreeShippingInfo } from '@/lib/shipping';
 import { computeParcelFromWeights, DEFAULT_ITEM_WEIGHT_OZ } from '@/lib/parcel';
 import { toCarrierAddress } from '@/lib/address';
 import { calculateTax } from '@/lib/taxcloud';
 import { evaluateCoupon } from '@/lib/coupons';
+import { liveCondition } from '@/lib/product-live';
+import { findVariantByOptions, variantOptions } from '@/lib/variant-options';
 import type { OrderItem, ShippingAddressDB } from '@/lib/schema';
 
 export const MAX_QTY = 99;
@@ -29,6 +31,18 @@ export interface ResolvedOrder {
   taxEstimate: number;
   shippingService: string;
   couponCode: string | null;
+}
+
+/**
+ * A cart line the shopper has to change: the product is not for sale or the
+ * picked options are not a real variant. The checkout route answers 409 with
+ * this message instead of a 500.
+ */
+export class CheckoutRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CheckoutRejectedError';
+  }
 }
 
 function round2(n: number): number {
@@ -71,8 +85,10 @@ export async function resolveCheckoutOrder(input: {
     throw new Error('Cart items are missing product IDs');
   }
 
+  // isLive is the storefront's own rule, evaluated by the database so a due
+  // scheduled product stays buyable and a draft does not.
   const rows = await db
-    .select()
+    .select({ ...getTableColumns(products), isLive: sql<boolean>`${liveCondition()}` })
     .from(products)
     .where(inArray(products.id, productIds));
 
@@ -89,17 +105,12 @@ export async function resolveCheckoutOrder(input: {
     return id ? categorySlug.get(id) ?? '' : '';
   };
 
-  // Variant prices override the parent price. One query for all variants
-  // referenced by this cart.
-  const variantIds = [
-    ...new Set(items.map((i) => i.variantId).filter(Boolean)),
-  ] as string[];
-  const variantRows = variantIds.length
-    ? await db
-        .select()
-        .from(productVariants)
-        .where(inArray(productVariants.id, variantIds))
-    : [];
+  // Variant prices override the parent price. One query for every variant of
+  // the products in this cart: a line may name its variant by id or by options.
+  const variantRows = await db
+    .select()
+    .from(productVariants)
+    .where(inArray(productVariants.productId, productIds));
   const variantById = new Map(variantRows.map((v) => [v.id, v]));
 
   const resolvedItems: OrderItem[] = [];
@@ -108,6 +119,10 @@ export async function resolveCheckoutOrder(input: {
     const product = byId.get(item.productId);
     if (!product) {
       throw new Error('A product in your cart no longer exists');
+    }
+
+    if (product.isLive !== true) {
+      throw new CheckoutRejectedError(`${product.name} is not available for purchase`);
     }
 
     if (!Number.isInteger(item.quantity) || item.quantity < 1) {
@@ -119,19 +134,39 @@ export async function resolveCheckoutOrder(input: {
     let price: number;
     let sku: string | undefined;
     let image: string | undefined = item.image;
-    let variantId: string | undefined;
 
+    // A line that names options but no id (a cart saved before the picker sent
+    // ids) is resolved to its variant. A line with neither stays at the parent
+    // price: the mobile app has no variant picker and sends only product id and
+    // quantity, so rejecting it would stop mobile sales of variable products.
+    let variant: (typeof variantRows)[number] | undefined;
     if (item.variantId) {
-      const variant = variantById.get(item.variantId);
+      variant = variantById.get(item.variantId);
       if (!variant || variant.productId !== product.id) {
         throw new Error('A product variant in your cart no longer exists');
       }
+    } else if (product.productType === 'variable' && (item.size || item.color)) {
+      const siblings = variantRows.filter((v) => v.productId === product.id);
+      if (siblings.length > 0) {
+        variant = findVariantByOptions(siblings, item);
+        if (!variant) {
+          throw new CheckoutRejectedError(
+            `The selected options for ${product.name} are no longer available`
+          );
+        }
+      }
+    }
+
+    // What ships is the variant that was priced, so its own Size/Color go on
+    // the order rather than the labels the client sent.
+    const options = variantOptions(variant?.attributes);
+
+    if (variant) {
       price = variant.price !== null && variant.price !== undefined
         ? parseFloat(variant.price as string)
         : parseFloat(product.price as string);
       sku = variant.sku;
       image = variant.image || item.image;
-      variantId = variant.id;
     } else {
       price = parseFloat(product.price as string);
       sku = product.sku || undefined;
@@ -139,10 +174,7 @@ export async function resolveCheckoutOrder(input: {
 
     // Snapshot the per-unit weight onto the line item so the order still
     // reports what it was priced and shipped at after the product is edited.
-    const variantWeight = item.variantId
-      ? variantById.get(item.variantId)?.weight
-      : null;
-    const rawWeight = variantWeight ?? product.weight;
+    const rawWeight = variant?.weight ?? product.weight;
     const parsedWeight = rawWeight != null ? parseFloat(rawWeight as string) : NaN;
     const weightOz = Number.isFinite(parsedWeight) && parsedWeight > 0
       ? parsedWeight
@@ -150,12 +182,12 @@ export async function resolveCheckoutOrder(input: {
 
     resolvedItems.push({
       productId: product.id,
-      variantId,
+      variantId: variant?.id,
       name: product.name,
       price: round2(price || 0),
       quantity,
-      color: item.color,
-      size: item.size,
+      color: options.color ?? item.color,
+      size: options.size ?? item.size,
       image,
       sku,
       weightOz,

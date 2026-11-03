@@ -3,7 +3,7 @@ import { createPaymentIntent } from '@/lib/stripe';
 import { getDb } from '@/lib/db';
 import { orders } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
-import { resolveCheckoutOrder, normalizeShippingAddress } from '@/lib/pricing';
+import { resolveCheckoutOrder, normalizeShippingAddress, CheckoutRejectedError } from '@/lib/pricing';
 import { generateOrderId } from '@/lib/utils';
 import { getAuthFromRequest } from '@/lib/auth';
 import type { ShippingAddressDB } from '@/lib/schema';
@@ -116,6 +116,9 @@ export async function POST(request: NextRequest) {
       resolvedTax: resolved.tax,
     });
   } catch (error: any) {
+    if (error instanceof CheckoutRejectedError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     console.error('Payment intent creation error:', error);
     return NextResponse.json(
       { error: error.message || 'Failed to create payment intent' },

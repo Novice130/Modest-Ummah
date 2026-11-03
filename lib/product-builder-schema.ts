@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { stringifyCsv } from '@/lib/csv';
+import { optionKind } from '@/lib/variant-options';
 
 /**
  * The single source of truth for product data across the builder, the CSV
@@ -271,12 +272,7 @@ export function slugifyProductName(name: string): string {
  * input for those, an option NAMED Size or Color is the source: on save the
  * server writes its values into those columns.
  */
-export function optionKind(name: string): 'size' | 'color' | null {
-  const n = name.trim().toLowerCase();
-  if (/^sizes?$/.test(n)) return 'size';
-  if (/^colou?rs?$/.test(n)) return 'color';
-  return null;
-}
+export { optionKind };
 
 export const DEFAULT_SWATCH = '#d4d4d4';
 
