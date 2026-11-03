@@ -5,7 +5,8 @@ import ProductGallery from '@/components/product/product-gallery';
 import ProductInfo from '@/components/product/product-info';
 import ProductRecommendations from '@/components/product/product-recommendations';
 import { fetchProductBySlugOrId } from '@/lib/actions/product.actions';
-import type { Product } from '@/types';
+import { getProductVariantsCached } from '@/lib/catalog-cache';
+import type { Product, StorefrontVariant } from '@/types';
 
 interface ProductPageProps {
   params: Promise<{ slug: string }>;
@@ -49,9 +50,13 @@ export default async function ProductPage({ params }: ProductPageProps) {
   const { slug } = await params;
   
   let product: Product | null = null;
-  
+  let variants: StorefrontVariant[] = [];
+
   try {
     product = await fetchProductBySlugOrId(slug);
+    if (product?.productType === 'variable') {
+      variants = await getProductVariantsCached(product.id);
+    }
   } catch (error) {
     console.error('Failed to fetch product:', error);
   }
@@ -115,7 +120,7 @@ export default async function ProductPage({ params }: ProductPageProps) {
         {/* Product Layout */}
         <div className="grid lg:grid-cols-2 gap-8 lg:gap-12">
           <ProductGallery images={product.images} name={product.name} />
-          <ProductInfo product={product} />
+          <ProductInfo product={product} variants={variants} />
         </div>
 
         {/* Product Details Tabs would go here */}

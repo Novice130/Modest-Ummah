@@ -2,7 +2,7 @@ import { getDb } from '@/lib/db';
 import { products, productVariants } from '@/lib/schema';
 import { eq, sql } from 'drizzle-orm';
 import type { OrderItem } from '@/lib/schema';
-import { optionKind } from '@/lib/product-builder-schema';
+import { findVariantByOptions } from '@/lib/variant-options';
 
 /**
  * Inventory mutations on payment. WooCommerce's defining behavior:
@@ -33,17 +33,7 @@ async function matchVariantByOptions(productId: string, item: OrderItem): Promis
     .select({ id: productVariants.id, attributes: productVariants.attributes })
     .from(productVariants)
     .where(eq(productVariants.productId, productId));
-  const matches = rows.filter((v) => {
-    const entries = Object.entries(v.attributes || {});
-    return (
-      entries.length > 0 &&
-      entries.every(([name, value]) => {
-        const kind = optionKind(name);
-        return kind === 'size' ? value === item.size : kind === 'color' ? value === item.color : false;
-      })
-    );
-  });
-  return matches.length === 1 ? matches[0].id : undefined;
+  return findVariantByOptions(rows, item)?.id;
 }
 
 /**

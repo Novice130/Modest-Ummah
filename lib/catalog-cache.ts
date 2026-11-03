@@ -1,32 +1,12 @@
 'use cache';
 
 import { getDb } from '@/lib/db';
-import { categories, productTags, products, tags } from '@/lib/schema';
+import { categories, productTags, products, productVariants, tags } from '@/lib/schema';
 import { eq, ne, inArray, like, or, desc, asc, and, count, sql } from 'drizzle-orm';
 import { tagProductCatalogue, productCacheProfile, tagTaxonomy } from '@/lib/cache';
 import { buildCategoryRef, mapProduct } from '@/lib/product-mapper';
-import type { CategoryNode, Product, TagRef } from '@/types';
-
-/**
- * "Live on the storefront": published, or scheduled with a publish time that
- * has passed. Nothing flips scheduled rows on a timer any more (the publish
- * cron kept Neon awake), so every storefront read applies the schedule
- * itself. published_at is a UTC wall-clock `timestamp` (Drizzle writes
- * toISOString), hence the explicit UTC conversion of now().
- *
- * Cached entries evaluate now() when they are filled, so a scheduled product
- * appears once its entry next revalidates: at most PRODUCT_CACHE_PROFILE
- * .revalidate (15 min) after the publish time.
- */
-function liveCondition() {
-  return or(
-    eq(products.status, 'published'),
-    and(
-      eq(products.status, 'scheduled'),
-      sql`${products.publishedAt} <= (now() AT TIME ZONE 'UTC')`
-    )
-  )!;
-}
+import { liveCondition } from '@/lib/product-live';
+import type { CategoryNode, Product, StorefrontVariant, TagRef } from '@/types';
 
 /**
  * Catalogue visibility, as in WooCommerce: "public" shows everywhere,
@@ -231,6 +211,34 @@ export async function getProductCached(idOrSlug: string, includeUnpublished = fa
   if (!result) return null;
   const [hydrated] = await hydrate([result]);
   return hydrated ?? null;
+}
+
+/**
+ * A product's variants for the storefront picker. Tagged like the product, so
+ * a save refreshes it; stock can be as stale as the product's own (a sale does
+ * not invalidate the cache).
+ */
+export async function getProductVariantsCached(productId: string): Promise<StorefrontVariant[]> {
+  tagProductCatalogue(productId);
+  productCacheProfile();
+
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(productVariants)
+    .where(eq(productVariants.productId, productId))
+    .orderBy(asc(productVariants.position));
+
+  return rows.map((v) => ({
+    id: v.id,
+    sku: v.sku,
+    attributes: v.attributes,
+    price: v.price !== null ? parseFloat(v.price) : null,
+    compareAtPrice: v.compareAtPrice !== null ? parseFloat(v.compareAtPrice) : null,
+    stockQuantity: v.stockQuantity ?? 0,
+    inStock: v.inStock ?? true,
+    image: v.image,
+  }));
 }
 
 export async function getNewArrivalsCached(limit = 8) {
