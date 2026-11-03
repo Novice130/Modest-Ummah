@@ -366,12 +366,12 @@ export default function ProductInfo({ product, variants = [] }: ProductInfoProps
         <div className="flex flex-col items-center gap-1.5 p-1 border-x border-black/[0.06] dark:border-white/[0.08]">
           <RotateCcw className="h-4 w-4 text-[#2E7D5B] dark:text-[#5FBE92]" />
           <span className="text-[11px] font-semibold text-foreground">30-Day Returns</span>
-          <span className="text-[10px] text-muted-foreground">Hassle-free guarantee</span>
+          <span className="text-[10px] text-muted-foreground">Unworn, with tags attached</span>
         </div>
         <div className="flex flex-col items-center gap-1.5 p-1">
           <ShieldCheck className="h-4 w-4 text-[#2E7D5B] dark:text-[#5FBE92]" />
           <span className="text-[11px] font-semibold text-foreground">Secure Checkout</span>
-          <span className="text-[10px] text-muted-foreground">Apple-grade Stripe</span>
+          <span className="text-[10px] text-muted-foreground">Payments by Stripe</span>
         </div>
       </div>
 
@@ -401,10 +401,7 @@ export default function ProductInfo({ product, variants = [] }: ProductInfoProps
           </AccordionTrigger>
           <AccordionContent className="text-xs sm:text-sm text-muted-foreground leading-relaxed pt-1 space-y-2">
             <p>
-              • <strong>Dispatch:</strong> Dispatched in 1-2 business days with tracking.
-            </p>
-            <p>
-              • <strong>Packaging:</strong> Shipped in our signature luxury presentation box.
+              • <strong>Delivery:</strong> US standard shipping takes 5-10 business days. You will receive a tracking number by email when your order ships.
             </p>
             <p>
               • <strong>Returns:</strong> 30-day returns accepted on unworn pieces in original packaging.
