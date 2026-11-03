@@ -46,9 +46,6 @@ next-env.d.ts
 # PocketBase (legacy)
 pocketbase/pb_data/
 
-# Drizzle
-drizzle/
-
 # IDE
 .idea
 .vscode

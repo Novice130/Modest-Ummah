@@ -1,5 +1,7 @@
 # Modest Ummah — Complete Project Documentation
 
+> **Historic, not current (marked 2026-11-03).** Hosting and `db:push` steps here are out of date. See `README.md` and `docs/database-migrations.md`.
+
 > **Last Updated:** March 31, 2026  
 > **Version:** 2.0.0 (Post PocketBase → Neon Migration)  
 > **Stack:** Next.js 16 · Drizzle ORM · Neon PostgreSQL · Stripe · Tailwind CSS 4 · shadcn/ui
