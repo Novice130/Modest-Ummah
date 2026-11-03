@@ -161,6 +161,47 @@ manifest, and every Stripe entry sets `NSPrivacyCollectedDataTypeTracking` to
 | `FileTimestamp` | `C617.1` | `cached_network_image` disk cache |
 | `DiskSpace` | `E174.1` | image cache eviction |
 
+### When `SENTRY_DSN` is enabled
+
+Everything in this subsection applies **only to a build made with
+`--dart-define=SENTRY_DSN=...`**. Without a DSN the SDK is never started and the
+app sends no crash reports. The answers above still describe that build's data.
+
+The `Sentry` pod (8.58.4, through `sentry_flutter` 9.30.1) adds its own manifest,
+`Pods/Sentry/Sources/Resources/PrivacyInfo.xcprivacy`. It declares:
+
+| Data type (ASC label) | Collected | Linked to user | Used for tracking | Purpose(s) |
+|---|---|---|---|---|
+| Diagnostics → Crash Data | Yes | No | No | App Functionality |
+| Diagnostics → Performance Data | Yes | No | No | App Functionality |
+| Diagnostics → Other Diagnostic Data | Yes | No | No | App Functionality |
+
+The pod is linked into **every** build, so this manifest is in the archive and in
+Apple's generated privacy report even when no DSN is set. Decide the Diagnostics
+answers with that report in hand.
+
+`lib/core/observability/crash_reporting.dart` turns off tracing, sessions and hang
+tracking, so the app itself requests crash reports only. The Performance Data row
+comes from the pod's manifest, not from anything the app enables.
+
+The pod also declares required-reason APIs: `UserDefaults` (`CA92.1`),
+`FileTimestamp` (`C617.1`) and `SystemBootTime` (`35F9.1`). There is no ASC question
+for these.
+
+With a DSN, these statements elsewhere in this file stop being true:
+
+- "Diagnostics ... is **not collected**" in the list above.
+- "We ship no analytics SDK of our own" in the Stripe notes. Sentry reports
+  crashes only, but it is a third-party SDK that sends data.
+- "no third-party analytics of our own. The only SDK that reports telemetry is
+  Stripe's payment sheet" in the §5 notes to reviewer.
+
+Add the define to the §7 build command:
+
+```bash
+--dart-define=SENTRY_DSN=https://...
+```
+
 ### Export compliance
 
 `ITSAppUsesNonExemptEncryption` is `false` in `Info.plist` → ASC will not ask
