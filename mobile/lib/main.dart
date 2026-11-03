@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_stripe/flutter_stripe.dart';
 
+import 'core/observability/crash_reporting.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/app_theme.dart';
 
@@ -21,7 +22,9 @@ Future<void> main() async {
     await Stripe.instance.applySettings();
   }
 
-  runApp(const ProviderScope(child: ModestUmmahApp()));
+  await runWithCrashReporting(
+    () => runApp(const ProviderScope(child: ModestUmmahApp())),
+  );
 }
 
 class ModestUmmahApp extends StatelessWidget {

@@ -3,6 +3,7 @@ import { Suspense } from 'react';
 import { Poppins, Inter } from 'next/font/google';
 import { ThemeProvider } from '@/components/providers/theme-provider';
 import { SessionShell } from '@/components/providers/session-shell';
+import { PageViewTracker } from '@/components/analytics/page-view-tracker';
 import './globals.css';
 
 const poppins = Poppins({
@@ -99,6 +100,7 @@ export default function RootLayout({
         >
           <Suspense fallback={null}>
             <SessionShell>{children}</SessionShell>
+            <PageViewTracker />
           </Suspense>
         </ThemeProvider>
       </body>

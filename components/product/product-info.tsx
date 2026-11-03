@@ -27,6 +27,7 @@ import { useToast } from '@/hooks/use-toast';
 import { formatPrice, cn, getImageUrl } from '@/lib/utils';
 import { findVariantByOptions } from '@/lib/variant-options';
 import type { Product, StorefrontVariant } from '@/types';
+import { trackProductViewed } from '@/lib/analytics';
 
 interface ProductInfoProps {
   product: Product;
@@ -51,6 +52,8 @@ export default function ProductInfo({ product, variants = [] }: ProductInfoProps
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => trackProductViewed(product.id, product.price), [product.id, product.price]);
 
   const isSaved = mounted ? isInWishlist(product.id) : false;
 
