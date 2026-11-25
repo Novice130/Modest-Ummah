@@ -16,15 +16,28 @@ const _stripeKey = String.fromEnvironment('STRIPE_PUBLISHABLE_KEY');
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  if (_stripeKey.isNotEmpty) {
-    Stripe.publishableKey = _stripeKey;
-    Stripe.merchantIdentifier = 'merchant.com.modestummah';
-    await Stripe.instance.applySettings();
-  }
+  await configureStripe(_stripeKey);
 
   await runWithCrashReporting(
     () => runApp(const ProviderScope(child: ModestUmmahApp())),
   );
+}
+
+/// A payments setup failure must never stop the shop from opening: browsing
+/// works without Stripe, and flutter_stripe applies its settings again on the
+/// first payment call.
+Future<void> configureStripe(
+  String key, {
+  Future<void> Function()? applySettings,
+}) async {
+  if (key.isEmpty) return;
+  try {
+    Stripe.publishableKey = key;
+    Stripe.merchantIdentifier = 'merchant.com.modestummah';
+    await (applySettings ?? Stripe.instance.applySettings)();
+  } catch (e) {
+    debugPrint('Stripe setup failed: $e');
+  }
 }
 
 class ModestUmmahApp extends StatelessWidget {

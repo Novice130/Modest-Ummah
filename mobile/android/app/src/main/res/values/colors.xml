@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The background of ios/Runner/Base.lproj/LaunchScreen.storyboard. -->
+    <color name="launch_background">#FAF8F5</color>
+    <!-- The paper tone at the edge of the app icon artwork. -->
+    <color name="ic_launcher_background">#EFE8DE</color>
+</resources>

@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
+import '../common/legal_links.dart';
 import '../common/states.dart';
 
 class AccountScreen extends ConsumerWidget {
@@ -20,15 +21,42 @@ class AccountScreen extends ConsumerWidget {
       );
     }
 
+    if (auth.restoreFailed) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('ACCOUNT')),
+        body: Column(
+          children: [
+            Expanded(
+              child: MessageState(
+                title: 'Could not reach Modest Ummah',
+                body: 'Check your connection. You are still signed in.',
+                icon: Icons.cloud_off_outlined,
+                actionLabel: 'Try again',
+                onAction: () => ref.read(authProvider.notifier).retryRestore(),
+              ),
+            ),
+            const LegalLinks(),
+          ],
+        ),
+      );
+    }
+
     if (!auth.isSignedIn) {
       return Scaffold(
         appBar: AppBar(title: const Text('ACCOUNT')),
-        body: MessageState(
-          title: 'Sign in',
-          body: 'Track orders, save addresses and check out faster.',
-          icon: Icons.person_outline,
-          actionLabel: 'Sign in or register',
-          onAction: () => context.push('/auth'),
+        body: Column(
+          children: [
+            Expanded(
+              child: MessageState(
+                title: 'Sign in',
+                body: 'Check out and track your orders.',
+                icon: Icons.person_outline,
+                actionLabel: 'Sign in or register',
+                onAction: () => context.push('/auth'),
+              ),
+            ),
+            const LegalLinks(),
+          ],
         ),
       );
     }
@@ -62,7 +90,9 @@ class AccountScreen extends ConsumerWidget {
             onTap: () => ref.read(authProvider.notifier).signOut(),
           ),
           const Divider(height: 1),
-          const SizedBox(height: 40),
+          const SizedBox(height: 16),
+          const LegalLinks(),
+          const SizedBox(height: 24),
           // App Store Guideline 5.1.1(v): an app that creates accounts must
           // let the customer delete one from inside the app. Reviewers test
           // this, so it stays reachable rather than buried behind support.

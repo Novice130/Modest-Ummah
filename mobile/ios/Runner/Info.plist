@@ -28,6 +28,14 @@
 			</array>
 		</dict>
 	</array>
+	<!-- google_sign_in reads its iOS configuration from these two keys. Without
+	     them the SDK raises an exception when sign-in starts. The values are the
+	     iOS and web OAuth clients from GoogleService-Info.plist and the server's
+	     allow-list in app/api/auth/google/route.ts. -->
+	<key>GIDClientID</key>
+	<string>488492087162-6do55jqj0ldo5efjvsibea9ehfl324nk.apps.googleusercontent.com</string>
+	<key>GIDServerClientID</key>
+	<string>488492087162-3gtbu198aonl52qckg9cdnk7s52l6c0a.apps.googleusercontent.com</string>
 	<!-- HTTPS only in release, so the standard export exemption applies. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>

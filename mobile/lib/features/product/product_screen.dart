@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../checkout/checkout_gate.dart';
 import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/palette.dart';
@@ -92,7 +93,7 @@ class _ProductBodyState extends ConsumerState<_ProductBody> {
     ref.read(cartProvider.notifier).add(p);
 
     if (checkout) {
-      context.push('/checkout');
+      openCheckout(context, ref);
       return;
     }
 
@@ -303,12 +304,6 @@ class _Gallery extends StatelessWidget {
                     onTap: () => context.pop(),
                   ),
                   const Spacer(),
-                  _GlassButton(
-                    icon: Icons.ios_share,
-                    tooltip: 'Share',
-                    onTap: () => HapticFeedback.selectionClick(),
-                  ),
-                  const SizedBox(width: 8),
                   _GlassButton(
                     icon: saved ? Icons.favorite : Icons.favorite_border,
                     tint: saved ? Brand.sale : null,
@@ -583,7 +578,7 @@ class _Summary extends StatelessWidget {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'Secure checkout · Apple Pay and card',
+                'Secure checkout · Payments by Stripe',
                 style: AppText.bodySmall.copyWith(color: muted),
               ),
             ),

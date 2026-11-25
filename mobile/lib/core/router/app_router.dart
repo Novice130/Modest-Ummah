@@ -89,7 +89,8 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/orders',
       parentNavigatorKey: _rootKey,
-      builder: (_, __) => const OrdersScreen(),
+      builder: (_, state) =>
+          OrdersScreen(paymentJustCompleted: state.extra == true),
     ),
   ],
 );

@@ -7,6 +7,7 @@ import '../../core/providers/providers.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/palette.dart';
 import '../../data/models/models.dart';
+import '../checkout/checkout_gate.dart';
 import '../common/product_image.dart';
 import '../common/states.dart';
 import '../common/surface_card.dart';
@@ -261,7 +262,7 @@ class _CheckoutBar extends ConsumerWidget {
                 height: 50,
                 width: double.infinity,
                 child: FilledButton(
-                  onPressed: () => context.push('/checkout'),
+                  onPressed: () => openCheckout(context, ref),
                   style: FilledButton.styleFrom(
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(999),

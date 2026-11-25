@@ -1,5 +1,7 @@
 package com.modestummah.modest_ummah
 
-import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.android.FlutterFragmentActivity
 
-class MainActivity : FlutterActivity()
+// FlutterFragmentActivity, not FlutterActivity: Stripe's payment sheet needs the
+// support fragment manager.
+class MainActivity : FlutterFragmentActivity()
