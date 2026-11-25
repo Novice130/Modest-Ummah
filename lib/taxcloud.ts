@@ -130,19 +130,20 @@ export async function calculateTax(params: {
   const apiLoginId = process.env.TAXCLOUD_API_LOGIN_ID;
   const apiKey = process.env.TAXCLOUD_API_KEY;
 
-  // If TaxCloud is not configured, fall back to estimate
-  if (!apiLoginId || !apiKey) {
-    console.warn('TaxCloud not configured, using estimated tax rate');
-    const subtotal = params.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const estimatedRate = getEstimatedTaxRate(params.shippingAddress.state);
+  // Tax is collected only where the store is registered (has nexus). Anywhere
+  // else nothing is charged and TaxCloud is not called.
+  const nexusRate = getNexusTaxRate(params.shippingAddress.state);
+  if (nexusRate === null) {
     return {
       success: true,
-      totalTax: Math.round(subtotal * estimatedRate * 100) / 100,
-      itemTaxes: params.items.map(item => ({
-        itemId: item.id,
-        taxAmount: Math.round(item.price * item.quantity * estimatedRate * 100) / 100,
-      })),
+      totalTax: 0,
+      itemTaxes: params.items.map((item) => ({ itemId: item.id, taxAmount: 0 })),
     };
+  }
+
+  // Without TaxCloud, the configured rate for that state is charged.
+  if (!apiLoginId || !apiKey) {
+    return flatRateTax(params.items, nexusRate);
   }
 
   const origin = getTaxCloudOriginAddress();
@@ -214,19 +215,8 @@ export async function calculateTax(params: {
   } catch (error: any) {
     console.error('TaxCloud API error:', error);
     
-    // Fall back to estimated tax
-    const subtotal = params.items.reduce((sum, item) => sum + item.price * item.quantity, 0);
-    const estimatedRate = getEstimatedTaxRate(params.shippingAddress.state);
-    
-    return {
-      success: false,
-      totalTax: Math.round(subtotal * estimatedRate * 100) / 100,
-      itemTaxes: params.items.map(item => ({
-        itemId: item.id,
-        taxAmount: Math.round(item.price * item.quantity * estimatedRate * 100) / 100,
-      })),
-      error: error.message,
-    };
+    // Fall back to the configured rate for this (nexus) state.
+    return { ...flatRateTax(params.items, nexusRate), success: false, error: error.message };
   }
 }
 
@@ -378,24 +368,47 @@ function getTICForProduct(category: string): string {
 }
 
 /**
- * Estimated tax rates by state (fallback when TaxCloud is not configured)
+ * States where the store collects sales tax, and the rate it charges there,
+ * from SALES_TAX_RATES, e.g. "IL:0.0875". The store is in Romeoville, Illinois
+ * and ships from there, so Illinois taxes every Illinois order at the rate of
+ * the shipping location (origin sourcing for in-state retailers), whatever the
+ * customer's Illinois address. Other states are added only once the store
+ * registers there (economic nexus, usually $100,000 of sales into that state).
+ * Unset means no state: nothing is charged anywhere, with a warning.
  */
-function getEstimatedTaxRate(state: string): number {
-  const rates: Record<string, number> = {
-    'AL': 0.04, 'AK': 0.00, 'AZ': 0.056, 'AR': 0.065, 'CA': 0.0725,
-    'CO': 0.029, 'CT': 0.0635, 'DE': 0.00, 'FL': 0.06, 'GA': 0.04,
-    'HI': 0.04, 'ID': 0.06, 'IL': 0.0625, 'IN': 0.07, 'IA': 0.06,
-    'KS': 0.065, 'KY': 0.06, 'LA': 0.0445, 'ME': 0.055, 'MD': 0.06,
-    'MA': 0.0625, 'MI': 0.06, 'MN': 0.06875, 'MS': 0.07, 'MO': 0.04225,
-    'MT': 0.00, 'NE': 0.055, 'NV': 0.0685, 'NH': 0.00, 'NJ': 0.06625,
-    'NM': 0.05125, 'NY': 0.08, 'NC': 0.0475, 'ND': 0.05, 'OH': 0.0575,
-    'OK': 0.045, 'OR': 0.00, 'PA': 0.06, 'RI': 0.07, 'SC': 0.06,
-    'SD': 0.045, 'TN': 0.07, 'TX': 0.0625, 'UT': 0.0485, 'VT': 0.06,
-    'VA': 0.053, 'WA': 0.065, 'WV': 0.06, 'WI': 0.05, 'WY': 0.04,
-    'DC': 0.06,
-  };
+function getNexusTaxRates(): Map<string, number> {
+  const raw = process.env.SALES_TAX_RATES?.trim();
+  const rates = new Map<string, number>();
+  if (!raw) {
+    console.warn('SALES_TAX_RATES is not set: no sales tax is being charged');
+    return rates;
+  }
+  for (const part of raw.split(',')) {
+    const [state, value] = part.split(':').map((v) => v?.trim());
+    const rate = Number(value);
+    if (!/^[A-Za-z]{2}$/.test(state || '') || !Number.isFinite(rate) || rate < 0 || rate >= 0.2) {
+      throw new Error(`SALES_TAX_RATES entry is invalid: "${part}" (expected e.g. IL:0.0875)`);
+    }
+    rates.set(state!.toUpperCase(), rate);
+  }
+  return rates;
+}
 
-  return rates[state.toUpperCase()] || 0.07; // Default 7% if state not found
+/** The rate to charge for a destination state, or null where the store has no nexus. */
+export function getNexusTaxRate(state: string): number | null {
+  return getNexusTaxRates().get((state || '').trim().toUpperCase()) ?? null;
+}
+
+function flatRateTax(
+  items: Array<{ id: string; price: number; quantity: number }>,
+  rate: number
+): { success: true; totalTax: number; itemTaxes: Array<{ itemId: string; taxAmount: number }> } {
+  const itemTaxes = items.map((item) => ({
+    itemId: item.id,
+    taxAmount: Math.round(item.price * item.quantity * rate * 100) / 100,
+  }));
+  const totalTax = Math.round(itemTaxes.reduce((sum, t) => sum + t.taxAmount, 0) * 100) / 100;
+  return { success: true, totalTax, itemTaxes };
 }
 
 /**

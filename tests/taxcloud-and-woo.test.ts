@@ -44,12 +44,33 @@ describe('TaxCloud origin requirement', () => {
     },
   };
 
-  it('uses estimated tax without requiring origin when TaxCloud keys are unset', async () => {
+  it('charges the configured nexus rate without requiring origin when TaxCloud keys are unset', async () => {
+    vi.stubEnv('SALES_TAX_RATES', 'IL:0.0875');
     vi.stubEnv('TAXCLOUD_API_LOGIN_ID', '');
     vi.stubEnv('TAXCLOUD_API_KEY', '');
     const res = await calculateTax(taxInput);
     expect(res.success).toBe(true);
-    expect(res.totalTax).toBeGreaterThan(0);
+    expect(res.totalTax).toBe(4.38);
+  });
+
+  it('charges nothing and never calls TaxCloud outside nexus states', async () => {
+    vi.stubEnv('SALES_TAX_RATES', 'IL:0.0875');
+    vi.stubEnv('TAXCLOUD_API_LOGIN_ID', 'login');
+    vi.stubEnv('TAXCLOUD_API_KEY', 'key');
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await calculateTax({ ...taxInput, shippingAddress: { ...taxInput.shippingAddress, state: 'CA' } });
+    expect(res.totalTax).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('charges nothing when SALES_TAX_RATES is unset, and rejects a malformed value', async () => {
+    vi.stubEnv('SALES_TAX_RATES', '');
+    vi.stubEnv('TAXCLOUD_API_LOGIN_ID', '');
+    vi.stubEnv('TAXCLOUD_API_KEY', '');
+    expect((await calculateTax(taxInput)).totalTax).toBe(0);
+    vi.stubEnv('SALES_TAX_RATES', 'IL:8.75');
+    await expect(calculateTax(taxInput)).rejects.toThrow(/SALES_TAX_RATES/);
   });
 
   it('fails loudly instead of sending 123 Business St when TaxCloud keys are set without origin', async () => {
@@ -59,6 +80,7 @@ describe('TaxCloud origin requirement', () => {
     vi.stubEnv('TAXCLOUD_ORIGIN_CITY', '');
     vi.stubEnv('TAXCLOUD_ORIGIN_STATE', '');
     vi.stubEnv('TAXCLOUD_ORIGIN_ZIP5', '');
+    vi.stubEnv('SALES_TAX_RATES', 'IL:0.0875');
 
     expect(() => getTaxCloudOriginAddress()).toThrow(/TaxCloud origin is not configured/);
     await expect(calculateTax(taxInput)).rejects.toThrow(/TAXCLOUD_ORIGIN_ADDRESS1/);
@@ -71,6 +93,7 @@ describe('TaxCloud origin requirement', () => {
     vi.stubEnv('TAXCLOUD_ORIGIN_CITY', 'Austin');
     vi.stubEnv('TAXCLOUD_ORIGIN_STATE', 'TX');
     vi.stubEnv('TAXCLOUD_ORIGIN_ZIP5', '78701');
+    vi.stubEnv('SALES_TAX_RATES', 'IL:0.0875');
 
     const fetchMock = vi.fn(async () =>
       new Response(JSON.stringify({ ResponseType: 3, CartItemsResponse: [{ CartItemIndex: 0, TaxAmount: 4.13 }], Messages: [] }))
