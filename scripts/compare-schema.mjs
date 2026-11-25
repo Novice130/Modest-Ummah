@@ -73,8 +73,22 @@ function normalizeType(type) {
   return type.replace(/\s+/g, '').toLowerCase();
 }
 
+// information_schema reports arrays as data_type 'ARRAY' with udt_name '_<element>'.
+const ARRAY_ELEMENT_NAMES = {
+  int2: 'smallint',
+  int4: 'integer',
+  int8: 'bigint',
+  bool: 'boolean',
+  float4: 'real',
+  float8: 'doubleprecision',
+};
+
 function dbType(row) {
   if (row.data_type === 'USER-DEFINED') return normalizeType(row.udt_name);
+  if (row.data_type === 'ARRAY' && row.udt_name?.startsWith('_')) {
+    const element = row.udt_name.slice(1);
+    return `${normalizeType(ARRAY_ELEMENT_NAMES[element] ?? element)}[]`;
+  }
   if (row.data_type === 'timestamp without time zone') return 'timestamp';
   if (row.data_type === 'timestamp with time zone') return 'timestamptz';
   if (row.data_type === 'numeric' && row.numeric_precision != null) {
