@@ -83,10 +83,10 @@ export default function Hero() {
             </div>
             <div>
               <p className="text-2xl md:text-4xl font-heading font-bold text-white">30 Day</p>
-              <p className="text-white/60 text-sm">Easy Returns</p>
+              <p className="text-white/60 text-sm">Returns</p>
             </div>
             <div>
-              <p className="text-2xl md:text-4xl font-heading font-bold text-white">24/7</p>
+              <p className="text-2xl md:text-4xl font-heading font-bold text-white">Email</p>
               <p className="text-white/60 text-sm">Support</p>
             </div>
           </motion.div>

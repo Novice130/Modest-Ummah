@@ -11,7 +11,7 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "node -e \"console.error('db:push is disabled: it bypasses migration history. See docs/database-migrations.md.'); process.exit(1)\"",
     "db:studio": "drizzle-kit studio",
-    "postbuild": "next-sitemap",
+    "test": "vitest run",
     "check:analytics": "node scripts/check-analytics.mjs"
   },
   "dependencies": {
@@ -79,6 +79,7 @@
     "eslint-config-next": "^16.4.6",
     "postcss": "^8.5.0",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
   }
 }

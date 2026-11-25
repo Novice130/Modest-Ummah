@@ -54,6 +54,8 @@ export interface TokenPayload {
    * existed carry no claim; those are read as 0.
    */
   ver?: number;
+  /** Seconds since the epoch; set by createToken when the token is signed. */
+  iat?: number;
   /** Admin tokens only: this session passed the second factor. See below. */
   mfa?: boolean;
 }
@@ -148,14 +150,23 @@ export async function getAuthFromRequest(
   // rotated would still open the account routes. One indexed lookup settles
   // both — a deleted user has no row, and a rotation bumped token_version.
   //
-  // The admins table has no counter, so an admin token is only checked for
-  // its row still existing: deleting the admin revokes it at once rather than
-  // after 24h. getSession() does the same.
-  if (isAdmin ? !(await adminStillExists(payload)) : !(await tokenVersionIsCurrent(payload))) {
+  // The admins table has no counter, so an admin token is judged both for its
+  // row still existing and against updated_at (which a password reset bumps).
+  if (isAdmin ? !(await adminTokenIsCurrent(payload)) : !(await tokenVersionIsCurrent(payload))) {
     return null;
   }
 
   return payload;
+}
+
+/**
+ * Whether an admin token predates the last change to the admin's row. Compared
+ * in whole seconds because `iat` has no finer resolution: a token minted in the
+ * same second as the change stays valid.
+ */
+export function adminTokenPredatesRow(iat: number | undefined, updatedAt: Date): boolean {
+  if (typeof iat !== 'number') return true;
+  return iat < Math.floor(updatedAt.getTime() / 1000);
 }
 
 /**
@@ -182,7 +193,7 @@ async function tokenVersionIsCurrent(payload: TokenPayload): Promise<boolean> {
   return row.tokenVersion === (payload.ver ?? 0);
 }
 
-async function adminStillExists(payload: TokenPayload): Promise<boolean> {
+async function adminTokenIsCurrent(payload: TokenPayload): Promise<boolean> {
   const [{ getDb }, { admins }, { eq }] = await Promise.all([
     import('./db'),
     import('./schema'),
@@ -190,11 +201,11 @@ async function adminStillExists(payload: TokenPayload): Promise<boolean> {
   ]);
 
   const [row] = await getDb()
-    .select({ id: admins.id })
+    .select({ updatedAt: admins.updatedAt })
     .from(admins)
     .where(eq(admins.id, payload.sub))
     .limit(1);
-  return !!row;
+  return !!row && !adminTokenPredatesRow(payload.iat, row.updatedAt);
 }
 
 // ─── Admin second factor ────────────────────────────────

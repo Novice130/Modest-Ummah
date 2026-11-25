@@ -3,6 +3,7 @@
 import { cookies } from 'next/headers';
 import { headers } from 'next/headers';
 import { verifyToken, clearAuthCookie, createAuthCookie } from '@/lib/auth';
+import { setSessionCookie } from '@/lib/session-cookie';
 import { getDb } from '@/lib/db';
 import { users, admins } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
@@ -30,6 +31,7 @@ export async function getSession(isAdmin = false) {
     if (!adminTokenPasses2fa(payload)) return null;
     const [admin] = await db.select().from(admins).where(eq(admins.email, payload.email)).limit(1);
     if (!admin) return null;
+    if (adminTokenPredatesRow(payload.iat, admin.updatedAt)) return null;
     return {
       id: admin.id,
       email: admin.email,
@@ -60,25 +62,12 @@ export async function clearSession(isAdmin = false) {
   cookieStore.delete(cookieName);
 }
 
-export async function setSession(token: string, isAdmin = false) {
-  const maxAge = isAdmin ? 86400 : 604800; // 24h or 7d
-  const cookieName = isAdmin ? 'admin_token' : 'auth_token';
-  
-  const cookieStore = await cookies();
-  cookieStore.set(cookieName, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: maxAge,
-    path: '/',
-  });
-}
-
 import {
   verifyPassword,
   createToken,
   hashPassword,
   adminTokenPasses2fa,
+  adminTokenPredatesRow,
   isAdmin2faRequired,
   createAdminPendingToken,
   ADMIN_PENDING_COOKIE,
@@ -108,7 +97,7 @@ export async function signInAction(email: string, password: string) {
       ver: user.tokenVersion,
     });
 
-    await setSession(token, false);
+    await setSessionCookie(token, false);
 
     const { passwordHash: _, ...safeUser } = user;
     return {
@@ -186,7 +175,7 @@ export async function adminSignInAction(
       type: 'admin',
     }, true);
 
-    await setSession(token, true);
+    await setSessionCookie(token, true);
 
     return { id: admin.id, email: admin.email, name: admin.name || '' };
   } catch (e) {
@@ -226,7 +215,7 @@ export async function signUpAction(email: string, password: string, name: string
       ver: user.tokenVersion,
     });
 
-    await setSession(token, false);
+    await setSessionCookie(token, false);
 
     const { passwordHash: _, ...safeUser } = user;
     return {

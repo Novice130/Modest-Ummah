@@ -30,12 +30,22 @@ export default function WishlistPage() {
 
     let cancelled = false;
 
-    // Fetch catalogue to filter down saved pieces
-    fetch('/api/v1/products?limit=100')
-      .then((res) => (res.ok ? res.json() : Promise.reject(res)))
-      .then((data) => {
+    // Fetch catalogue to filter down saved pieces. The API caps perPage at 60,
+    // so a larger catalogue has to be walked page by page.
+    const fetchPage = (page: number) =>
+      fetch(`/api/v1/products?perPage=60&page=${page}`).then((res) =>
+        res.ok ? res.json() : Promise.reject(res)
+      );
+
+    fetchPage(1)
+      .then(async (first) => {
+        const rest = await Promise.all(
+          Array.from({ length: Math.max(0, (first.totalPages || 1) - 1) }, (_, i) => fetchPage(i + 2))
+        );
+        return [first, ...rest].flatMap((data) => data.items || []) as Product[];
+      })
+      .then((allItems) => {
         if (cancelled) return;
-        const allItems: Product[] = data.items || [];
         const matched = allItems.filter((p) => savedIds.includes(p.id) || savedIds.includes(p.slug));
         setProducts(matched);
       })

@@ -6,8 +6,9 @@
  * target endpoints that do not exist; PIRATESHIP_API_KEY is set in no
  * environment, so every function here takes its "not configured" branch:
  *
- *  - getShippingRates() returns getEstimatedRates(), the zone table that
- *    checkout actually charges from (see lib/pricing.ts).
+ *  - getShippingRates() returns getEstimatedRates(), the flat US rates from
+ *    app/shipping/page.tsx that checkout actually charges (see lib/pricing.ts).
+ *    Other countries get no rate and a refusal: nothing here can price them.
  *  - getTracking() reports "not configured"; /api/shipping/tracking falls
  *    back to the carrier's public tracking page.
  *  - createShipment / schedulePickup / cancelShipment / verifyAddress have
@@ -155,6 +156,10 @@ export async function getShippingRates(params: {
   rates: ShippingRate[];
   error?: string;
 }> {
+  if (!isUnitedStates(params.destination.country)) {
+    return { success: false, rates: [], error: UNSUPPORTED_COUNTRY_MESSAGE };
+  }
+
   const apiKey = process.env.PIRATESHIP_API_KEY;
 
   // If Pirate Ship is not configured, return estimated rates
@@ -162,7 +167,7 @@ export async function getShippingRates(params: {
     console.warn('Pirate Ship not configured, using estimated rates');
     return {
       success: true,
-      rates: getEstimatedRates(params.destination.state, params.package.weight),
+      rates: getEstimatedRates(),
     };
   }
 
@@ -170,7 +175,7 @@ export async function getShippingRates(params: {
   if (!origin) {
     return {
       success: true,
-      rates: getEstimatedRates(params.destination.state, params.package.weight),
+      rates: getEstimatedRates(),
     };
   }
 
@@ -215,7 +220,7 @@ export async function getShippingRates(params: {
     console.error('Pirate Ship rates error:', error);
     return {
       success: false,
-      rates: getEstimatedRates(params.destination.state, params.package.weight),
+      rates: getEstimatedRates(),
       error: error.message,
     };
   }
@@ -488,59 +493,50 @@ export async function verifyAddress(address: ShippingAddress): Promise<{
 }
 
 /**
- * Get estimated shipping rates (fallback when API not configured)
+ * The US rates published on app/shipping/page.tsx. Keep the two in step.
+ * estimatedDays is the top of the published range.
  */
-function getEstimatedRates(destinationState: string, weight: number): ShippingRate[] {
-  // Determine zone (simplified)
-  const eastCoast = ['ME', 'NH', 'VT', 'MA', 'RI', 'CT', 'NY', 'NJ', 'PA', 'DE', 'MD', 'DC', 'VA', 'WV', 'NC', 'SC', 'GA', 'FL'];
-  const midwest = ['OH', 'MI', 'IN', 'WI', 'IL', 'MN', 'IA', 'MO', 'ND', 'SD', 'NE', 'KS'];
-  
-  const zone = eastCoast.includes(destinationState.toUpperCase()) ? 'near' 
-    : midwest.includes(destinationState.toUpperCase()) ? 'medium' 
-    : 'far';
-
-  const zoneMultiplier = { near: 1, medium: 1.3, far: 1.6 };
-  const baseRate = weight <= 16 ? 4.99 : weight <= 32 ? 7.99 : 12.99;
-
+function getEstimatedRates(): ShippingRate[] {
   return [
     {
       carrier: 'USPS',
       service: 'usps_ground_advantage',
-      serviceName: 'USPS Ground Advantage',
-      rate: Math.round(baseRate * zoneMultiplier[zone] * 100) / 100,
-      estimatedDays: zone === 'near' ? 3 : zone === 'medium' ? 5 : 7,
+      serviceName: 'Standard Shipping',
+      rate: 9.99,
+      estimatedDays: 10,
       guaranteed: false,
     },
     {
       carrier: 'USPS',
       service: 'usps_priority',
-      serviceName: 'USPS Priority Mail',
-      rate: Math.round((baseRate + 4) * zoneMultiplier[zone] * 100) / 100,
-      estimatedDays: zone === 'near' ? 2 : zone === 'medium' ? 3 : 4,
+      serviceName: 'Express Shipping',
+      rate: 14.99,
+      estimatedDays: 4,
       guaranteed: false,
-    },
-    {
-      carrier: 'USPS',
-      service: 'usps_priority_express',
-      serviceName: 'USPS Priority Mail Express',
-      rate: Math.round((baseRate + 20) * zoneMultiplier[zone] * 100) / 100,
-      estimatedDays: zone === 'near' ? 1 : 2,
-      guaranteed: true,
     },
   ];
 }
 
+export const UNSUPPORTED_COUNTRY_MESSAGE =
+  'Sorry, we can only ship to addresses in the United States at the moment. For an international order, please email support@modestummah.com.';
+
+/** An absent country means US, the default lib/address.ts already applies. */
+export function isUnitedStates(country: string | null | undefined): boolean {
+  const c = (country || 'US').trim().toUpperCase();
+  return ['US', 'USA', 'UNITED STATES', 'UNITED STATES OF AMERICA'].includes(c);
+}
+
 /**
- * Get free shipping threshold info
+ * Get free shipping threshold info. Free shipping is US only.
  */
-export function getFreeShippingInfo(subtotal: number): {
+export function getFreeShippingInfo(subtotal: number, country?: string | null): {
   eligible: boolean;
   threshold: number;
   amountNeeded: number;
 } {
   const threshold = 75; // $75 for free shipping
   return {
-    eligible: subtotal >= threshold,
+    eligible: isUnitedStates(country) && subtotal >= threshold,
     threshold,
     amountNeeded: Math.max(0, threshold - subtotal),
   };

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { ArrowRight, Heart, Shield, Users, Leaf } from 'lucide-react';
+import { ArrowRight, Heart, Shield, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export const metadata: Metadata = {
@@ -18,35 +18,12 @@ const values = [
   {
     icon: Shield,
     title: 'Quality First',
-    description: 'We source premium materials and employ skilled craftspeople to ensure lasting quality.',
+    description: 'We choose our materials and products with lasting quality in mind.',
   },
   {
     icon: Users,
     title: 'Community Driven',
-    description: 'Built by Muslims, for Muslims, with input from our vibrant community.',
-  },
-  {
-    icon: Leaf,
-    title: 'Sustainable',
-    description: 'Committed to ethical production and environmentally conscious practices.',
-  },
-];
-
-const team = [
-  {
-    name: 'Ahmed Rahman',
-    role: 'Founder & CEO',
-    image: '/images/team/ahmed.jpg',
-  },
-  {
-    name: 'Fatima Hassan',
-    role: 'Creative Director',
-    image: '/images/team/fatima.jpg',
-  },
-  {
-    name: 'Omar Khalid',
-    role: 'Head of Operations',
-    image: '/images/team/omar.jpg',
+    description: 'Built for the Muslim community.',
   },
 ];
 
@@ -77,12 +54,11 @@ export default function AboutPage() {
               <h2 className="font-heading text-3xl md:text-4xl mb-6">Our Story</h2>
               <div className="space-y-4 text-muted-foreground">
                 <p>
-                  Modest Ummah was founded in 2020 with a 
-                  mission to make quality modest clothing accessible to Muslims worldwide.
+                  Modest Ummah&apos;s mission is to make quality modest clothing accessible
+                  to Muslims.
                 </p>
                 <p>
-                  What started as a small online store has grown into a beloved brand serving 
-                  customers across the globe. From traditional thobes and elegant abayas to 
+                  We are an online store. From traditional thobes and elegant abayas to
                   essential sunnah items like miswak and attar, we curate products that honor 
                   our heritage while embracing modern aesthetics.
                 </p>
@@ -112,7 +88,7 @@ export default function AboutPage() {
               These principles guide everything we do, from design to delivery.
             </p>
           </div>
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="grid md:grid-cols-3 gap-8">
             {values.map((value) => (
               <div key={value.title} className="text-center">
                 <div className="w-16 h-16 bg-sage-100 dark:bg-sage-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -120,27 +96,6 @@ export default function AboutPage() {
                 </div>
                 <h3 className="font-heading text-xl mb-2">{value.title}</h3>
                 <p className="text-sm text-muted-foreground">{value.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Team */}
-      <section className="py-16 md:py-24">
-        <div className="container-custom">
-          <div className="text-center mb-12">
-            <h2 className="font-heading text-3xl md:text-4xl mb-4">Meet Our Team</h2>
-            <p className="text-muted-foreground max-w-2xl mx-auto">
-              The passionate people behind Modest Ummah.
-            </p>
-          </div>
-          <div className="grid md:grid-cols-3 gap-8 max-w-4xl mx-auto">
-            {team.map((member) => (
-              <div key={member.name} className="text-center">
-                <div className="w-32 h-32 bg-sage-100 rounded-full mx-auto mb-4" />
-                <h3 className="font-heading text-lg">{member.name}</h3>
-                <p className="text-sm text-muted-foreground">{member.role}</p>
               </div>
             ))}
           </div>

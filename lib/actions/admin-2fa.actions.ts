@@ -10,7 +10,8 @@ import {
   isAdmin2faRequired,
   verifyAdminPendingToken,
 } from '@/lib/auth';
-import { getSession, setSession } from './auth.actions';
+import { getSession } from './auth.actions';
+import { setSessionCookie } from '@/lib/session-cookie';
 import { rateLimitAction } from '@/lib/rate-limit-guards';
 import {
   confirmEnrollment,
@@ -54,7 +55,7 @@ async function completeSignIn(adminId: string): Promise<boolean> {
     { sub: admin.id, email: admin.email, name: admin.name || '', type: 'admin', mfa: true },
     true
   );
-  await setSession(token, true);
+  await setSessionCookie(token, true);
   const cookieStore = await cookies();
   cookieStore.delete(ADMIN_PENDING_COOKIE);
   return true;

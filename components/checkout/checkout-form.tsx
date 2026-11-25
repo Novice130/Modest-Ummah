@@ -187,6 +187,7 @@ export default function CheckoutForm() {
 
   // Calculate shipping and tax when address is submitted
   const onSubmitInfo = async (data: CheckoutFormData) => {
+    setApiError(null);
     setIsCalculating(true);
     setAddressData(data);
     
@@ -220,6 +221,11 @@ export default function CheckoutForm() {
       });
       
       const shippingData = await shippingResponse.json();
+      if (shippingResponse.status === 422) {
+        // A refusal, not an outage: stop here rather than use the fallback rates.
+        setApiError(shippingData.error);
+        return;
+      }
       if (shippingData.success && shippingData.rates.length > 0) {
         setShippingRates(shippingData.rates);
         // Auto-select cheapest or free shipping
@@ -546,6 +552,11 @@ export default function CheckoutForm() {
               </CardContent>
             </Card>
 
+            {apiError && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm" role="alert">
+                {apiError}
+              </div>
+            )}
             <Button type="submit" size="lg" className="w-full" disabled={isCalculating}>
               {isCalculating ? (
                 <>

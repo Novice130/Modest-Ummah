@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 # Build stage
-FROM node:20-slim AS builder
+FROM node:24-slim AS builder
 
 # Increase Node memory for build
 ENV NODE_OPTIONS="--max-old-space-size=2048"
@@ -50,7 +50,7 @@ RUN --mount=type=secret,id=database_url,env=DATABASE_URL \
     npm run build || (echo "=== BUILD FAILED ===" && cat .next/build-error.log 2>/dev/null; exit 1)
 
 # Production stage
-FROM node:20-slim AS runner
+FROM node:24-slim AS runner
 
 WORKDIR /app
 

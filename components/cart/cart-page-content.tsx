@@ -207,7 +207,7 @@ export default function CartPageContent() {
 
           <div className="flex items-center justify-center gap-2 text-[11px] text-muted-foreground pt-1">
             <ShieldCheck className="h-3.5 w-3.5 text-[#2E7D5B] dark:text-[#5FBE92]" />
-            <span>Secure checkout encrypted with 256-bit SSL</span>
+            <span>Payments processed by Stripe</span>
           </div>
         </SurfaceCard>
       </div>

@@ -7,8 +7,9 @@ import { findVariantByOptions } from '@/lib/variant-options';
 /**
  * Inventory mutations on payment. WooCommerce's defining behavior:
  * stock drops when payment succeeds (not at order placement), and a
- * refund restocks. The webhook idempotency table (stripe_events) is the
- * only thing that prevents a Stripe retry from double-decrementing.
+ * refund restocks. The webhook calls these one line at a time, each under a
+ * lib/webhook-ledger.ts step, which is what prevents a Stripe retry from
+ * double-decrementing. A failed write therefore has to throw.
  *
  * Rules, matching the product builder's save path:
  *  - a product with "Manage stock" off is never decremented, and its manual
@@ -39,14 +40,15 @@ async function matchVariantByOptions(productId: string, item: OrderItem): Promis
 /**
  * Apply a stock change for each line item. `sign` 1 decrements (payment),
  * -1 restocks (refund). Returns the items that could not be fully
- * satisfied so the caller can log an oversell.
+ * satisfied so the caller can log an oversell. `failed` marks a line whose
+ * stock write did not happen.
  */
 export async function applyStockDelta(
   items: OrderItem[],
   sign: 1 | -1
-): Promise<Array<{ item: OrderItem; available: number }>> {
+): Promise<Array<{ item: OrderItem; available: number; failed?: boolean }>> {
   const db = getDb();
-  const oversold: Array<{ item: OrderItem; available: number }> = [];
+  const oversold: Array<{ item: OrderItem; available: number; failed?: boolean }> = [];
 
   for (const item of items) {
     if (!item.productId) continue;
@@ -103,14 +105,21 @@ export async function applyStockDelta(
           oversold.push({ item, available: before?.qty ?? 0 });
         }
 
-        // The parent row carries the total the storefront shows.
-        await db
-          .update(products)
-          .set({
-            stockQuantity: sql`(SELECT coalesce(sum(${productVariants.stockQuantity}), 0) FROM ${productVariants} WHERE ${productVariants.productId} = ${product.id})`,
-            inStock: sql`EXISTS (SELECT 1 FROM ${productVariants} WHERE ${productVariants.productId} = ${product.id} AND ${productVariants.inStock} = true)`,
-          })
-          .where(eq(products.id, product.id));
+        // The parent row carries the total the storefront shows. It is derived
+        // and re-derived on the next sale or save, so failing here must not
+        // report the line as failed: the variant write above already landed,
+        // and a retry would decrement it twice.
+        try {
+          await db
+            .update(products)
+            .set({
+              stockQuantity: sql`(SELECT coalesce(sum(${productVariants.stockQuantity}), 0) FROM ${productVariants} WHERE ${productVariants.productId} = ${product.id})`,
+              inStock: sql`EXISTS (SELECT 1 FROM ${productVariants} WHERE ${productVariants.productId} = ${product.id} AND ${productVariants.inStock} = true)`,
+            })
+            .where(eq(products.id, product.id));
+        } catch (error) {
+          console.error('Failed to refresh parent stock for product:', product.id, error);
+        }
       } else {
         const [before] = await db
           .select({ qty: products.stockQuantity })
@@ -131,19 +140,26 @@ export async function applyStockDelta(
       }
     } catch (error) {
       console.error('Failed to apply stock delta for item:', item.productId, error);
-      oversold.push({ item, available: 0 });
+      oversold.push({ item, available: 0, failed: true });
     }
   }
 
   return oversold;
 }
 
+function throwIfFailed(results: Array<{ failed?: boolean }>) {
+  const count = results.filter((r) => r.failed).length;
+  if (count > 0) throw new Error(`Stock update failed for ${count} line(s)`);
+}
+
 /**
  * Decrement on payment success. Oversells are logged, not fatal — the
- * customer has already paid; the order must complete.
+ * customer has already paid; the order must complete. A failed write throws
+ * so the webhook can retry it.
  */
 export async function decrementStock(items: OrderItem[]) {
   const oversold = await applyStockDelta(items, 1);
+  throwIfFailed(oversold);
   for (const { item, available } of oversold) {
     console.error(
       `OVERSOLD: ${item.name} (product ${item.productId}${item.variantId ? ` variant ${item.variantId}` : ''}) — wanted ${item.quantity}, had ${available}`
@@ -152,8 +168,8 @@ export async function decrementStock(items: OrderItem[]) {
 }
 
 /**
- * Restock on refund.
+ * Restock on refund. A failed write throws so the webhook can retry it.
  */
 export async function restock(items: OrderItem[]) {
-  await applyStockDelta(items, -1);
+  throwIfFailed(await applyStockDelta(items, -1));
 }

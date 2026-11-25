@@ -6,6 +6,7 @@ import { computeParcelFromWeights, DEFAULT_ITEM_WEIGHT_OZ } from '@/lib/parcel';
 import { toCarrierAddress } from '@/lib/address';
 import { calculateTax } from '@/lib/taxcloud';
 import { evaluateCoupon } from '@/lib/coupons';
+import { priceForSaleWindow } from '@/lib/sale-window';
 import { liveCondition } from '@/lib/product-live';
 import { findVariantByOptions, variantOptions } from '@/lib/variant-options';
 import type { OrderItem, ShippingAddressDB } from '@/lib/schema';
@@ -47,6 +48,14 @@ export class CheckoutRejectedError extends Error {
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function checkedOption(value: unknown, allowed: string[], label: string): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string' || !allowed.includes(value)) {
+    throw new CheckoutRejectedError(`The selected ${label} is no longer available. Please update your cart.`);
+  }
+  return value;
 }
 
 export function normalizeShippingAddress(raw: unknown): ShippingAddressDB {
@@ -175,11 +184,27 @@ export async function resolveCheckoutOrder(input: {
         ? parseFloat(variant.price as string)
         : parseFloat(product.price as string);
       sku = variant.sku;
-      image = variant.image || item.image;
     } else {
       price = parseFloat(product.price as string);
       sku = product.sku || undefined;
     }
+
+    price = priceForSaleWindow(price, product, variant);
+
+    // Nothing descriptive is taken from the client: the image comes from the
+    // catalogue and options not defined by the variant must exist on the product.
+    image = variant?.image || product.images?.[0] || undefined;
+    const variantAttrOptions = Object.values(variant?.attributes || {});
+    const color =
+      options.color ??
+      checkedOption(
+        item.color,
+        [...(product.colors || []).map((c) => c.name), ...variantAttrOptions],
+        'color'
+      );
+    const size =
+      options.size ??
+      checkedOption(item.size, [...(product.sizes || []), ...variantAttrOptions], 'size');
 
     // A missing or zero price is a catalogue mistake, never a free item.
     if (!Number.isFinite(price) || price <= 0) {
@@ -200,8 +225,8 @@ export async function resolveCheckoutOrder(input: {
       name: product.name,
       price: round2(price),
       quantity,
-      color: options.color ?? item.color,
-      size: options.size ?? item.size,
+      color,
+      size,
       image,
       sku,
       weightOz,
@@ -247,14 +272,20 @@ export async function resolveCheckoutOrder(input: {
     package: parcel,
   });
 
+  // No rate means no way to ship there, never a US rate as a stand-in.
+  if (ratesResult.rates.length === 0) {
+    throw new CheckoutRejectedError(ratesResult.error || 'Shipping is not available for this address');
+  }
+
   const selected =
     ratesResult.rates.find((r) => r.service === input.shippingService) ||
     ratesResult.rates[0];
 
-  const freeShipping = getFreeShippingInfo(taxableSubtotal);
-  const shipping = freeShipping.eligible
-    ? 0
-    : round2(selected?.rate ?? 9.99);
+  // Free shipping covers standard only (app/shipping/page.tsx), which is the
+  // cheapest rate; the checkout form shows it the same way.
+  const freeShipping = getFreeShippingInfo(taxableSubtotal, address.country);
+  const shippingIsFree = freeShipping.eligible && selected === ratesResult.rates[0];
+  const shipping = shippingIsFree ? 0 : round2(selected.rate);
 
   const taxResult = await calculateTax({
     items: resolvedItems.map((item) => {
@@ -287,7 +318,7 @@ export async function resolveCheckoutOrder(input: {
     tax,
     total: round2(taxableSubtotal + shipping + tax),
     taxEstimate: tax,
-    shippingService: freeShipping.eligible ? 'standard' : (selected?.service || 'standard'),
+    shippingService: shippingIsFree ? 'standard' : selected.service,
     couponCode: coupon.couponCode || null,
   };
 }

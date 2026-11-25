@@ -68,15 +68,38 @@ export interface TaxCloudCaptureRequest {
   dateCaptured: string;
 }
 
-// Your business origin address (shipping from)
-const ORIGIN_ADDRESS: TaxCloudAddress = {
-  address1: process.env.TAXCLOUD_ORIGIN_ADDRESS1 || '123 Business St',
-  address2: process.env.TAXCLOUD_ORIGIN_ADDRESS2 || '',
-  city: process.env.TAXCLOUD_ORIGIN_CITY || 'New York',
-  state: process.env.TAXCLOUD_ORIGIN_STATE || 'NY',
-  zip5: process.env.TAXCLOUD_ORIGIN_ZIP5 || '10001',
-  zip4: process.env.TAXCLOUD_ORIGIN_ZIP4 || '',
-};
+/**
+ * Business origin address resolved from the environment per call (not at module
+ * load, so `next build` can evaluate this module cleanly). Fails loudly when
+ * TaxCloud credentials are present without a configured origin address.
+ */
+export function getTaxCloudOriginAddress(): TaxCloudAddress {
+  const required = {
+    address1: process.env.TAXCLOUD_ORIGIN_ADDRESS1,
+    city: process.env.TAXCLOUD_ORIGIN_CITY,
+    state: process.env.TAXCLOUD_ORIGIN_STATE,
+    zip5: process.env.TAXCLOUD_ORIGIN_ZIP5,
+  };
+
+  const missing = Object.entries(required)
+    .filter(([, value]) => !value?.trim())
+    .map(([key]) => `TAXCLOUD_ORIGIN_${key.toUpperCase()}`);
+
+  if (missing.length > 0) {
+    throw new Error(
+      `TaxCloud origin is not configured. Set ${missing.join(', ')} before calculating tax.`
+    );
+  }
+
+  return {
+    address1: required.address1!.trim(),
+    address2: process.env.TAXCLOUD_ORIGIN_ADDRESS2?.trim() || '',
+    city: required.city!.trim(),
+    state: required.state!.trim(),
+    zip5: required.zip5!.trim(),
+    zip4: process.env.TAXCLOUD_ORIGIN_ZIP4?.trim() || '',
+  };
+}
 
 /**
  * Calculate sales tax using TaxCloud API
@@ -122,6 +145,8 @@ export async function calculateTax(params: {
     };
   }
 
+  const origin = getTaxCloudOriginAddress();
+
   // Map items to TaxCloud format
   const cartItems: TaxCloudCartItem[] = params.items.map((item, index) => ({
     index,
@@ -158,7 +183,7 @@ export async function calculateTax(params: {
         customerId: params.customerId || 'guest',
         cartId: params.cartId || `cart_${Date.now()}`,
         cartItems,
-        origin: ORIGIN_ADDRESS,
+        origin,
         destination,
         deliveredBySeller: false,
       }),

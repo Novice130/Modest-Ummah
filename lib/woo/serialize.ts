@@ -272,6 +272,21 @@ export function serializeOrder(
 
 // ─── Products ───────────────────────────────────────────
 
+export function isProductLiveAt(
+  product: { status?: string | null; publishedAt?: Date | string | null },
+  now: Date = new Date()
+): boolean {
+  if (product.status === 'published') return true;
+  if (product.status === 'scheduled' && product.publishedAt != null) {
+    const at =
+      product.publishedAt instanceof Date
+        ? product.publishedAt
+        : new Date(product.publishedAt);
+    return Number.isFinite(at.getTime()) && at.getTime() <= now.getTime();
+  }
+  return false;
+}
+
 export function serializeProduct(
   product: ProductSelect,
   options: {
@@ -304,7 +319,7 @@ export function serializeProduct(
     date_modified: modified.local,
     date_modified_gmt: modified.gmt,
     type: product.productType === 'variable' ? 'variable' : 'simple',
-    status: product.status === 'published' ? 'publish' : 'draft',
+    status: isProductLiveAt(product) ? 'publish' : 'draft',
     featured: Boolean(product.featured),
     catalog_visibility: product.visibility === 'public' ? 'visible' : 'hidden',
     description: product.description || '',

@@ -71,6 +71,28 @@ export const users = pgTable(
   ]
 );
 
+// ─── Password reset tokens ──────────────────────────────
+// Only a SHA-256 digest is stored. The raw token is 32 bytes of CSPRNG output,
+// so there is no low-entropy secret for a slow hash to protect. Created by
+// scripts/apply-password-reset.mjs.
+export const passwordResetTokens = pgTable(
+  'password_reset_tokens',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull(),
+    expiresAt: timestamp('expires_at').notNull(),
+    usedAt: timestamp('used_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex('idx_password_reset_tokens_hash').on(table.tokenHash),
+    index('idx_password_reset_tokens_user').on(table.userId),
+  ]
+);
+
 // ─── Admins ─────────────────────────────────────────────
 export const admins = pgTable(
   'admins',

@@ -38,6 +38,11 @@ export interface ExtractedTracking {
   carrier: string;
 }
 
+/** Strip whitespace and uppercase tracking numbers so Pirate Ship retries compare cleanly. */
+export function normalizeTrackingNumber(value: unknown): string {
+  return typeof value === 'string' ? value.trim().replace(/\s+/g, '').toUpperCase() : '';
+}
+
 /** Pull a tracking number and carrier out of free text (an order note). */
 export function extractTracking(text: string): ExtractedTracking | null {
   if (!text) return null;
@@ -45,7 +50,7 @@ export function extractTracking(text: string): ExtractedTracking | null {
   for (const { carrier, pattern } of TRACKING_PATTERNS) {
     const match = text.match(pattern);
     if (match) {
-      return { trackingNumber: match[1].toUpperCase(), carrier: carrierHint(text) || carrier };
+      return { trackingNumber: normalizeTrackingNumber(match[1]), carrier: carrierHint(text) || carrier };
     }
   }
   return null;
@@ -103,8 +108,11 @@ export function parseTrackingMeta(metaData: unknown): ParsedMeta {
     if (key === '_wc_shipment_tracking_items' && Array.isArray(raw.value)) {
       const first = raw.value[0] as Record<string, unknown> | undefined;
       if (first) {
-        if (typeof first.tracking_number === 'string') out.trackingNumber = first.tracking_number;
-        if (typeof first.tracking_provider === 'string') out.carrier = first.tracking_provider;
+        const trackingNumber = normalizeTrackingNumber(first.tracking_number);
+        if (trackingNumber) out.trackingNumber = trackingNumber;
+        if (typeof first.tracking_provider === 'string' && first.tracking_provider.trim()) {
+          out.carrier = first.tracking_provider.trim();
+        }
       }
       continue;
     }
@@ -112,8 +120,10 @@ export function parseTrackingMeta(metaData: unknown): ParsedMeta {
     const value = typeof raw.value === 'string' ? raw.value.trim() : '';
     if (!value) continue;
 
-    if (TRACKING_META_KEYS.has(key)) out.trackingNumber = value;
-    else if (CARRIER_META_KEYS.has(key)) out.carrier = value;
+    if (TRACKING_META_KEYS.has(key)) {
+      const trackingNumber = normalizeTrackingNumber(value);
+      if (trackingNumber) out.trackingNumber = trackingNumber;
+    } else if (CARRIER_META_KEYS.has(key)) out.carrier = value;
     else if (LABEL_META_KEYS.has(key)) out.labelUrl = value;
     else if (SHIPMENT_META_KEYS.has(key)) out.shipmentId = value;
   }
@@ -156,7 +166,7 @@ export async function applyWriteback(
   const meta = parseTrackingMeta(input.meta_data);
   const fromNote = input.noteText ? extractTracking(input.noteText) : null;
 
-  const trackingNumber = meta.trackingNumber || fromNote?.trackingNumber || null;
+  const trackingNumber = normalizeTrackingNumber(meta.trackingNumber || fromNote?.trackingNumber) || null;
   const carrier = meta.carrier || fromNote?.carrier || null;
 
   const update: Partial<typeof orders.$inferInsert> = {};
@@ -177,7 +187,8 @@ export async function applyWriteback(
   }
 
   // Tracking
-  const trackingIsNew = Boolean(trackingNumber) && trackingNumber !== order.trackingNumber;
+  const existingTracking = normalizeTrackingNumber(order.trackingNumber) || null;
+  const trackingIsNew = Boolean(trackingNumber) && trackingNumber !== existingTracking;
   if (trackingIsNew) {
     update.trackingNumber = trackingNumber;
     update.externalSource = 'pirateship';

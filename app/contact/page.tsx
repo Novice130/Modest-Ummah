@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Mail, MapPin, Clock, Send } from 'lucide-react';
+import { Mail, Send } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ContactForm } from '@/components/contact/contact-form';
 
@@ -14,19 +14,7 @@ const contactInfo = [
     icon: Mail,
     title: 'Email',
     details: 'support@modestummah.com',
-    description: 'We\'ll respond within 24 hours',
-  },
-  {
-    icon: MapPin,
-    title: 'Location',
-    details: 'New York, NY',
-    description: 'Online store — we ship worldwide',
-  },
-  {
-    icon: Clock,
-    title: 'Hours',
-    details: 'Mon-Fri: 9am-6pm EST',
-    description: 'Sat: 10am-4pm EST',
+    description: 'We reply by email',
   },
 ];
 
@@ -55,7 +43,7 @@ export default function ContactPage() {
             {/* Contact Info */}
             <div>
               <h2 className="font-heading text-2xl mb-6">Contact Information</h2>
-              <div className="grid sm:grid-cols-2 gap-4">
+              <div className="grid gap-4">
                 {contactInfo.map((info) => (
                   <div key={info.title} className="border rounded-lg p-6 bg-card">
                     <div className="flex items-start gap-4">
@@ -75,8 +63,7 @@ export default function ContactPage() {
               <div className="mt-8 p-6 bg-muted rounded-lg">
                 <p className="text-sm text-muted-foreground">
                   <Send className="h-4 w-4 inline mr-2 text-sage-600" />
-                  Messages go straight to our support inbox. Please include your order number
-                  if you have one.
+                  Please include your order number if you have one.
                 </p>
               </div>
             </div>

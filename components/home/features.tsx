@@ -7,7 +7,7 @@ const features = [
   {
     icon: Truck,
     title: 'Free Shipping',
-    description: 'Free shipping on orders over $75. Fast delivery worldwide.',
+    description: 'Free US shipping on orders of $75 or more after discounts.',
   },
   {
     icon: Shield,
@@ -16,13 +16,13 @@ const features = [
   },
   {
     icon: RefreshCw,
-    title: 'Easy Returns',
-    description: '30-day return policy. No questions asked.',
+    title: 'Returns',
+    description: '30-day return policy on unworn items. See our returns page for details.',
   },
   {
     icon: Headphones,
-    title: '24/7 Support',
-    description: "We're here to help you anytime you need us.",
+    title: 'Email Support',
+    description: 'Reach us at support@modestummah.com.',
   },
 ];
 

@@ -11,7 +11,30 @@
  * 4. Add BREVO_API_KEY to your environment variables
  */
 
+import * as Sentry from '@sentry/nextjs';
+
 const BREVO_API_URL = 'https://api.brevo.com/v3';
+
+/** Every value placed in email HTML goes through this. */
+export function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/** For href/src: http(s) or a site-relative path only, escaped. Otherwise empty. */
+function safeUrl(value: unknown): string {
+  const url = String(value ?? '').trim();
+  return /^(https?:\/\/|\/(?!\/))/i.test(url) ? escapeHtml(url) : '';
+}
+
+/** Fixed text only: Brevo's own messages can quote the recipient's address. */
+function reportEmailFailure(message: string) {
+  Sentry.captureMessage(message, { level: 'error' });
+}
 
 interface EmailRecipient {
   email: string;
@@ -45,19 +68,6 @@ interface OrderEmailData {
 }
 
 /**
- * Escapes a value for HTML text or a quoted attribute. Every customer- or
- * DB-supplied value interpolated into a template below goes through this.
- */
-function escapeHtml(value: unknown): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-/**
  * Get authorization header for Brevo API
  */
 function getAuthHeader(): Record<string, string> {
@@ -85,7 +95,12 @@ export async function sendEmail(params: {
   const apiKey = process.env.BREVO_API_KEY;
 
   if (!apiKey) {
-    console.warn('Brevo not configured, skipping email');
+    if (process.env.NODE_ENV === 'production') {
+      console.error('BREVO_API_KEY is not set: email was NOT sent');
+      reportEmailFailure('BREVO_API_KEY is not set: email was not sent');
+    } else {
+      console.warn('Brevo not configured, skipping email');
+    }
     return { success: false, error: 'Email not configured' };
   }
 
@@ -114,29 +129,75 @@ export async function sendEmail(params: {
     const data = await response.json();
     return { success: true, messageId: data.messageId };
   } catch (error: any) {
-    console.error('Brevo email error:', error);
+    console.error('Brevo email send failed');
+    reportEmailFailure('Brevo email send failed');
     return { success: false, error: error.message };
   }
+}
+
+function orderItemsHtml(items: OrderItem[]): string {
+  return items
+    .map((item) => {
+      const image = safeUrl(item.image);
+      return `
+      <tr>
+        <td style="padding: 12px; border-bottom: 1px solid #eee;">
+          ${image ? `<img src="${image}" alt="${escapeHtml(item.name)}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;">` : ''}
+        </td>
+        <td style="padding: 12px; border-bottom: 1px solid #eee;">${escapeHtml(item.name)}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">${escapeHtml(item.quantity)}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">$${item.price.toFixed(2)}</td>
+      </tr>
+    `;
+    })
+    .join('');
+}
+
+function addressHtml(address: OrderEmailData['shippingAddress']): string {
+  return `
+          ${escapeHtml(address.street1)}<br>
+          ${address.street2 ? escapeHtml(address.street2) + '<br>' : ''}
+          ${escapeHtml(address.city)}, ${escapeHtml(address.state)} ${escapeHtml(address.zip)}<br>
+          ${escapeHtml(address.country)}
+  `;
+}
+
+/**
+ * New-order alert to the store. The caller passes the recipient (the store
+ * contact email setting), which keeps this file free of database access.
+ */
+export async function sendNewOrderAlert(
+  order: OrderEmailData,
+  adminEmail: string
+): Promise<{ success: boolean; error?: string }> {
+  const htmlContent = `
+    <!DOCTYPE html>
+    <html>
+    <head><meta charset="utf-8"></head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <h1 style="color: #8B7355; font-size: 22px;">New order #${escapeHtml(order.orderId)}</h1>
+      <p><strong>Total:</strong> $${order.total.toFixed(2)} (shipping $${order.shipping.toFixed(2)}, tax $${order.tax.toFixed(2)})</p>
+      <p><strong>Customer:</strong> ${escapeHtml(order.customerName)}, ${escapeHtml(order.email)}</p>
+      <table style="width: 100%; border-collapse: collapse;"><tbody>${orderItemsHtml(order.items)}</tbody></table>
+      <h3 style="margin-top: 24px;">Ship to</h3>
+      <p style="margin: 0;">${addressHtml(order.shippingAddress)}</p>
+    </body>
+    </html>
+  `;
+
+  return sendEmail({
+    to: [{ email: adminEmail }],
+    subject: `New order #${order.orderId} - $${order.total.toFixed(2)}`,
+    htmlContent,
+    replyTo: { email: order.email, name: order.customerName },
+  });
 }
 
 /**
  * Send order confirmation email
  */
 export async function sendOrderConfirmation(order: OrderEmailData): Promise<{ success: boolean; error?: string }> {
-  const itemsHtml = order.items
-    .map(
-      (item) => `
-      <tr>
-        <td style="padding: 12px; border-bottom: 1px solid #eee;">
-          ${item.image ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;">` : ''}
-        </td>
-        <td style="padding: 12px; border-bottom: 1px solid #eee;">${escapeHtml(item.name)}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">${escapeHtml(item.quantity)}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">$${item.price.toFixed(2)}</td>
-      </tr>
-    `
-    )
-    .join('');
+  const itemsHtml = orderItemsHtml(order.items);
 
   const htmlContent = `
     <!DOCTYPE html>
@@ -185,12 +246,7 @@ export async function sendOrderConfirmation(order: OrderEmailData): Promise<{ su
         </div>
 
         <h3 style="color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-top: 30px;">Shipping Address</h3>
-        <p style="margin: 0;">
-          ${escapeHtml(order.shippingAddress.street1)}<br>
-          ${order.shippingAddress.street2 ? escapeHtml(order.shippingAddress.street2) + '<br>' : ''}
-          ${escapeHtml(order.shippingAddress.city)}, ${escapeHtml(order.shippingAddress.state)} ${escapeHtml(order.shippingAddress.zip)}<br>
-          ${escapeHtml(order.shippingAddress.country)}
-        </p>
+        <p style="margin: 0;">${addressHtml(order.shippingAddress)}</p>
       </div>
 
       <div style="border-top: 1px solid #eee; padding: 20px 0; text-align: center; color: #666; font-size: 14px;">
@@ -221,13 +277,13 @@ export async function sendShippingNotification(params: {
   carrier: string;
   estimatedDelivery?: string;
 }): Promise<{ success: boolean; error?: string }> {
-  const tracking = encodeURIComponent(params.trackingNumber);
+  const trackingParam = encodeURIComponent(params.trackingNumber);
   const trackingUrl = params.carrier.toLowerCase().includes('usps')
-    ? `https://tools.usps.com/go/TrackConfirmAction?tLabels=${tracking}`
+    ? `https://tools.usps.com/go/TrackConfirmAction?tLabels=${trackingParam}`
     : params.carrier.toLowerCase().includes('ups')
-    ? `https://www.ups.com/track?tracknum=${tracking}`
+    ? `https://www.ups.com/track?tracknum=${trackingParam}`
     : params.carrier.toLowerCase().includes('fedex')
-    ? `https://www.fedex.com/fedextrack/?trknbr=${tracking}`
+    ? `https://www.fedex.com/fedextrack/?trknbr=${trackingParam}`
     : '#';
 
   const htmlContent = `
@@ -246,7 +302,7 @@ export async function sendShippingNotification(params: {
 
       <div style="padding: 30px 0;">
         <p>Assalamu Alaikum ${escapeHtml(params.customerName)},</p>
-        
+
         <p>Great news! Your order <strong>#${escapeHtml(params.orderId)}</strong> is on its way!</p>
         
         <div style="background: #f8f8f8; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
@@ -302,7 +358,7 @@ export async function sendWelcomeEmail(params: {
         <h2 style="text-align: center; color: #333;">Welcome to the Family! 🌙</h2>
         
         <p>Assalamu Alaikum ${escapeHtml(params.name)},</p>
-        
+
         <p>Welcome to Modest Ummah! We're thrilled to have you join our community of believers who value modesty, quality, and style.</p>
         
         <p>Here's what you can look forward to:</p>
@@ -360,11 +416,11 @@ export async function sendPasswordResetEmail(params: {
         <h2 style="text-align: center; color: #333;">Reset Your Password</h2>
         
         <p>Assalamu Alaikum ${escapeHtml(params.name)},</p>
-        
+
         <p>We received a request to reset your password. Click the button below to create a new password:</p>
 
         <div style="text-align: center; margin: 30px 0;">
-          <a href="${escapeHtml(params.resetLink)}" style="display: inline-block; background: #8B7355; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Reset Password</a>
+          <a href="${safeUrl(params.resetLink)}" style="display: inline-block; background: #8B7355; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Reset Password</a>
         </div>
         
         <p style="color: #666; font-size: 14px;">If you didn't request this, you can safely ignore this email. This link will expire in 1 hour.</p>

@@ -2,7 +2,7 @@
 
 import { getDb } from '@/lib/db';
 import { categories, productTags, products, productVariants, tags } from '@/lib/schema';
-import { eq, ne, inArray, like, or, desc, asc, and, count, sql } from 'drizzle-orm';
+import { eq, ne, inArray, ilike, or, desc, asc, and, count, sql } from 'drizzle-orm';
 import { tagProductCatalogue, productCacheProfile, tagTaxonomy } from '@/lib/cache';
 import { buildCategoryRef, mapProduct } from '@/lib/product-mapper';
 import { liveCondition } from '@/lib/product-live';
@@ -157,7 +157,7 @@ export async function getProductsCached({
 
   if (search) {
     const searchPattern = `%${search}%`;
-    conditions.push(or(like(products.name, searchPattern), like(products.sku, searchPattern), like(products.description, searchPattern)));
+    conditions.push(or(ilike(products.name, searchPattern), ilike(products.sku, searchPattern), ilike(products.description, searchPattern)));
   }
 
   if (minPrice) {
@@ -305,12 +305,29 @@ export async function getSearchCached(query: string) {
     .where(and(
       liveCondition(),
       listedCondition(true),
-      or(like(products.name, searchPattern), like(products.description, searchPattern))
+      or(ilike(products.name, searchPattern), ilike(products.description, searchPattern))
     ))
     .orderBy(desc(products.publishedAt))
     .limit(20);
 
   return hydrate(items);
+}
+
+/**
+ * Slugs for /sitemap.xml: live, publicly listed products only. Filled on demand
+ * when a crawler asks and the entry is stale, never on a timer, so Neon compute
+ * can still suspend between visits.
+ */
+export async function getSitemapProductsCached(): Promise<Array<{ slug: string; updatedAt: string }>> {
+  tagProductCatalogue();
+  productCacheProfile();
+
+  const rows = await getDb()
+    .select({ slug: products.slug, updatedAt: products.updatedAt })
+    .from(products)
+    .where(and(liveCondition(), listedCondition(false)));
+
+  return rows.map((r) => ({ slug: r.slug, updatedAt: r.updatedAt.toISOString() }));
 }
 
 /**

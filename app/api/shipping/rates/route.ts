@@ -64,6 +64,13 @@ export async function POST(request: NextRequest) {
       package: parcel,
     });
 
+    if (result.rates.length === 0) {
+      return NextResponse.json(
+        { success: false, rates: [], error: result.error || 'Shipping is not available for this address' },
+        { status: 422 }
+      );
+    }
+
     return NextResponse.json({
       success: result.success,
       rates: result.rates,
