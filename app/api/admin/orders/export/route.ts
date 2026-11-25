@@ -77,7 +77,8 @@ export async function POST(request: NextRequest) {
       (o) => isPaymentCaptured(o.paymentStatus) && (o.status === 'processing' || o.status === 'pending')
     );
     const lines = await Promise.all(shippable.map(pirateShipRow));
-    const csv = stringifyCsv([PIRATE_SHIP_HEADER, ...lines]);
+    // Formula-escaped too: names and addresses are customer input.
+    const csv = stringifyCsv([PIRATE_SHIP_HEADER, ...lines], { escapeFormulas: true });
     return csvResponse(csv, `pirate_ship_export_${date}.csv`, shippable.length, rows.length - shippable.length);
   } catch (error: any) {
     console.error('CSV export error:', error);

@@ -132,10 +132,13 @@ export function useProductBuilder(init: BuilderInit) {
   const [previewOpen, setPreviewOpen] = useState(false);
 
   const docRef = useRef(doc);
+  // eslint-disable-next-line react-hooks/refs -- latest-value ref read by callbacks, intentional
   docRef.current = doc;
   const productIdRef = useRef(productId);
+  // eslint-disable-next-line react-hooks/refs -- latest-value ref read by callbacks, intentional
   productIdRef.current = productId;
   const slugStatusRef = useRef(slugStatus);
+  // eslint-disable-next-line react-hooks/refs -- latest-value ref read by callbacks, intentional
   slugStatusRef.current = slugStatus;
   const autosaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const inFlight = useRef<Promise<unknown> | null>(null);

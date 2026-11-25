@@ -16,7 +16,6 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       amount,
-      orderId,
       customerEmail,
       shippingAddress,
       items,
@@ -39,12 +38,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // The web checkout mints its own order id so the confirmation page can be
-    // addressed before the payment resolves. The mobile client has no such
-    // need, so an absent id is minted here rather than rejected — it only ever
-    // has to be unique and to match what goes into the Stripe metadata.
-    const resolvedOrderId =
-      typeof orderId === 'string' && orderId.trim() ? orderId.trim() : generateOrderId();
+    // The order id is always minted here. A client-supplied `orderId` (the
+    // web checkout still sends one) is ignored: it is returned below instead.
+    const resolvedOrderId = generateOrderId();
 
     const resolved = await resolveCheckoutOrder({
       items,
@@ -112,6 +108,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id,
+      orderId: resolvedOrderId,
       resolvedTotal: resolved.total,
       resolvedSubtotal: resolved.subtotal,
       resolvedDiscount: resolved.discount,
@@ -122,9 +119,11 @@ export async function POST(request: NextRequest) {
     if (error instanceof CheckoutRejectedError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
+    // Logged in full; the client gets a generic message, since a raw error
+    // can carry SQL or provider details.
     console.error('Payment intent creation error:', error);
     return NextResponse.json(
-      { error: error.message || 'Failed to create payment intent' },
+      { error: 'Failed to create payment intent' },
       { status: 500 }
     );
   }

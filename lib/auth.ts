@@ -148,9 +148,12 @@ export async function getAuthFromRequest(
   // rotated would still open the account routes. One indexed lookup settles
   // both — a deleted user has no row, and a rotation bumped token_version.
   //
-  // Admin tokens are not checked here: the admins table has no counter, and
-  // they expire in 24h. getSession() already re-reads the admin row.
-  if (!isAdmin && !(await tokenVersionIsCurrent(payload))) return null;
+  // The admins table has no counter, so an admin token is only checked for
+  // its row still existing: deleting the admin revokes it at once rather than
+  // after 24h. getSession() does the same.
+  if (isAdmin ? !(await adminStillExists(payload)) : !(await tokenVersionIsCurrent(payload))) {
+    return null;
+  }
 
   return payload;
 }
@@ -177,6 +180,21 @@ async function tokenVersionIsCurrent(payload: TokenPayload): Promise<boolean> {
 
   if (!row) return false;
   return row.tokenVersion === (payload.ver ?? 0);
+}
+
+async function adminStillExists(payload: TokenPayload): Promise<boolean> {
+  const [{ getDb }, { admins }, { eq }] = await Promise.all([
+    import('./db'),
+    import('./schema'),
+    import('drizzle-orm'),
+  ]);
+
+  const [row] = await getDb()
+    .select({ id: admins.id })
+    .from(admins)
+    .where(eq(admins.id, payload.sub))
+    .limit(1);
+  return !!row;
 }
 
 // ─── Admin second factor ────────────────────────────────

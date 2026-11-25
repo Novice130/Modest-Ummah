@@ -26,17 +26,24 @@ export interface ImageMetaEntry {
 const LQIP_WIDTH = 24;
 
 /**
+ * Uploaded files are untrusted: a small, highly compressed image can declare
+ * enormous dimensions and exhaust the container's memory when decoded. 40 MP
+ * is far above any product photo.
+ */
+const SHARP_OPTIONS = { limitInputPixels: 40_000_000 };
+
+/**
  * Reads dimensions and renders the placeholder. Returns null rather than
  * throwing: a file that sharp cannot decode must not fail a product save, and
  * the serializer already has a fallback for a missing entry.
  */
 export async function computeImageMeta(buffer: Buffer): Promise<ImageMetaEntry | null> {
   try {
-    const image = sharp(buffer);
+    const image = sharp(buffer, SHARP_OPTIONS);
     const { width, height } = await image.metadata();
     if (!width || !height) return null;
 
-    const lqip = await sharp(buffer)
+    const lqip = await sharp(buffer, SHARP_OPTIONS)
       .resize({ width: LQIP_WIDTH })
       .webp({ quality: 40 })
       .toBuffer();

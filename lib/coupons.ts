@@ -1,6 +1,6 @@
 import { getDb } from '@/lib/db';
 import { categories, coupons } from '@/lib/schema';
-import { sql } from 'drizzle-orm';
+import { and, isNull, lt, or, sql } from 'drizzle-orm';
 
 /**
  * Coupon evaluation. The single source of truth for discounts — nothing
@@ -70,6 +70,8 @@ async function subtreeSlugs(categoryId: string): Promise<Set<string>> {
   return out;
 }
 
+const INVALID_COUPON = 'This coupon code is not valid';
+
 export async function evaluateCoupon(
   code: string | null | undefined,
   subtotal: number,
@@ -86,25 +88,25 @@ export async function evaluateCoupon(
     .where(codeEquals(code))
     .limit(1);
 
-  if (!coupon) {
-    return { ok: false, discount: 0, error: `Coupon "${code.trim()}" does not exist` };
-  }
+  // One message for every reason a code cannot be used, so the answer does
+  // not tell a guesser which codes exist.
+  const invalid: CouponEvaluation = { ok: false, discount: 0, error: INVALID_COUPON };
 
-  if (!coupon.enabled) {
-    return { ok: false, discount: 0, error: 'This coupon is no longer active' };
+  if (!coupon || !coupon.enabled) {
+    return invalid;
   }
 
   const now = new Date();
   if (coupon.startsAt && new Date(coupon.startsAt) > now) {
-    return { ok: false, discount: 0, error: 'This coupon is not active yet' };
+    return invalid;
   }
   if (coupon.expiresAt && new Date(coupon.expiresAt) <= now) {
-    return { ok: false, discount: 0, error: 'This coupon has expired' };
+    return invalid;
   }
 
   if (coupon.usageLimit !== null && coupon.usageLimit !== undefined) {
     if (coupon.usageCount >= coupon.usageLimit) {
-      return { ok: false, discount: 0, error: 'This coupon has reached its usage limit' };
+      return invalid;
     }
   }
 
@@ -163,12 +165,24 @@ export async function evaluateCoupon(
   };
 }
 
-/** Increment usage on payment success. Called from the idempotent webhook. */
-export async function recordCouponUsage(code: string | null | undefined) {
-  if (!code) return;
+/**
+ * Increment usage on payment success. Called from the idempotent webhook.
+ * The limit is re-checked in the same statement: two checkouts can both pass
+ * evaluateCoupon before either is paid. Returns false when the coupon was
+ * already at its limit (or no longer exists), so nothing was counted.
+ */
+export async function recordCouponUsage(code: string | null | undefined): Promise<boolean> {
+  if (!code) return true;
   const db = getDb();
-  await db
+  const updated = await db
     .update(coupons)
     .set({ usageCount: sql`${coupons.usageCount} + 1`, updatedAt: new Date() })
-    .where(codeEquals(code));
+    .where(
+      and(
+        codeEquals(code),
+        or(isNull(coupons.usageLimit), lt(coupons.usageCount, coupons.usageLimit))
+      )
+    )
+    .returning({ id: coupons.id });
+  return updated.length > 0;
 }

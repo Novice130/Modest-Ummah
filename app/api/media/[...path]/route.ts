@@ -75,6 +75,7 @@ export async function GET(
       'Content-Type': contentType,
       'Content-Length': String(fileStats.size),
       'Cache-Control': CACHE_CONTROL,
+      'X-Content-Type-Options': 'nosniff',
     },
   });
 }

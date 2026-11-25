@@ -45,6 +45,19 @@ interface OrderEmailData {
 }
 
 /**
+ * Escapes a value for HTML text or a quoted attribute. Every customer- or
+ * DB-supplied value interpolated into a template below goes through this.
+ */
+function escapeHtml(value: unknown): string {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+/**
  * Get authorization header for Brevo API
  */
 function getAuthHeader(): Record<string, string> {
@@ -115,10 +128,10 @@ export async function sendOrderConfirmation(order: OrderEmailData): Promise<{ su
       (item) => `
       <tr>
         <td style="padding: 12px; border-bottom: 1px solid #eee;">
-          ${item.image ? `<img src="${item.image}" alt="${item.name}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;">` : ''}
+          ${item.image ? `<img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}" style="width: 60px; height: 60px; object-fit: cover; border-radius: 4px;">` : ''}
         </td>
-        <td style="padding: 12px; border-bottom: 1px solid #eee;">${item.name}</td>
-        <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">${item.quantity}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #eee;">${escapeHtml(item.name)}</td>
+        <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: center;">${escapeHtml(item.quantity)}</td>
         <td style="padding: 12px; border-bottom: 1px solid #eee; text-align: right;">$${item.price.toFixed(2)}</td>
       </tr>
     `
@@ -140,12 +153,12 @@ export async function sendOrderConfirmation(order: OrderEmailData): Promise<{ su
       </div>
 
       <div style="padding: 30px 0;">
-        <p>Assalamu Alaikum ${order.customerName},</p>
+        <p>Assalamu Alaikum ${escapeHtml(order.customerName)},</p>
         
         <p>Thank you for your order! We're preparing your items with care and will notify you when they ship.</p>
         
         <div style="background: #f8f8f8; border-radius: 8px; padding: 20px; margin: 20px 0;">
-          <h2 style="margin: 0 0 10px 0; font-size: 18px; color: #333;">Order #${order.orderId}</h2>
+          <h2 style="margin: 0 0 10px 0; font-size: 18px; color: #333;">Order #${escapeHtml(order.orderId)}</h2>
         </div>
 
         <h3 style="color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px;">Order Summary</h3>
@@ -173,10 +186,10 @@ export async function sendOrderConfirmation(order: OrderEmailData): Promise<{ su
 
         <h3 style="color: #333; border-bottom: 1px solid #eee; padding-bottom: 10px; margin-top: 30px;">Shipping Address</h3>
         <p style="margin: 0;">
-          ${order.shippingAddress.street1}<br>
-          ${order.shippingAddress.street2 ? order.shippingAddress.street2 + '<br>' : ''}
-          ${order.shippingAddress.city}, ${order.shippingAddress.state} ${order.shippingAddress.zip}<br>
-          ${order.shippingAddress.country}
+          ${escapeHtml(order.shippingAddress.street1)}<br>
+          ${order.shippingAddress.street2 ? escapeHtml(order.shippingAddress.street2) + '<br>' : ''}
+          ${escapeHtml(order.shippingAddress.city)}, ${escapeHtml(order.shippingAddress.state)} ${escapeHtml(order.shippingAddress.zip)}<br>
+          ${escapeHtml(order.shippingAddress.country)}
         </p>
       </div>
 
@@ -208,12 +221,13 @@ export async function sendShippingNotification(params: {
   carrier: string;
   estimatedDelivery?: string;
 }): Promise<{ success: boolean; error?: string }> {
+  const tracking = encodeURIComponent(params.trackingNumber);
   const trackingUrl = params.carrier.toLowerCase().includes('usps')
-    ? `https://tools.usps.com/go/TrackConfirmAction?tLabels=${params.trackingNumber}`
+    ? `https://tools.usps.com/go/TrackConfirmAction?tLabels=${tracking}`
     : params.carrier.toLowerCase().includes('ups')
-    ? `https://www.ups.com/track?tracknum=${params.trackingNumber}`
+    ? `https://www.ups.com/track?tracknum=${tracking}`
     : params.carrier.toLowerCase().includes('fedex')
-    ? `https://www.fedex.com/fedextrack/?trknbr=${params.trackingNumber}`
+    ? `https://www.fedex.com/fedextrack/?trknbr=${tracking}`
     : '#';
 
   const htmlContent = `
@@ -231,19 +245,19 @@ export async function sendShippingNotification(params: {
       </div>
 
       <div style="padding: 30px 0;">
-        <p>Assalamu Alaikum ${params.customerName},</p>
+        <p>Assalamu Alaikum ${escapeHtml(params.customerName)},</p>
         
-        <p>Great news! Your order <strong>#${params.orderId}</strong> is on its way!</p>
+        <p>Great news! Your order <strong>#${escapeHtml(params.orderId)}</strong> is on its way!</p>
         
         <div style="background: #f8f8f8; border-radius: 8px; padding: 20px; margin: 20px 0; text-align: center;">
           <p style="margin: 0 0 10px 0; color: #666;">Tracking Number</p>
-          <p style="margin: 0; font-size: 20px; font-weight: bold; color: #333;">${params.trackingNumber}</p>
-          <p style="margin: 10px 0 0 0; color: #666;">via ${params.carrier}</p>
-          ${params.estimatedDelivery ? `<p style="margin: 10px 0 0 0; color: #8B7355;">Estimated delivery: ${params.estimatedDelivery}</p>` : ''}
+          <p style="margin: 0; font-size: 20px; font-weight: bold; color: #333;">${escapeHtml(params.trackingNumber)}</p>
+          <p style="margin: 10px 0 0 0; color: #666;">via ${escapeHtml(params.carrier)}</p>
+          ${params.estimatedDelivery ? `<p style="margin: 10px 0 0 0; color: #8B7355;">Estimated delivery: ${escapeHtml(params.estimatedDelivery)}</p>` : ''}
         </div>
 
         <div style="text-align: center; margin: 30px 0;">
-          <a href="${trackingUrl}" style="display: inline-block; background: #8B7355; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Track Your Package</a>
+          <a href="${escapeHtml(trackingUrl)}" style="display: inline-block; background: #8B7355; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Track Your Package</a>
         </div>
       </div>
 
@@ -287,7 +301,7 @@ export async function sendWelcomeEmail(params: {
       <div style="padding: 30px 0;">
         <h2 style="text-align: center; color: #333;">Welcome to the Family! 🌙</h2>
         
-        <p>Assalamu Alaikum ${params.name},</p>
+        <p>Assalamu Alaikum ${escapeHtml(params.name)},</p>
         
         <p>Welcome to Modest Ummah! We're thrilled to have you join our community of believers who value modesty, quality, and style.</p>
         
@@ -345,12 +359,12 @@ export async function sendPasswordResetEmail(params: {
       <div style="padding: 30px 0;">
         <h2 style="text-align: center; color: #333;">Reset Your Password</h2>
         
-        <p>Assalamu Alaikum ${params.name},</p>
+        <p>Assalamu Alaikum ${escapeHtml(params.name)},</p>
         
         <p>We received a request to reset your password. Click the button below to create a new password:</p>
 
         <div style="text-align: center; margin: 30px 0;">
-          <a href="${params.resetLink}" style="display: inline-block; background: #8B7355; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Reset Password</a>
+          <a href="${escapeHtml(params.resetLink)}" style="display: inline-block; background: #8B7355; color: white; padding: 15px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Reset Password</a>
         </div>
         
         <p style="color: #666; font-size: 14px;">If you didn't request this, you can safely ignore this email. This link will expire in 1 hour.</p>

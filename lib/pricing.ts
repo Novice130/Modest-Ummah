@@ -34,9 +34,9 @@ export interface ResolvedOrder {
 }
 
 /**
- * A cart line the shopper has to change: the product is not for sale or the
- * picked options are not a real variant. The checkout route answers 409 with
- * this message instead of a 500.
+ * A checkout the shopper has to change: the cart, a product, its options, the
+ * coupon or the address. The message is safe to show; the checkout route
+ * answers 409 with it, and any other error gets a generic 500.
  */
 export class CheckoutRejectedError extends Error {
   constructor(message: string) {
@@ -77,12 +77,12 @@ export async function resolveCheckoutOrder(input: {
 
   const items = Array.isArray(input.items) ? input.items : [];
   if (items.length === 0) {
-    throw new Error('Cart is empty');
+    throw new CheckoutRejectedError('Cart is empty');
   }
 
   const productIds = [...new Set(items.map((i) => i.productId).filter(Boolean))];
   if (productIds.length === 0) {
-    throw new Error('Cart items are missing product IDs');
+    throw new CheckoutRejectedError('Cart items are missing product IDs');
   }
 
   // isLive is the storefront's own rule, evaluated by the database so a due
@@ -118,7 +118,7 @@ export async function resolveCheckoutOrder(input: {
   for (const item of items) {
     const product = byId.get(item.productId);
     if (!product) {
-      throw new Error('A product in your cart no longer exists');
+      throw new CheckoutRejectedError('A product in your cart no longer exists');
     }
 
     if (product.isLive !== true) {
@@ -126,7 +126,7 @@ export async function resolveCheckoutOrder(input: {
     }
 
     if (!Number.isInteger(item.quantity) || item.quantity < 1) {
-      throw new Error('Invalid quantity');
+      throw new CheckoutRejectedError('Invalid quantity');
     }
 
     const quantity = Math.min(item.quantity, MAX_QTY);
@@ -143,7 +143,7 @@ export async function resolveCheckoutOrder(input: {
     if (item.variantId) {
       variant = variantById.get(item.variantId);
       if (!variant || variant.productId !== product.id) {
-        throw new Error('A product variant in your cart no longer exists');
+        throw new CheckoutRejectedError('A product variant in your cart no longer exists');
       }
     } else if (product.productType === 'variable' && (item.size || item.color)) {
       const siblings = variantRows.filter((v) => v.productId === product.id);
@@ -155,6 +155,15 @@ export async function resolveCheckoutOrder(input: {
           );
         }
       }
+    }
+
+    // Purchasable, by the same rule inventory.ts writes: in_stock is
+    // quantity > 0 (or the manual flag when stock is not managed), and
+    // backorders keep a line buyable at zero.
+    const backorders = (product.backorderPolicy ?? 'no') !== 'no';
+    const stocked = variant ? variant.inStock !== false : product.inStock !== false;
+    if (!backorders && !stocked) {
+      throw new CheckoutRejectedError(`${product.name} is out of stock`);
     }
 
     // What ships is the variant that was priced, so its own Size/Color go on
@@ -172,6 +181,11 @@ export async function resolveCheckoutOrder(input: {
       sku = product.sku || undefined;
     }
 
+    // A missing or zero price is a catalogue mistake, never a free item.
+    if (!Number.isFinite(price) || price <= 0) {
+      throw new CheckoutRejectedError(`${product.name} is not available for purchase`);
+    }
+
     // Snapshot the per-unit weight onto the line item so the order still
     // reports what it was priced and shipped at after the product is edited.
     const rawWeight = variant?.weight ?? product.weight;
@@ -184,7 +198,7 @@ export async function resolveCheckoutOrder(input: {
       productId: product.id,
       variantId: variant?.id,
       name: product.name,
-      price: round2(price || 0),
+      price: round2(price),
       quantity,
       color: options.color ?? item.color,
       size: options.size ?? item.size,
@@ -212,14 +226,14 @@ export async function resolveCheckoutOrder(input: {
     }))
   );
   if (!coupon.ok) {
-    throw new Error(coupon.error || 'Invalid coupon');
+    throw new CheckoutRejectedError(coupon.error || 'Invalid coupon');
   }
   const discount = round2(coupon.discount || 0);
   const taxableSubtotal = Math.max(0, subtotal - discount);
 
   const address = normalizeShippingAddress(input.shippingAddress);
   if (!address.address1 || !address.city || !address.state || !address.postalCode) {
-    throw new Error('Shipping address is incomplete');
+    throw new CheckoutRejectedError('Shipping address is incomplete');
   }
 
   // Real weights from the snapshots taken above, via the shared calculator.

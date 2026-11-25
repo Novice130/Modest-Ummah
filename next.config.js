@@ -10,6 +10,49 @@ const { withSentryConfig } = require('@sentry/nextjs/config');
 //   disable: process.env.NODE_ENV === 'development',
 // });
 
+// Report-only for now: violations show in the browser console and nothing is
+// blocked. Tighten and switch to the enforcing header once a release runs
+// clean. 'unsafe-inline' scripts are needed because Next's inline bootstrap
+// has no nonce. Sentry goes through the same-origin /monitoring tunnel.
+const posthogHost = (() => {
+  try {
+    return process.env.NEXT_PUBLIC_POSTHOG_HOST
+      ? new URL(process.env.NEXT_PUBLIC_POSTHOG_HOST).origin
+      : '';
+  } catch {
+    return '';
+  }
+})();
+
+const contentSecurityPolicy = [
+  "default-src 'self'",
+  "base-uri 'self'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+  "form-action 'self' https://appleid.apple.com",
+  [
+    "script-src 'self' 'unsafe-inline'",
+    process.env.NODE_ENV === 'development' ? "'unsafe-eval'" : '',
+    'https://js.stripe.com https://*.js.stripe.com',
+    'https://accounts.google.com/gsi/client',
+    'https://appleid.cdn-apple.com',
+  ].filter(Boolean).join(' '),
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://accounts.google.com/gsi/style",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https://*.stripe.com",
+  [
+    "connect-src 'self'",
+    'https://api.stripe.com https://*.stripe.com',
+    'https://accounts.google.com',
+    'https://appleid.apple.com',
+    'https://*.ingest.sentry.io https://*.ingest.us.sentry.io',
+    posthogHost,
+  ].filter(Boolean).join(' '),
+  'frame-src https://js.stripe.com https://*.js.stripe.com https://hooks.stripe.com https://*.stripe.com https://accounts.google.com https://appleid.apple.com',
+  "worker-src 'self' blob:",
+  "manifest-src 'self'",
+].join('; ');
+
 const nextConfig = {
   images: {
     formats: ['image/avif', 'image/webp'],
@@ -66,12 +109,12 @@ const nextConfig = {
             value: 'DENY',
           },
           {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
+            key: 'Referrer-Policy',
+            value: 'strict-origin-when-cross-origin',
           },
           {
-            key: 'Referrer-Policy',
-            value: 'origin-when-cross-origin',
+            key: 'Content-Security-Policy-Report-Only',
+            value: contentSecurityPolicy,
           },
         ],
       },

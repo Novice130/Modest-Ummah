@@ -11,6 +11,7 @@ import { adminIsLocked, recordAdminAttempt } from '@/lib/admin-login-guard';
 import { clientIpFromHeaders, ipLimitKey } from '@/lib/client-ip';
 import { rateLimitAction } from '@/lib/rate-limit-guards';
 import { adminTotpStage, type AdminTotpStage } from '@/lib/admin-2fa';
+import { MIN_PASSWORD_LENGTH } from '@/lib/account';
 
 export async function getSession(isAdmin = false) {
   const cookieName = isAdmin ? 'admin_token' : 'auth_token';
@@ -196,6 +197,9 @@ export async function adminSignInAction(
 
 export async function signUpAction(email: string, password: string, name: string) {
   if (!email || !password || !name) return { error: 'All fields are required' };
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
+  }
 
   const limited = await rateLimitAction('register', { email });
   if (limited) return { error: limited };

@@ -50,6 +50,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ received: true });
   }
 
+  // The event id is recorded before processing. If processing fails, forget
+  // it and answer 500 so Stripe's retry is processed rather than skipped as a
+  // duplicate (neon-http has no interactive transactions to roll back with).
+  const failed = async (error: unknown) => {
+    console.error(`Webhook processing failed (${event.type}):`, error);
+    try {
+      await db.delete(stripeEvents).where(eq(stripeEvents.eventId, event.id));
+    } catch (deleteError) {
+      console.error('Failed to release webhook event for retry:', deleteError);
+    }
+    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
+  };
+
   switch (event.type) {
     case 'payment_intent.succeeded': {
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
@@ -65,6 +78,47 @@ export async function POST(request: NextRequest) {
           .limit(1);
 
         if (existingOrder) {
+          // What Stripe took must be what this order is for. A mismatch is
+          // left for the admin rather than fulfilled.
+          const expectedAmount = Math.round(parseFloat(existingOrder.total as string) * 100);
+          const mismatch =
+            paymentIntent.amount !== expectedAmount
+              ? `amount ${paymentIntent.amount} cents, order total ${expectedAmount} cents`
+              : paymentIntent.currency !== 'usd'
+                ? `currency ${paymentIntent.currency}`
+                : existingOrder.paymentIntentId && existingOrder.paymentIntentId !== paymentIntent.id
+                  ? 'a different PaymentIntent than the one linked to this order'
+                  : null;
+          if (mismatch) {
+            await db.insert(orderNotes).values({
+              orderId: existingOrder.id,
+              note: `Payment received in Stripe that does not match this order (${mismatch}). Not marked paid: check Stripe, then fulfil or refund.`,
+              author: 'Stripe',
+            });
+            console.error('Payment does not match order; left for review');
+            break;
+          }
+
+          // Only an unpaid order moves to paid. A retry after a partial
+          // failure must not decrement stock or count the coupon again.
+          const [flipped] = await db
+            .update(orders)
+            .set({
+              paymentStatus: 'paid',
+              status: 'processing',
+              paymentIntentId: paymentIntent.id,
+              updatedAt: new Date(),
+            })
+            .where(and(eq(orders.id, existingOrder.id), inArray(orders.paymentStatus, ['pending', 'failed'])))
+            .returning({ id: orders.id });
+
+          if (!flipped) {
+            console.log('Order already paid; side effects skipped');
+            break;
+          }
+
+          console.log('Order marked paid');
+
           // An order cancelled while unpaid can still be paid afterwards (the
           // PaymentIntent stays open). The money is taken, so it reopens for
           // fulfilment; the timeline says why.
@@ -75,18 +129,6 @@ export async function POST(request: NextRequest) {
               author: 'Stripe',
             });
           }
-
-          await db
-            .update(orders)
-            .set({
-              paymentStatus: 'paid',
-              status: 'processing',
-              paymentIntentId: paymentIntent.id,
-              updatedAt: new Date(),
-            })
-            .where(eq(orders.id, existingOrder.id));
-
-          console.log('Order marked paid');
 
           const items = (existingOrder.items || []) as OrderItem[];
           const shippingAddress = existingOrder.shippingAddress as ShippingAddressDB;
@@ -99,8 +141,18 @@ export async function POST(request: NextRequest) {
 
           // Coupon usage counts on payment success. The stripe_events
           // dedupe above guarantees a replayed webhook cannot double-count.
+          // The limit is enforced here too: checkouts that passed the check
+          // together can overrun it. The customer has paid, so the order
+          // stands and the admin is told.
           if (existingOrder.couponCode) {
-            await recordCouponUsage(existingOrder.couponCode);
+            const counted = await recordCouponUsage(existingOrder.couponCode);
+            if (!counted) {
+              await db.insert(orderNotes).values({
+                orderId: existingOrder.id,
+                note: `Coupon ${existingOrder.couponCode} was already at its usage limit when this order was paid. The discount was honoured; the use was not counted.`,
+                author: 'Stripe',
+              });
+            }
           }
 
           // Clear user's cart
@@ -153,6 +205,7 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         console.error('Error updating order:', error);
+        return failed(error);
       }
       break;
     }
@@ -189,6 +242,7 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         console.error('Error updating failed order:', error);
+        return failed(error);
       }
       break;
     }
@@ -249,6 +303,7 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         console.error('Error recording refund:', error);
+        return failed(error);
       }
       break;
     }

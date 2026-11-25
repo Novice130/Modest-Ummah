@@ -3,6 +3,20 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:modest_ummah/main.dart' as app;
 
+/// Reason to skip, or null when the test may run. It registers a user and
+/// starts a PaymentIntent, and the app's default API host is production, so it
+/// needs an explicit non-production host:
+/// `flutter test integration_test --dart-define=API_BASE_URL=https://staging.example`
+String? _liveApiSkipReason() {
+  const baseUrl = String.fromEnvironment('API_BASE_URL');
+  if (baseUrl.isEmpty) return 'API_BASE_URL is not set';
+  final host = Uri.parse(baseUrl).host.replaceAll(RegExp(r'\.+$'), '');
+  if (host == 'modestummah.com' || host == 'www.modestummah.com') {
+    return 'API_BASE_URL is production';
+  }
+  return null;
+}
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
 
@@ -145,5 +159,5 @@ void main() {
     // Allow network call to create payment intent and initialize Stripe
     await tester.pump(const Duration(seconds: 4));
     debugPrint('Step 10 PASSED: Continue to payment triggered, PaymentIntent initiated');
-  });
+  }, skip: _liveApiSkipReason() != null);
 }

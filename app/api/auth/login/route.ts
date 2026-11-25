@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
       email: user.email,
       name: user.name || '',
       type: 'user',
+      ver: user.tokenVersion,
     });
 
     // Return user data (without password hash)

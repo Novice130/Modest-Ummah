@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
       email: newUser.email,
       name: newUser.name || '',
       type: 'user',
+      ver: newUser.tokenVersion,
     });
 
     const { passwordHash: _, ...safeUser } = newUser;

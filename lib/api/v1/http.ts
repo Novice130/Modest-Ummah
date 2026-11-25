@@ -15,6 +15,7 @@ import { getAuthFromRequest, type TokenPayload } from '@/lib/auth';
  */
 
 export const MAX_PER_PAGE = 60;
+const MAX_PAGE = 10_000;
 export const DEFAULT_PER_PAGE = 24;
 
 export function json(data: unknown, init?: ResponseInit) {
@@ -46,9 +47,14 @@ export async function requireUser(
 }
 
 export function parsePagination(url: URL) {
-  const page = Math.max(1, Number(url.searchParams.get('page')) || 1);
-  const requested = Number(url.searchParams.get('perPage')) || DEFAULT_PER_PAGE;
-  const perPage = Math.min(MAX_PER_PAGE, Math.max(1, requested));
+  // Finite integers only: `page=1e400` parses to Infinity and used to reach
+  // the query as an offset, failing with a 500.
+  const rawPage = Number(url.searchParams.get('page'));
+  const page = Number.isFinite(rawPage) ? Math.min(MAX_PAGE, Math.max(1, Math.floor(rawPage))) : 1;
+  const requested = Number(url.searchParams.get('perPage'));
+  const perPage = Number.isFinite(requested) && requested >= 1
+    ? Math.min(MAX_PER_PAGE, Math.floor(requested))
+    : DEFAULT_PER_PAGE;
   return { page, perPage };
 }
 

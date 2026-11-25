@@ -129,6 +129,10 @@ export const RATE_LIMITS = {
   paymentIntent: {
     ip: { limit: 30, windowMs: 10 * MINUTE },
   },
+  // /api/tax/calculate is unauthenticated and each call goes out to TaxCloud.
+  taxQuote: {
+    ip: { limit: 30, windowMs: 10 * MINUTE },
+  },
 } as const;
 
 export type RateScope = keyof typeof RATE_LIMITS;
