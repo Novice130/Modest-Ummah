@@ -133,6 +133,16 @@ export const RATE_LIMITS = {
   taxQuote: {
     ip: { limit: 30, windowMs: 10 * MINUTE },
   },
+  // Forgot-password sends mail and queries Neon on every call. A refused call
+  // still gets the same reply, so the limit reveals nothing about accounts.
+  passwordReset: {
+    ip: { limit: 10, windowMs: 60 * MINUTE },
+    email: { limit: 3, windowMs: 60 * MINUTE },
+  },
+  // The token is 256 bits, so this caps work and Neon wake-ups, not guessing.
+  passwordResetConfirm: {
+    ip: { limit: 20, windowMs: 15 * MINUTE },
+  },
 } as const;
 
 export type RateScope = keyof typeof RATE_LIMITS;

@@ -38,6 +38,16 @@ export async function isEventHandled(eventId: string): Promise<boolean> {
   return Boolean(row);
 }
 
+/** True only when step `key` finished (a pending or missing step is false). */
+export async function isStepDone(key: string): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ type: stripeEvents.type })
+    .from(stripeEvents)
+    .where(eq(stripeEvents.eventId, key))
+    .limit(1);
+  return row?.type === DONE;
+}
+
 export async function markEventHandled(eventId: string, type: string): Promise<void> {
   await getDb()
     .insert(stripeEvents)

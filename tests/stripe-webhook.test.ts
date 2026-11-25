@@ -304,9 +304,17 @@ describe('payment_intent.payment_failed', () => {
   });
 });
 
+/** The ledger rows a completed payment webhook leaves behind. */
+const seedPaidSteps = (keys = ['pi_1:stock:0', 'pi_1:stock:1', 'pi_1:coupon']) =>
+  h.fake.seed(
+    stripeEvents,
+    keys.map((eventId) => ({ eventId, type: 'step:done', processedAt: new Date() }))
+  );
+
 describe('charge.refunded', () => {
   it('restocks each line once across a retry', async () => {
     const order = seedOrder({ paymentStatus: 'paid', status: 'processing' });
+    seedPaidSteps();
     vi.mocked(restock)
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('stock write failed'));
@@ -320,6 +328,7 @@ describe('charge.refunded', () => {
 
   it('releases the coupon only on the first move into refunded', async () => {
     seedOrder({ paymentStatus: 'paid' });
+    seedPaidSteps();
     await deliver(refunded('evt_a'));
     await deliver(refunded('evt_b'));
     const couponUpdates = h.fake.log.filter((l: any) => l.table === 'coupons');
@@ -329,9 +338,19 @@ describe('charge.refunded', () => {
 
   it('an admin refund that got there first still restocks, without a coupon release', async () => {
     seedOrder({ paymentStatus: 'refunded', status: 'cancelled' });
+    seedPaidSteps();
     await deliver(refunded());
     expect(h.fake.log.filter((l: any) => l.table === 'coupons')).toHaveLength(0);
     expect(restock).toHaveBeenCalledTimes(2);
+  });
+
+  it('a refund before the payment webhook succeeded restocks nothing and keeps the coupon count', async () => {
+    const order = seedOrder({ paymentStatus: 'pending', status: 'pending_payment' });
+    seedPaidSteps(['pi_1:stock:0']);
+    expect((await deliver(refunded())).status).toBe(200);
+    expect(vi.mocked(restock).mock.calls.map((c) => c[0][0].productId)).toEqual(['p1']);
+    expect(h.fake.log.filter((l: any) => l.table === 'coupons')).toHaveLength(0);
+    expect(order.paymentStatus).toBe('refunded');
   });
 
   it('a partial refund leaves stock alone', async () => {

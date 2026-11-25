@@ -11,6 +11,7 @@ import { decrementStock, restock } from '@/lib/inventory';
 import { normalizeCouponCode, recordCouponUsage } from '@/lib/coupons';
 import {
   isEventHandled,
+  isStepDone,
   markEventHandled,
   runOnce,
   StepInProgressError,
@@ -263,7 +264,14 @@ async function handleChargeRefunded(eventId: string, charge: Stripe.Charge) {
   // "refunded" counts: an admin refund (refundOrderAction) that got there first
   // has already released it. A retry sees no flip, so a failure here cannot be
   // retried; it is reported rather than holding up the restock below.
-  if (charge.refunded && flipped && existingOrder.couponCode) {
+  // Only give back a use the payment webhook actually counted: a dashboard
+  // refund can land before payment handling ever succeeded.
+  if (
+    charge.refunded &&
+    flipped &&
+    existingOrder.couponCode &&
+    (await isStepDone(`${paymentIntentId}:coupon`))
+  ) {
     try {
       await db
         .update(coupons)
@@ -284,6 +292,8 @@ async function handleChargeRefunded(eventId: string, charge: Stripe.Charge) {
   if (charge.refunded && !shipped) {
     const items = (existingOrder.items || []) as OrderItem[];
     for (const [index, item] of items.entries()) {
+      // Restock only lines whose stock was actually taken on payment.
+      if (!(await isStepDone(`${paymentIntentId}:stock:${index}`))) continue;
       await runOnce(`${charge.id}:restock:${index}`, () => restock([item]));
     }
   }
