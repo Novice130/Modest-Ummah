@@ -4,7 +4,7 @@
  * There is one web container, so one process sees every request. The cost of
  * keeping this in memory is that counters reset on deploy or restart, which is
  * acceptable: an attacker gains one extra window per deploy. The benefit is the
- * reason it is not modelled on lib/woo/auth.ts, which counts rows in the
+ * reason it is not modelled on the old WooCommerce connector auth, which counted rows in the
  * database: a refused request here makes no query, so a flood cannot keep Neon
  * awake, and an idle site does nothing at all. There is no timer. Expired
  * entries are removed when the table fills up.

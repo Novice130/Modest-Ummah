@@ -19,7 +19,7 @@ Illinois Department of Revenue (IDOR) or an accountant before launch.
 | # | Item | Why | Where |
 |---|------|-----|-------|
 | 1 | Register for sales tax (Retailers' Occupation Tax) | Required before selling goods and collecting tax in Illinois | MyTax Illinois, "Register a New Business (Form REG-1)", about 1-2 business days online |
-| 2 | Look up the exact tax rate for the shipping address | Romeoville's combined rate is reported between 8.5% and 9.5% depending on special/business districts; only the address lookup is authoritative | IDOR Tax Rate Finder (MyTax Illinois), then set `SALES_TAX_RATES=IL:<rate>` |
+| 2 | ~~Look up the exact tax rate~~ Done 2026-11-26: IDOR Tax Rate Finder, ship-from address, location code 09900251R00: general merchandise **8.750%**, so `SALES_TAX_RATES=IL:0.0875` | Romeoville's combined rate is reported between 8.5% and 9.5% depending on special/business districts; only the address lookup is authoritative | IDOR Tax Rate Finder (MyTax Illinois), then set `SALES_TAX_RATES=IL:<rate>` |
 | 3 | Assumed business name (DBA) for "Modest Ummah" | Trading under a name other than his legal name; Illinois requires filing with the county clerk and a newspaper notice | Will County Clerk |
 | 4 | Village of Romeoville home occupation / business license | Chapter 113 requires a business license per location; home occupations are licensed by the Zoning Administrator | Romeoville Planning & Zoning, 815-886-7200 |
 | 5 | Operator details in legal pages | Privacy policy, terms and emails must name a real operator and contact; marketing email needs a postal address (a PO box or virtual mailbox avoids publishing the home address) | Site legal pages, Brevo |
@@ -81,6 +81,16 @@ Each server/cloud step is shown with its exact commands and waits for "go".
 9. **Soon after**: Cloudflare Authenticated Origin Pulls (infra branch
    `fix/security-audit-2026-11-25`, order in runbook 4a), confirm port 22 is
    closed, guard `mobile/integration_test/capture_flow.dart`.
+
+## Fulfillment (decided 2026-11-26)
+
+The WooCommerce connector (`/wp-json`, `/wc-auth`, `lib/woo`) is removed.
+Pirate Ship gets orders by spreadsheet: Admin > Orders > select > Export
+(Pirate Ship format, paid and unshipped only), import the file in Pirate Ship
+(map columns once), buy labels, then enter each tracking number on the order
+page, which emails the customer. Migration `drizzle/0002_drop_woo_connector.sql`
+drops `api_keys`, `woo_oauth_nonces` and `integration_events`; apply it only
+after the new image is live, because the old image still has the connector.
 
 ## Sources
 

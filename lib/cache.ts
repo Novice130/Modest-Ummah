@@ -31,10 +31,18 @@ export const TAGS_TAG = 'tags';
  * requires a profile argument; keep it identical to what the cached reads
  * declare so invalidations land on the right entries.
  */
+//
+// Sized for Neon's free plan (100 CU-hours/month; compute sleeps after 5 idle
+// minutes). Each revalidation is a DB query that wakes the compute, so
+// `revalidate` caps how often visitor or bot traffic can do that: at most once
+// an hour per entry. Admin writes call updateTag, so edits still show at once.
+// The cost is that a *scheduled* product appears up to an hour after its
+// publish time (see lib/product-live.ts). Entries live in the server's
+// in-memory 'use cache' store (bounded LRU), so this adds no disk or CPU load.
 export const PRODUCT_CACHE_PROFILE: { stale: number; revalidate: number; expire: number } = {
   stale: 300,
-  revalidate: 900,
-  expire: 86400,
+  revalidate: 3600,
+  expire: 604800,
 };
 
 export function productTag(id: string): string {

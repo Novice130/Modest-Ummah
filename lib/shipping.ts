@@ -14,9 +14,9 @@
  *  - createShipment / schedulePickup / cancelShipment / verifyAddress have
  *    no callers.
  *
- * Labels are bought in Pirate Ship itself, which imports orders through the
- * WooCommerce-compatible API in lib/woo and writes tracking back
- * (lib/woo/writeback.ts). See CONNECTOR_IMPLEMENTATION_PIRATESHIP.md.
+ * Labels are bought in Pirate Ship itself: export paid orders from the admin
+ * (app/api/admin/orders/export, Pirate Ship spreadsheet format), import the
+ * file in Pirate Ship, then enter each tracking number on the order page.
  * Parcel weight/box: lib/parcel.ts (single source of truth).
  */
 

@@ -1,12 +1,13 @@
 /**
- * Store identity and origin address for the WooCommerce-compatible surface.
+ * Store identity and ship-from address.
  *
  * The origin values are the same PIRATESHIP_ORIGIN_* variables lib/shipping.ts
  * reads. If they are unset, lib/shipping.ts falls back to a placeholder
- * ("123 Business St, New York, NY 10001") which would print on real labels —
- * so this module reports whether the origin is actually configured, and the
- * admin integration card surfaces that.
+ * ("123 Business St, New York, NY 10001"), so this module reports whether the
+ * origin is actually configured, and the admin settings page shows that.
  */
+
+export const STORE_CURRENCY = 'USD';
 
 export function storeUrl(): string {
   const url = process.env.NEXT_PUBLIC_APP_URL || 'https://modestummah.com';

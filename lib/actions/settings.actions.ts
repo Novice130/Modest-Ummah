@@ -5,8 +5,7 @@ import { settings } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
 import { getSession } from './auth.actions';
 import { getFreeShippingInfo } from '@/lib/shipping';
-import { storeUrl, storeOrigin, isOriginConfigured } from '@/lib/woo/store';
-import { STORE_CURRENCY } from '@/lib/woo/serialize';
+import { storeUrl, storeOrigin, isOriginConfigured, STORE_CURRENCY } from '@/lib/store-info';
 
 /**
  * Store settings persisted in the key/value `settings` table under key

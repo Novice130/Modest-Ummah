@@ -62,7 +62,7 @@ const nextConfig = {
   // Dev-only. Next blocks cross-origin requests for /_next/* dev resources,
   // which silently breaks any page served through a tunnel: the HTML renders
   // but the JS chunks are refused, so nothing hydrates and forms do nothing.
-  // Needed while testing the Pirate Ship connector over cloudflared. Has no
+  // Needed when testing through a tunnel such as cloudflared. Has no
   allowedDevOrigins: [
     'localhost:3000',
     '127.0.0.1:3000',

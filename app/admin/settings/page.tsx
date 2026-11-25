@@ -20,7 +20,6 @@ import {
   fetchStoreConfigAction,
   type StoreConfigItem,
 } from '@/lib/actions/settings.actions';
-import PirateShipConnector from '@/components/admin/pirate-ship-connector';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -183,7 +182,6 @@ export default function AdminSettingsPage() {
         </CardHeader>
       </Card>
 
-      <PirateShipConnector />
     </div>
   );
 }

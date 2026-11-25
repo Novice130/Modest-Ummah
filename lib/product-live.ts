@@ -10,7 +10,7 @@ import { products } from '@/lib/schema';
  *
  * Cached entries evaluate now() when they are filled, so a scheduled product
  * appears once its entry next revalidates: at most PRODUCT_CACHE_PROFILE
- * .revalidate (15 min) after the publish time. Checkout is uncached, so it can
+ * .revalidate (1 hour) after the publish time. Checkout is uncached, so it can
  * accept a due product slightly before the shop lists it.
  *
  * Lives outside lib/catalog-cache.ts because a 'use cache' file may only

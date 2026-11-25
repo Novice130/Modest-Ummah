@@ -423,7 +423,7 @@ th,td{text-align:left;border-bottom:1px solid #ddd;padding:8px 4px;vertical-alig
         </Badge>
         <span className="text-sm text-muted-foreground">
           Placed {formatDateTime(order.createdAt)}
-          {order.wooId != null && ` · Pirate Ship #${order.wooId}`}
+          {order.wooId != null && ` · #${order.wooId}`}
         </span>
       </div>
 
