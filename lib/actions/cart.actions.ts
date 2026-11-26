@@ -4,7 +4,7 @@ import { getDb } from '@/lib/db';
 import { carts } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
 import type { Cart, CartItem } from '@/types';
-import { getSession } from './auth.actions';
+import { getSession } from '@/lib/session';
 
 function mapCart(c: any): Cart {
   return {

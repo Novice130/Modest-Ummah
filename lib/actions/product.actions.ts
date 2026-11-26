@@ -33,7 +33,7 @@ import {
 } from '@/lib/product-builder-schema';
 import { stringifyCsv, parseList, joinList } from '@/lib/csv';
 import { resolveImageMeta, type ImageMetaEntry } from '@/lib/image-meta';
-import { getSession } from './auth.actions';
+import { getSession } from '@/lib/session';
 import { setProductTags } from './tag.actions';
 
 /**

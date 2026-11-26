@@ -7,7 +7,7 @@ import { User, Package, Heart, MapPin, CreditCard, Settings, LogOut, Loader2 } f
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuthStore } from '@/lib/store';
-import { clearSession } from '@/lib/actions/auth.actions';
+import { signOutAction } from '@/lib/actions/auth.actions';
 import { fetchUserOrders } from '@/lib/actions/order.actions';
 
 const accountLinks = [
@@ -78,7 +78,7 @@ export default function AccountPage() {
   }, [user, router]);
 
   const handleSignOut = async () => {
-    await clearSession();
+    await signOutAction();
     setUser(null);
     router.refresh(); // Crucial for layout update
     router.push('/');

@@ -3,7 +3,7 @@
 import { getDb } from '@/lib/db';
 import { users, orders, settings } from '@/lib/schema';
 import { and, asc, count, desc, eq, ilike, isNull, like, or, sql, type SQL } from 'drizzle-orm';
-import { getSession } from './auth.actions';
+import { getSession } from '@/lib/session';
 import { placedOrderCondition, revenueOrderCondition } from '@/lib/admin-helpers';
 import { normalizeAddress } from '@/lib/address';
 import type { ShippingAddressDB } from '@/lib/schema';

@@ -35,6 +35,12 @@ describe('auth actions', () => {
   it('setSession is not exposed as a server action', () => {
     expect((authActions as Record<string, unknown>).setSession).toBeUndefined();
   });
+
+  it('getSession and clearSession are not exposed as server actions', () => {
+    expect((authActions as Record<string, unknown>).getSession).toBeUndefined();
+    expect((authActions as Record<string, unknown>).clearSession).toBeUndefined();
+    expect(typeof authActions.signOutAction).toBe('function');
+  });
 });
 
 describe('catalogue search', () => {

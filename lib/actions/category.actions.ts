@@ -8,7 +8,7 @@ import { CATEGORIES_TAG, PRODUCTS_TAG, TAGS_TAG } from '@/lib/cache';
 import { getCategoryTreeCached } from '@/lib/catalog-cache';
 import { slugify } from '@/lib/utils';
 import type { CategoryNode } from '@/types';
-import { getSession } from './auth.actions';
+import { getSession } from '@/lib/session';
 
 /**
  * Category CRUD. The categories table has been hierarchical since the

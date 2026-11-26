@@ -3,7 +3,7 @@
 import { getDb } from '@/lib/db';
 import { settings } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
-import { getSession } from './auth.actions';
+import { getSession } from '@/lib/session';
 import { getFreeShippingInfo } from '@/lib/shipping';
 import { storeUrl, storeOrigin, isOriginConfigured, STORE_CURRENCY } from '@/lib/store-info';
 

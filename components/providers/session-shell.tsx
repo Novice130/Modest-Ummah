@@ -1,5 +1,5 @@
 import { AuthProvider } from '@/components/providers/auth-provider';
-import { getSession } from '@/lib/actions/auth.actions';
+import { getSession } from '@/lib/session';
 import AppShell from '@/components/layout/app-shell';
 import { fetchCategoryTree } from '@/lib/actions/category.actions';
 import { Toaster } from '@/components/ui/toaster';

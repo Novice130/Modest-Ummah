@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { LayoutDashboard, ShoppingBag, Package, Users, Settings, LogOut, TicketPercent, FolderTree, Tags, ExternalLink, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { clearSession } from '@/lib/actions/auth.actions';
+import { signOutAction } from '@/lib/actions/auth.actions';
 
 // Ordered like a store admin's daily workflow: orders first, then catalogue,
 // then people and promotions.
@@ -28,7 +28,7 @@ export default function AdminNav({ onNavigate }: { onNavigate?: () => void }) {
   const handleSignOut = async () => {
     setSigningOut(true);
     try {
-      await clearSession(true);
+      await signOutAction(true);
     } finally {
       // Full navigation, not router.push: it discards the client router
       // cache, so Back cannot show admin pages rendered before sign-out.

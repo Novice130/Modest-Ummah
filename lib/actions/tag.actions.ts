@@ -8,7 +8,7 @@ import { CATEGORIES_TAG, PRODUCTS_TAG, TAGS_TAG } from '@/lib/cache';
 import { getTagsCached } from '@/lib/catalog-cache';
 import { slugify } from '@/lib/utils';
 import type { TagRef } from '@/types';
-import { getSession } from './auth.actions';
+import { getSession } from '@/lib/session';
 
 /**
  * Tag CRUD against a real registry.

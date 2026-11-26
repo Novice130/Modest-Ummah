@@ -11,7 +11,7 @@ import {
   isAdmin2faRequired,
   verifyAdminPendingToken,
 } from '@/lib/auth';
-import { getSession } from './auth.actions';
+import { getSession } from '@/lib/session';
 import { setSessionCookie } from '@/lib/session-cookie';
 import { rateLimitAction } from '@/lib/rate-limit-guards';
 import {
