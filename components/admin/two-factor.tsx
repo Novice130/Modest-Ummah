@@ -160,7 +160,7 @@ export function TotpEnrollForm({
   onDone: () => void;
   onCancel?: () => void;
 }) {
-  const [setup, setSetup] = useState<{ secret: string; uri: string } | null>(null);
+  const [setup, setSetup] = useState<{ secret: string; uri: string; qr: string } | null>(null);
   const [codes, setCodes] = useState<string[] | null>(null);
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -230,8 +230,17 @@ export function TotpEnrollForm({
   return (
     <form onSubmit={confirm} className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Add this key to your authenticator app as a time-based code, then enter the code it shows.
+        Scan this QR code with your authenticator app, then enter the 6-digit code it shows.
       </p>
+      {/* eslint-disable-next-line @next/next/no-img-element -- inline data URL, nothing to optimise */}
+      <img
+        src={setup.qr}
+        alt="QR code for your authenticator app"
+        width={200}
+        height={200}
+        className="mx-auto rounded-md bg-white p-2"
+      />
+      <p className="text-sm text-muted-foreground">Can&apos;t scan? Enter this key instead:</p>
       <p className="break-all rounded-md bg-muted p-3 font-mono text-sm select-all">
         {setup.secret.match(/.{1,4}/g)?.join(' ')}
       </p>

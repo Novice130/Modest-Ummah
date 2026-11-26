@@ -1,6 +1,7 @@
 'use server';
 
 import { cookies } from 'next/headers';
+import QRCode from 'qrcode';
 import { eq } from 'drizzle-orm';
 import { getDb } from '@/lib/db';
 import { admins } from '@/lib/schema';
@@ -102,14 +103,22 @@ async function enrollingAdmin(): Promise<{
 }
 
 export async function startAdminEnrollmentAction(): Promise<
-  { secret: string; uri: string } | { error: string }
+  { secret: string; uri: string; qr: string } | { error: string }
 > {
   try {
     const admin = await enrollingAdmin();
     if (!admin) return { error: EXPIRED };
 
     const started = await startEnrollment(admin.adminId, admin.account);
-    return started ?? { error: 'An authenticator is already set up for this account.' };
+    if (!started) return { error: 'An authenticator is already set up for this account.' };
+    // The QR code is drawn here, on the server, so the secret never reaches a
+    // third-party QR service. Returned as an SVG data URL for a plain <img>.
+    const svg = await QRCode.toString(started.uri, {
+      type: 'svg',
+      errorCorrectionLevel: 'M',
+      margin: 2,
+    });
+    return { ...started, qr: `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}` };
   } catch (error) {
     console.error('[admin-2fa] enrolment start failed:', error);
     return { error: UNAVAILABLE };
