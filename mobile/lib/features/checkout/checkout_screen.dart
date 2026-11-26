@@ -9,6 +9,7 @@ import '../../data/models/models.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/theme/palette.dart';
 import '../common/product_image.dart';
+import '../orders/orders_screen.dart';
 import '../common/surface_card.dart';
 
 /// Checkout collects an address, then hands off to Stripe's native sheet.
@@ -80,6 +81,13 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
     final lines = ref.read(cartProvider);
     if (lines.isEmpty) return;
 
+    // openCheckout gates the way in; this covers a session that ended while
+    // the form was open, or a route reached some other way.
+    if (!ref.read(authProvider).isSignedIn) {
+      await context.push('/auth');
+      if (!mounted || !ref.read(authProvider).isSignedIn) return;
+    }
+
     setState(() {
       _busy = true;
       _error = null;
@@ -135,19 +143,28 @@ class _CheckoutScreenState extends ConsumerState<CheckoutScreen> {
 
       // The Stripe webhook is the source of truth for order state — it writes
       // the order, decrements stock and sends the confirmation email. The app
-      // never creates the order itself.
+      // never creates the order itself, so at this point the payment has gone
+      // through but the order is not confirmed yet.
       if (!mounted) return;
       ref.read(cartProvider.notifier).clear();
-      context.go('/orders');
+      ref.invalidate(ordersProvider);
+      context.go('/orders', extra: true);
       messenger.showSnackBar(
-        const SnackBar(content: Text('Thank you — your order is confirmed.')),
+        const SnackBar(
+          content: Text('Payment received. We are confirming your order.'),
+        ),
       );
     } on StripeException catch (e) {
       if (mounted) {
         setState(() => _error = e.error.localizedMessage ?? 'Payment was not completed.');
       }
+    } on ApiException catch (e) {
+      if (mounted) setState(() => _error = e.message);
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      debugPrint('checkout failed: $e');
+      if (mounted) {
+        setState(() => _error = 'Payment could not be started. Please try again.');
+      }
     } finally {
       if (mounted) setState(() => _busy = false);
     }

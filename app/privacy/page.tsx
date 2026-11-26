@@ -11,17 +11,19 @@ export default function PrivacyPage() {
     <div className="container-custom py-16 max-w-3xl">
       <h1 className="font-heading text-3xl md:text-4xl mb-8">Privacy Policy</h1>
       <p className="text-sm text-muted-foreground mb-8">
-        Last updated: August 2026
+        Last updated: November 2026
       </p>
 
       <div className="prose prose-sm max-w-none space-y-6">
         <section>
           <h2 className="font-heading text-xl mb-3">What we collect</h2>
           <p className="text-muted-foreground">
-            When you place an order, create an account, or subscribe to our newsletter, we
-            collect the information you give us: your name, email address, shipping address,
-            and phone number. Payment details are handled by our payment processor (Stripe)
-            and never touch our servers.
+            When you place an order, create an account, contact us, or subscribe to our
+            newsletter, we collect the information you give us: your name, email address,
+            shipping and billing addresses, phone number, order details, and any message you
+            send us. If you sign in with Google or Apple, we receive your name, email address,
+            and an account identifier from them. Payment details are handled by our payment
+            processor (Stripe) and never touch our servers.
           </p>
         </section>
 
@@ -35,11 +37,36 @@ export default function PrivacyPage() {
         </section>
 
         <section>
+          <h2 className="font-heading text-xl mb-3">Service providers</h2>
+          <p className="text-muted-foreground mb-3">
+            These companies handle information for us as part of running the store:
+          </p>
+          <ul className="list-disc pl-5 space-y-1 text-muted-foreground">
+            <li>Stripe: payment processing.</li>
+            <li>Brevo: sending order, shipping, and account emails.</li>
+            <li>Google and Apple: sign-in, if you choose to use them.</li>
+            <li>
+              Pirate Ship and the delivery carrier: order and address details, to buy shipping
+              labels and deliver your order.
+            </li>
+            <li>TaxCloud: delivery address and cart items, to calculate sales tax, when enabled.</li>
+            <li>
+              Sentry: error monitoring, set up not to send user details, cookies, request
+              contents, or query strings.
+            </li>
+            <li>Cloudflare: website delivery and security.</li>
+            <li>Hetzner: website hosting.</li>
+            <li>Neon: database hosting.</li>
+          </ul>
+        </section>
+
+        <section>
           <h2 className="font-heading text-xl mb-3">Cookies</h2>
           <p className="text-muted-foreground">
-            We use essential cookies to keep you signed in and to remember your cart.
-            Our theme preference is stored on your device. We do not use advertising
-            trackers.
+            We use an essential cookie to keep you signed in. Your cart, wishlist, and theme
+            preference are stored on your device. Stripe, Google, and Apple load their own
+            scripts on checkout and sign-in pages and may set their own cookies. We do not use
+            advertising trackers.
           </p>
         </section>
 
@@ -47,7 +74,7 @@ export default function PrivacyPage() {
           <h2 className="font-heading text-xl mb-3">Your rights</h2>
           <p className="text-muted-foreground">
             You can request a copy of your data, ask us to correct it, or ask us to delete
-            your account and personal information at any time by contacting us at{' '}
+            your account at any time by contacting us at{' '}
             <a href="mailto:support@modestummah.com" className="text-sage-600 hover:underline">
               support@modestummah.com
             </a>
@@ -58,9 +85,11 @@ export default function PrivacyPage() {
         <section>
           <h2 className="font-heading text-xl mb-3">Data retention</h2>
           <p className="text-muted-foreground">
-            Order records are kept for accounting and legal purposes. Newsletter
-            subscriptions are kept until you unsubscribe. Accounts you delete are removed
-            from our database.
+            Order records are kept for accounting and legal purposes. When an account is
+            deleted, the account and its saved cart are removed and the email address on its
+            orders is replaced, but the orders themselves are kept, including the name, phone
+            number, and shipping and billing addresses on them. Newsletter sign-ups are kept
+            until you ask us to remove them.
           </p>
         </section>
 

@@ -32,10 +32,12 @@ const protectedAdminRoutes = ['/admin'];
 // Admin login is public
 const adminLoginRoute = '/admin/login';
 
-async function verifyJWT(token: string): Promise<{ sub: string; type: string } | null> {
+async function verifyJWT(
+  token: string
+): Promise<{ sub: string; type: string; mfa?: boolean } | null> {
   try {
     const { payload } = await jwtVerify(token, getJwtSecret(), { issuer: JWT_ISSUER });
-    return payload as unknown as { sub: string; type: string };
+    return payload as unknown as { sub: string; type: string; mfa?: boolean };
   } catch {
     return null;
   }
@@ -47,15 +49,21 @@ export async function proxy(request: NextRequest) {
   // --- Admin routes ---
   if (pathname.startsWith('/admin') && pathname !== adminLoginRoute) {
     const adminToken = request.cookies.get('admin_token')?.value;
+    // Back to the page that was asked for after signing in; the login page
+    // only follows same-origin /admin paths.
+    const loginUrl = new URL('/admin/login', request.url);
+    loginUrl.searchParams.set('redirect', pathname + request.nextUrl.search);
 
     if (!adminToken) {
-      return NextResponse.redirect(new URL('/admin/login', request.url));
+      return NextResponse.redirect(loginUrl);
     }
 
     const payload = await verifyJWT(adminToken);
-    if (!payload || payload.type !== 'admin') {
+    // Same rule as adminTokenPasses2fa in lib/auth.ts.
+    const passes2fa = process.env.ADMIN_2FA_REQUIRED !== 'true' || payload?.mfa === true;
+    if (!payload || payload.type !== 'admin' || !passes2fa) {
       // Clear invalid cookie and redirect
-      const response = NextResponse.redirect(new URL('/admin/login', request.url));
+      const response = NextResponse.redirect(loginUrl);
       response.cookies.delete('admin_token');
       return response;
     }

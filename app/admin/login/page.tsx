@@ -1,8 +1,9 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { adminSignIn } from '@/lib/api';
+import { TotpEnrollForm, TotpVerifyForm } from '@/components/admin/two-factor';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,12 +16,23 @@ import Link from 'next/link';
  * target worth aiming one at.
  */
 function safeRedirect(value: string | null): string {
-  if (!value || !value.startsWith('/') || value.startsWith('//')) return '/admin';
+  // Browsers read "/\evil.com" like "//evil.com", so backslashes are refused too.
+  if (!value || !/^\/admin(\/|\?|$)/.test(value) || value.includes('\\')) return '/admin';
   return value;
 }
 
+/**
+ * Full page load after sign-in, not router.push. Setting the session cookie in
+ * the sign-in Server Action makes Next re-render the current page (the login
+ * form) in the same round trip; a client push started at the same time races
+ * that refresh and can leave the router in the error boundary. A full load
+ * also drops router cache entries rendered while signed out.
+ */
+function goTo(path: string) {
+  window.location.assign(path);
+}
+
 function AdminLoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = safeRedirect(searchParams.get('redirect'));
   const [email, setEmail] = useState('');
@@ -28,6 +40,7 @@ function AdminLoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [twoFactor, setTwoFactor] = useState<'verify' | 'enroll' | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,14 +56,19 @@ function AdminLoginForm() {
         return;
       }
 
-      router.push(redirectTo);
+      if (result && 'twoFactor' in result) {
+        setPassword('');
+        setTwoFactor(result.twoFactor);
+        setLoading(false);
+        return;
+      }
+
+      // Keep the spinner until the new page loads.
+      goTo(redirectTo);
     } catch (err) {
       console.error(err);
       setError('Something went wrong. Please try again.');
-    } finally {
-      if (window.location.pathname === '/admin/login') {
-         setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
@@ -67,13 +85,29 @@ function AdminLoginForm() {
           </p>
         </div>
 
+        {twoFactor === 'verify' ? (
+          <TotpVerifyForm
+            onVerified={(usedRecoveryCode) =>
+              // A used recovery code usually means a lost phone: go straight to
+              // the page that replaces the authenticator.
+              goTo(usedRecoveryCode ? '/admin/settings/security' : redirectTo)
+            }
+            onCancel={() => setTwoFactor(null)}
+          />
+        ) : twoFactor === 'enroll' ? (
+          <TotpEnrollForm
+            required
+            onDone={() => goTo(redirectTo)}
+            onCancel={() => setTwoFactor(null)}
+          />
+        ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="email">Admin Email</Label>
             <Input
               id="email"
               type="email"
-              placeholder="admin@modestummah.com"
+              placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoCapitalize="none"
@@ -129,6 +163,7 @@ function AdminLoginForm() {
             )}
           </Button>
         </form>
+        )}
 
         <div className="mt-6 text-center">
           <Link href="/" className="text-sm text-muted-foreground hover:text-primary">

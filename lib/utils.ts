@@ -89,7 +89,9 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
 
 export function generateOrderId(): string {
   const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).substring(2, 8);
+  // Web Crypto, not Math.random: this runs on the server and in the browser.
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(6));
+  const random = Array.from(bytes, (b) => (b % 36).toString(36)).join('');
   return `ORD-${timestamp}-${random}`.toUpperCase();
 }
 

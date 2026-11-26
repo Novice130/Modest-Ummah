@@ -20,8 +20,11 @@ class ApiException implements Exception {
 /// The single Dio instance. Attaches the bearer token, and reports a 401 once
 /// so the app can drop the session and send the customer to sign-in.
 class ApiClient {
-  ApiClient({required SecureStore store, this.onUnauthenticated})
-      : _store = store {
+  ApiClient({
+    required SecureStore store,
+    this.onUnauthenticated,
+    HttpClientAdapter? httpAdapter,
+  }) : _store = store {
     _dio = Dio(
       BaseOptions(
         baseUrl: ApiConfig.apiBase,
@@ -33,6 +36,8 @@ class ApiClient {
         validateStatus: (status) => status != null && status < 500,
       ),
     );
+
+    if (httpAdapter != null) _dio.httpClientAdapter = httpAdapter;
 
     _dio.interceptors.add(
       InterceptorsWrapper(

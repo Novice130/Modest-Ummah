@@ -11,7 +11,7 @@ import {
   tags,
   type ProductAttributeInsert,
 } from '@/lib/schema';
-import { eq, inArray, ilike, or, and, desc, ne, count, like } from 'drizzle-orm';
+import { eq, inArray, ilike, or, and, asc, desc, ne, count, isNotNull, gt, lte, sql, type SQL } from 'drizzle-orm';
 import { PRODUCTS_TAG, productTag } from '@/lib/cache';
 import { buildCategoryRef, mapProduct } from '@/lib/product-mapper';
 import {
@@ -21,11 +21,19 @@ import {
   getRelatedCached,
   getSearchCached,
 } from '@/lib/catalog-cache';
-import type { Product } from '@/types';
-import { productDocumentSchema, type ProductDocument } from '@/lib/product-builder-schema';
+import type { Product, ProductStatus } from '@/types';
+import {
+  CSV_COLUMNS,
+  deriveStorefrontOptions,
+  flattenIssues,
+  productDocumentSchema,
+  slugifyProductName,
+  type ProductDocument,
+  type VariantRow,
+} from '@/lib/product-builder-schema';
 import { stringifyCsv, parseList, joinList } from '@/lib/csv';
 import { resolveImageMeta, type ImageMetaEntry } from '@/lib/image-meta';
-import { getSession } from './auth.actions';
+import { getSession } from '@/lib/session';
 import { setProductTags } from './tag.actions';
 
 /**
@@ -38,11 +46,27 @@ function invalidateProductCaches(id?: string) {
   if (id) updateTag(productTag(id));
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+async function requireAdmin() {
+  const session = await getSession(true);
+  if (!session) throw new Error('Unauthorized');
+}
+
 export async function fetchProducts(params?: Parameters<typeof getProductsCached>[0]) {
+  // Public Server Action: the unpublished flag is honoured for admins only.
+  if (params?.includeUnpublished && !(await getSession(true))) {
+    params = { ...params, includeUnpublished: false };
+  }
   return getProductsCached(params);
 }
 
 export async function fetchProductBySlugOrId(idOrSlug: string, includeUnpublished = false): Promise<Product | null> {
+  // This is a public Server Action: drafts are admin-only.
+  if (includeUnpublished) {
+    const session = await getSession(true);
+    if (!session) includeUnpublished = false;
+  }
   return getProductCached(idOrSlug, includeUnpublished);
 }
 
@@ -55,12 +79,28 @@ export async function fetchNewArrivals(limit = 8) {
   return getNewArrivalsCached(limit);
 }
 
+/**
+ * "You may also like": the products picked in the builder's Related products
+ * field come first (published ones only, in the order picked), then the
+ * remaining slots fill from the same category. All reads are cached.
+ */
 export async function fetchRelatedProducts(
   currentProductId: string,
   categoryId: string | null,
   limit = 4
 ) {
-  return getRelatedCached(currentProductId, categoryId, limit);
+  const current = await getProductCached(currentProductId);
+  const picked: Product[] = [];
+  for (const id of current?.similarProducts ?? []) {
+    if (picked.length >= limit) break;
+    if (id === currentProductId || !UUID_RE.test(id)) continue;
+    const p = await getProductCached(id);
+    if (p && !picked.some((x) => x.id === p.id)) picked.push(p);
+  }
+  if (picked.length >= limit) return picked;
+
+  const fill = await getRelatedCached(currentProductId, categoryId, limit + picked.length);
+  return [...picked, ...fill.filter((p) => !picked.some((x) => x.id === p.id))].slice(0, limit);
 }
 
 export async function fetchSearchProducts(query: string) {
@@ -69,31 +109,52 @@ export async function fetchSearchProducts(query: string) {
 
 // ─── BUILDER SUPPORT ──────────────────────────────────────
 
-/** Fetch a full product for the builder: row + variants + attributes. */
+/** Fetch a full product for the builder: row + category + tags + variants + attributes. */
 export async function fetchBuilderProduct(id: string) {
-  const session = await getSession(true);
-  if (!session) throw new Error('Unauthorized');
+  await requireAdmin();
+  if (!UUID_RE.test(id)) return null;
 
   const db = getDb();
   const [row] = await db.select().from(products).where(eq(products.id, id)).limit(1);
   if (!row) return null;
 
-  const [variants, attributes] = await Promise.all([
+  const [variants, attributes, categoryRows, tagRows] = await Promise.all([
     db.select().from(productVariants).where(eq(productVariants.productId, id)),
     db.select().from(productAttributes).where(eq(productAttributes.productId, id)),
+    db
+      .select({
+        id: categories.id,
+        name: categories.name,
+        slug: categories.slug,
+        parentId: categories.parentId,
+      })
+      .from(categories),
+    db
+      .select({ id: tags.id, name: tags.name, slug: tags.slug })
+      .from(productTags)
+      .innerJoin(tags, eq(productTags.tagId, tags.id))
+      .where(eq(productTags.productId, id)),
   ]);
 
-  return { product: mapProduct(row), variants, attributes };
+  // Without the category and tags the builder opened with an empty category
+  // (failing validation) and an empty tag list that the next save wrote back.
+  const categoryMap = new Map(categoryRows.map((c) => [c.id, c]));
+  const product = mapProduct(row, {
+    category: buildCategoryRef(categoryMap, row.categoryId),
+    tags: tagRows,
+  });
+
+  return { product, variants, attributes };
 }
 
 /** Uniqueness check for the slug field (excludes the product being edited). */
 export async function checkSlugAvailable(slug: string, excludeId?: string) {
-  const session = await getSession(true);
-  if (!session) throw new Error('Unauthorized');
+  await requireAdmin();
+  if (!slug) return true;
 
   const db = getDb();
-  const conditions = [eq(products.slug, slug)];
-  if (excludeId) conditions.push(ne(products.id, excludeId) as any);
+  const conditions: SQL[] = [eq(products.slug, slug)];
+  if (excludeId && UUID_RE.test(excludeId)) conditions.push(ne(products.id, excludeId));
   const [row] = await db
     .select({ id: products.id })
     .from(products)
@@ -102,135 +163,300 @@ export async function checkSlugAvailable(slug: string, excludeId?: string) {
   return !row;
 }
 
-/** Lightweight options for linked-product pickers (search + paginate). */
-export async function fetchProductPickerOptions(query = '', limit = 12) {
-  const session = await getSession(true);
-  if (!session) throw new Error('Unauthorized');
+export interface PickerOption {
+  id: string;
+  name: string;
+  sku: string;
+  image: string | null;
+  status: string;
+}
+
+/** Lightweight options for linked-product pickers (search). Published only. */
+export async function fetchProductPickerOptions(query = '', limit = 12, excludeId?: string) {
+  await requireAdmin();
 
   const db = getDb();
-  const conditions = [eq(products.status, 'published')];
-  if (query) {
-    conditions.push(or(ilike(products.name, `%${query}%`), ilike(products.sku, `%${query}%`)) as any);
+  const conditions: SQL[] = [eq(products.status, 'published')];
+  if (excludeId && UUID_RE.test(excludeId)) conditions.push(ne(products.id, excludeId));
+  const q = query.trim();
+  if (q) {
+    conditions.push(or(ilike(products.name, `%${q}%`), ilike(products.sku, `%${q}%`))!);
   }
   const rows = await db
-    .select({ id: products.id, name: products.name, sku: products.sku, images: products.images })
+    .select({
+      id: products.id,
+      name: products.name,
+      sku: products.sku,
+      images: products.images,
+      status: products.status,
+    })
     .from(products)
     .where(and(...conditions))
     .orderBy(products.name)
     .limit(limit);
 
-  return rows.map((r) => ({
-    id: r.id,
-    name: r.name,
-    sku: r.sku,
-    image: (r.images || [])[0] || null,
-  }));
+  return rows.map(toPickerOption);
+}
+
+/** Resolve already-linked ids to display rows, whatever their status. */
+export async function fetchProductsByIds(ids: string[]): Promise<PickerOption[]> {
+  await requireAdmin();
+  const valid = [...new Set(ids)].filter((id) => UUID_RE.test(id));
+  if (valid.length === 0) return [];
+
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: products.id,
+      name: products.name,
+      sku: products.sku,
+      images: products.images,
+      status: products.status,
+    })
+    .from(products)
+    .where(inArray(products.id, valid));
+  const byId = new Map(rows.map((r) => [r.id, toPickerOption(r)]));
+  return valid.map((id) => byId.get(id)).filter((r): r is PickerOption => Boolean(r));
+}
+
+function toPickerOption(r: {
+  id: string;
+  name: string;
+  sku: string;
+  images: string[] | null;
+  status: string;
+}): PickerOption {
+  return { id: r.id, name: r.name, sku: r.sku, image: (r.images || [])[0] || null, status: r.status };
 }
 
 // ─── SAVE / AUTOSAVE ──────────────────────────────────────
 
-interface SaveResult {
-  productId: string;
-  slug: string;
-  status: string;
+export type SaveResult =
+  | {
+      ok: true;
+      productId: string;
+      slug: string;
+      status: ProductStatus;
+      /** Server ids for the saved variants, so later saves update in place. */
+      variants: Array<{ id: string; attributes: Record<string, string> }>;
+    }
+  | { ok: false; error: string; fieldErrors?: Record<string, string[]> };
+
+/**
+ * Finds a SKU in `skus` already used by a DIFFERENT product (its own SKU or
+ * any of its variants). Variant SKUs are unique in the database; product
+ * SKUs are not, but Pirate Ship and the order export key on them.
+ */
+async function findSkuConflict(
+  skus: string[],
+  productId: string | null
+): Promise<{ sku: string; productName: string } | null> {
+  const wanted = [...new Set(skus.map((s) => s.trim().toLowerCase()).filter(Boolean))];
+  if (wanted.length === 0) return null;
+  const db = getDb();
+
+  const productConditions: SQL[] = [inArray(sql`lower(${products.sku})`, wanted)];
+  if (productId) productConditions.push(ne(products.id, productId));
+  const [p] = await db
+    .select({ sku: products.sku, name: products.name })
+    .from(products)
+    .where(and(...productConditions))
+    .limit(1);
+  if (p) return { sku: p.sku, productName: p.name };
+
+  const variantConditions: SQL[] = [inArray(sql`lower(${productVariants.sku})`, wanted)];
+  if (productId) variantConditions.push(ne(productVariants.productId, productId));
+  const [v] = await db
+    .select({ sku: productVariants.sku, name: products.name })
+    .from(productVariants)
+    .innerJoin(products, eq(productVariants.productId, products.id))
+    .where(and(...variantConditions))
+    .limit(1);
+  if (v) return { sku: v.sku, productName: v.name };
+
+  return null;
+}
+
+/** In-stock rule shared by products and variants. */
+function resolveInStock(manageStock: boolean, quantity: number, backorders: string, manual: boolean) {
+  return manageStock ? quantity > 0 || backorders !== 'no' : manual;
 }
 
 /**
  * Single write path for the builder. Upserts the product row and its
- * variant/attribute children in one transaction. Used by the explicit
- * Save button and the debounced autosave.
+ * variant/attribute children. Used by the explicit Save button, the
+ * debounced draft autosave, and the CSV import.
+ *
+ * Expected failures (validation, slug/SKU conflicts) come back as values,
+ * because production builds replace thrown Server Action messages with a
+ * generic one.
  */
 export async function saveProductAction(input: {
   productId?: string | null;
   document: ProductDocument;
-  /** Autosave never transitions into 'published'; explicit saves can. */
+  /** Autosave is only for drafts and never changes status. */
   autosave?: boolean;
 }): Promise<SaveResult> {
-  const session = await getSession(true);
-  if (!session) throw new Error('Unauthorized');
+  await requireAdmin();
 
   const parsed = productDocumentSchema.safeParse(input.document);
   if (!parsed.success) {
-    const fields = parsed.error.issues
-      .map((i) => `${i.path.join('.') || 'form'}: ${i.message}`)
-      .join('; ');
-    throw new Error(`Invalid product data — ${fields}`);
+    return { ok: false, error: 'Some fields need attention.', fieldErrors: flattenIssues(parsed) };
   }
   const doc = parsed.data;
 
   const db = getDb();
   const productId = input.productId || null;
+  if (productId && !UUID_RE.test(productId)) return { ok: false, error: 'Product not found.' };
 
-  // Intrinsic size + LQIP for anything uploaded through the admin. Only URLs
-  // without an entry are read off disk, so the 1.5s autosave does not
-  // re-encode the gallery on every keystroke.
-  let existingMeta: Record<string, ImageMetaEntry> = {};
-  if (productId) {
-    const [row] = await db
-      .select({ imageMeta: products.imageMeta })
-      .from(products)
-      .where(eq(products.id, productId))
-      .limit(1);
-    existingMeta = (row?.imageMeta || {}) as Record<string, ImageMetaEntry>;
+  const [existing] = productId
+    ? await db
+        .select({
+          status: products.status,
+          publishedAt: products.publishedAt,
+          imageMeta: products.imageMeta,
+          colors: products.colors,
+        })
+        .from(products)
+        .where(eq(products.id, productId))
+        .limit(1)
+    : [];
+  if (productId && !existing) return { ok: false, error: 'This product no longer exists.' };
+
+  // Autosave used to force status 'draft' on every write, so merely opening
+  // a live product in the builder unpublished it 1.5s later.
+  if (input.autosave && existing && existing.status !== 'draft') {
+    return { ok: false, error: 'Autosave only applies to drafts. Use Save to update this product.' };
   }
-  const imageMeta = await resolveImageMeta(
-    [...doc.images, ...doc.variants.map((v) => v.image)],
-    existingMeta
-  );
 
-  // Autosave of a new row still creates a draft row on the server (the plan
-  // replaces localStorage with server drafts); it must never publish.
-  let status = doc.status;
+  // ── Slug ──
+  const slug = doc.slug || slugifyProductName(doc.name) || `product-${Date.now().toString(36)}`;
+  const slugConditions: SQL[] = [eq(products.slug, slug)];
+  if (productId) slugConditions.push(ne(products.id, productId));
+  const [slugOwner] = await db
+    .select({ id: products.id })
+    .from(products)
+    .where(and(...slugConditions))
+    .limit(1);
+  if (slugOwner) {
+    return {
+      ok: false,
+      error: `The URL slug "${slug}" is already used by another product.`,
+      fieldErrors: { slug: ['Already used by another product — pick another'] },
+    };
+  }
+
+  // ── SKUs ── checked BEFORE any child rows are touched: a unique-index
+  // failure mid-save would otherwise leave the product without variants.
+  const isVariable = doc.productType === 'variable';
+  const conflict = await findSkuConflict(
+    [doc.sku, ...(isVariable ? doc.variants.map((v) => v.sku) : [])],
+    productId
+  );
+  if (conflict) {
+    const onProduct = conflict.sku.toLowerCase() === doc.sku.trim().toLowerCase();
+    const message = `SKU "${conflict.sku}" is already used by “${conflict.productName}”`;
+    return {
+      ok: false,
+      error: message,
+      fieldErrors: onProduct ? { sku: [message] } : { variants: [message] },
+    };
+  }
+
+  // ── Status ──
+  let status: ProductStatus = doc.status;
   let publishedAt: Date | null = null;
   if (input.autosave) {
     status = 'draft';
+    publishedAt = existing?.publishedAt ?? null;
   } else if (status === 'published') {
-    publishedAt = new Date();
+    // Set at the transition INTO published, and kept on later edits — New
+    // Arrivals orders by it, so re-saving must not bump a product to the top.
+    publishedAt =
+      existing?.status === 'published' && existing.publishedAt ? existing.publishedAt : new Date();
   } else if (status === 'scheduled') {
     publishedAt = doc.publishAt ? new Date(doc.publishAt) : null;
   }
 
+  // ── Stock ── products.in_stock is what the storefront filters and renders
+  // on; it was never written here, so restocking in the admin left a sold-out
+  // product unbuyable.
+  const variants: VariantRow[] = isVariable
+    ? doc.variants.map((v) => ({
+        ...v,
+        sku: v.sku.trim(),
+        inStock: resolveInStock(doc.manageStock, v.stockQuantity, doc.backorderPolicy, v.inStock),
+      }))
+    : [];
+  const stockQuantity =
+    isVariable && doc.manageStock
+      ? variants.reduce((n, v) => n + v.stockQuantity, 0)
+      : doc.stockQuantity;
+  const inStock = isVariable
+    ? variants.some((v) => v.inStock)
+    : resolveInStock(doc.manageStock, doc.stockQuantity, doc.backorderPolicy, doc.inStock);
+
+  // Size / Color options feed the storefront pickers.
+  const { sizes, colors } = deriveStorefrontOptions(
+    doc,
+    (existing?.colors || []) as Array<{ name: string; value: string; image?: string }>
+  );
+
+  // Intrinsic size + LQIP for anything uploaded through the admin. Only URLs
+  // without an entry are read off disk, so the autosave does not re-encode
+  // the gallery on every keystroke.
+  const imageMeta = await resolveImageMeta(
+    [...doc.images, ...variants.map((v) => v.image)],
+    (existing?.imageMeta || {}) as Record<string, ImageMetaEntry>
+  );
+
   const values = {
     name: doc.name,
-    slug: doc.slug,
+    slug,
     productType: doc.productType,
     description: doc.description,
     shortDescription: doc.shortDescription,
     price: doc.price,
-    compareAtPrice: doc.compareAtPrice ?? null,
+    compareAtPrice: doc.compareAtPrice || null,
     categoryId: doc.categoryId || null,
     featured: doc.featured,
     newArrivalPinned: doc.newArrivalPinned,
     excludeFromNewArrivals: doc.excludeFromNewArrivals,
     visibility: doc.visibility,
-    saleStartsAt: doc.saleStartsAt ? new Date(doc.saleStartsAt) : null,
-    saleEndsAt: doc.saleEndsAt ? new Date(doc.saleEndsAt) : null,
+    // A sale window only means something alongside a compare-at price.
+    saleStartsAt: doc.compareAtPrice && doc.saleStartsAt ? new Date(doc.saleStartsAt) : null,
+    saleEndsAt: doc.compareAtPrice && doc.saleEndsAt ? new Date(doc.saleEndsAt) : null,
     taxClass: doc.taxClass || null,
     sku: doc.sku,
     manageStock: doc.manageStock,
-    stockQuantity: doc.stockQuantity,
+    stockQuantity,
+    inStock,
     backorderPolicy: doc.backorderPolicy,
     lowStockThreshold: doc.lowStockThreshold,
-    weight: doc.weight ?? null,
-    lengthIn: doc.lengthIn ?? null,
-    widthIn: doc.widthIn ?? null,
-    heightIn: doc.heightIn ?? null,
+    weight: doc.weight || null,
+    lengthIn: doc.lengthIn || null,
+    widthIn: doc.widthIn || null,
+    heightIn: doc.heightIn || null,
     shippingClass: doc.shippingClass || null,
     metaTitle: doc.metaTitle || null,
     metaDescription: doc.metaDescription || null,
     ogImage: doc.ogImage || null,
     upsellIds: doc.upsellIds,
     crossSellIds: doc.crossSellIds,
-    similarProducts: doc.similarProductIds,
+    similarProducts: doc.similarProductIds.filter((id) => id !== productId),
     images: doc.images,
-    imageAlts: doc.imageAlts,
+    imageAlts: Object.fromEntries(
+      Object.entries(doc.imageAlts).filter(([url, alt]) => doc.images.includes(url) && alt.trim())
+    ),
     imageMeta,
+    sizes,
+    colors,
     status,
     publishedAt,
     updatedAt: new Date(),
   };
 
-  const finalId = await (async () => {
+  try {
     let id: string;
     if (productId) {
       const [updated] = await db
@@ -238,69 +464,91 @@ export async function saveProductAction(input: {
         .set(values)
         .where(eq(products.id, productId))
         .returning({ id: products.id });
-      if (!updated) throw new Error('Product not found');
+      if (!updated) return { ok: false, error: 'This product no longer exists.' };
       id = updated.id;
-      // Replace children: delete and re-insert keeps the matrix exactly in
-      // sync with the attributes section. (No transaction support in the
-      // neon-http driver; the product row is already committed, and the next
-      // autosave repairs any children that fail here.)
-      await db.delete(productVariants).where(eq(productVariants.productId, id));
-      await db.delete(productAttributes).where(eq(productAttributes.productId, id));
     } else {
       const [created] = await db
         .insert(products)
-        .values({
-          ...values,
-          createdAt: new Date(),
-        })
+        .values({ ...values, createdAt: new Date() })
         .returning({ id: products.id });
       id = created.id;
     }
 
-    // Tags live in product_tags now. Written AFTER the product row so a
-    // failure here leaves stale tags rather than an orphaned join row.
+    // Children. No transaction support in the neon-http driver: the product
+    // row is committed first, and the next save repairs any child that fails.
     await setProductTags(id, doc.tagIds);
 
+    await db.delete(productAttributes).where(eq(productAttributes.productId, id));
     if (doc.attributes.length > 0) {
       const attrRows: ProductAttributeInsert[] = doc.attributes.map((a, i) => ({
         productId: id,
-        name: a.name,
+        name: a.name.trim(),
         terms: a.terms,
-        usedForVariations: a.usedForVariations,
+        usedForVariations: isVariable && a.usedForVariations,
         position: i,
       }));
       await db.insert(productAttributes).values(attrRows);
     }
 
-    if (doc.productType === 'variable' && doc.variants.length > 0) {
-      await db.insert(productVariants).values(
-        doc.variants.map((v, i) => ({
-          productId: id,
-          sku: v.sku,
-          attributes: v.attributes,
-          price: v.price ?? null,
-          compareAtPrice: v.compareAtPrice ?? null,
-          stockQuantity: v.stockQuantity,
-          inStock: v.inStock,
-          image: v.image || null,
-          weight: v.weight ?? null,
-          position: i,
-        }))
-      );
+    // Variants are updated in place by id rather than deleted and
+    // re-inserted: a cart or order line refers to the variant id, and
+    // replacing every row on each save broke those references.
+    const existingVariantIds = productId
+      ? (
+          await db
+            .select({ id: productVariants.id })
+            .from(productVariants)
+            .where(eq(productVariants.productId, id))
+        ).map((r) => r.id)
+      : [];
+    const existingSet = new Set(existingVariantIds);
+    const kept = new Set(variants.filter((v) => v.id && existingSet.has(v.id)).map((v) => v.id!));
+    const removed = existingVariantIds.filter((vid) => !kept.has(vid));
+    if (removed.length > 0) {
+      await db.delete(productVariants).where(inArray(productVariants.id, removed));
     }
 
-    return id;
-  })();
+    const savedVariants: Array<{ id: string; attributes: Record<string, string> }> = [];
+    for (const [i, v] of variants.entries()) {
+      const row = {
+        productId: id,
+        sku: v.sku,
+        attributes: v.attributes,
+        price: v.price || null,
+        compareAtPrice: v.compareAtPrice || null,
+        stockQuantity: v.stockQuantity,
+        inStock: v.inStock,
+        image: v.image || null,
+        weight: v.weight || null,
+        position: i,
+      };
+      if (v.id && kept.has(v.id)) {
+        await db.update(productVariants).set(row).where(eq(productVariants.id, v.id));
+        savedVariants.push({ id: v.id, attributes: v.attributes });
+      } else {
+        const [created] = await db
+          .insert(productVariants)
+          .values(row)
+          .returning({ id: productVariants.id });
+        savedVariants.push({ id: created.id, attributes: v.attributes });
+      }
+    }
 
-  invalidateProductCaches(finalId);
-  return { productId: finalId, slug: values.slug, status };
+    invalidateProductCaches(id);
+    return { ok: true, productId: id, slug, status, variants: savedVariants };
+  } catch (error: any) {
+    console.error('saveProductAction failed', error);
+    if (error?.code === '23505' || /duplicate key/i.test(String(error?.message))) {
+      return { ok: false, error: 'Another product already uses this slug or one of these SKUs.' };
+    }
+    return { ok: false, error: 'Could not save the product. Please try again.' };
+  }
 }
 
 // ─── DUPLICATE ────────────────────────────────────────────
 
 export async function duplicateProductAction(id: string): Promise<{ id: string; slug: string }> {
-  const session = await getSession(true);
-  if (!session) throw new Error('Unauthorized');
+  await requireAdmin();
 
   const db = getDb();
   const [row] = await db.select().from(products).where(eq(products.id, id)).limit(1);
@@ -318,47 +566,25 @@ export async function duplicateProductAction(id: string): Promise<{ id: string; 
     if (!existing) break;
     slug = `${baseSlug}-${i}`;
   }
+  // "-COPY", "-COPY-2", … — tracks the slug so a second copy does not reuse
+  // the first copy's variant SKUs (variant SKUs are unique).
+  const skuSuffix = slug.slice(row.slug.length).toUpperCase();
+
+  // Every column carries over except identity, timestamps and the fields a
+  // copy must not inherit. Spreading the row means a new column is copied
+  // by default instead of silently dropped.
+  const { id: _id, wooProductId: _woo, createdAt: _c, updatedAt: _u, ...rest } = row;
 
   // Sequential (no transaction support in the neon-http driver).
   const [created] = await db
     .insert(products)
     .values({
+      ...rest,
       name: `${row.name} (Copy)`,
       slug,
-      productType: row.productType,
-      description: row.description,
-      shortDescription: row.shortDescription,
-      price: row.price,
-      compareAtPrice: row.compareAtPrice,
-      categoryId: row.categoryId,
+      sku: row.sku ? `${row.sku}${skuSuffix}` : '',
       featured: false,
       newArrivalPinned: false,
-      excludeFromNewArrivals: row.excludeFromNewArrivals,
-      visibility: 'hidden',
-      saleStartsAt: row.saleStartsAt,
-      saleEndsAt: row.saleEndsAt,
-      taxClass: row.taxClass,
-      sku: row.sku ? `${row.sku}-COPY` : '',
-      manageStock: row.manageStock,
-      stockQuantity: row.stockQuantity,
-      backorderPolicy: row.backorderPolicy,
-      lowStockThreshold: row.lowStockThreshold,
-      weight: row.weight,
-      lengthIn: row.lengthIn,
-      widthIn: row.widthIn,
-      heightIn: row.heightIn,
-      shippingClass: row.shippingClass,
-      metaTitle: row.metaTitle,
-      metaDescription: row.metaDescription,
-      ogImage: row.ogImage,
-      upsellIds: row.upsellIds,
-      crossSellIds: row.crossSellIds,
-      similarProducts: row.similarProducts,
-      images: row.images,
-      imageAlts: row.imageAlts,
-      // The copy points at the same files, so the resolved sizes and blur
-      // placeholders come with it rather than being recomputed.
-      imageMeta: row.imageMeta,
       // A copy is always a draft; publishing is a deliberate action.
       status: 'draft',
       publishedAt: null,
@@ -381,29 +607,33 @@ export async function duplicateProductAction(id: string): Promise<{ id: string; 
 
   if (variants.length > 0) {
     await db.insert(productVariants).values(
-      variants.map((v, i) => ({
-        productId: created.id,
-        sku: v.sku ? `${v.sku}-COPY` : `V-${i + 1}`,
-        attributes: v.attributes,
-        price: v.price,
-        compareAtPrice: v.compareAtPrice,
-        stockQuantity: v.stockQuantity,
-        inStock: v.inStock,
-        image: v.image,
-        weight: v.weight,
-        position: i,
-      }))
+      [...variants]
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+        .map((v, i) => ({
+          productId: created.id,
+          sku: v.sku ? `${v.sku}${skuSuffix}` : `${slug.toUpperCase()}-${i + 1}`,
+          attributes: v.attributes,
+          price: v.price,
+          compareAtPrice: v.compareAtPrice,
+          stockQuantity: v.stockQuantity,
+          inStock: v.inStock,
+          image: v.image,
+          weight: v.weight,
+          position: i,
+        }))
     );
   }
   if (attributes.length > 0) {
     await db.insert(productAttributes).values(
-      attributes.map((a, i) => ({
-        productId: created.id,
-        name: a.name,
-        terms: a.terms,
-        usedForVariations: a.usedForVariations,
-        position: i,
-      }))
+      [...attributes]
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+        .map((a, i) => ({
+          productId: created.id,
+          name: a.name,
+          terms: a.terms,
+          usedForVariations: a.usedForVariations,
+          position: i,
+        }))
     );
   }
 
@@ -414,126 +644,109 @@ export async function duplicateProductAction(id: string): Promise<{ id: string; 
 // ─── CSV ──────────────────────────────────────────────────
 
 export async function exportProductsCsv(): Promise<string> {
-  const session = await getSession(true);
-  if (!session) throw new Error('Unauthorized');
+  await requireAdmin();
 
   const db = getDb();
   const rows = await db.select().from(products).orderBy(desc(products.createdAt));
-  const variantRows = await db
-    .select()
-    .from(productVariants)
-    .where(inArray(productVariants.productId, rows.map((r) => r.id)));
-  const attrRows = await db
-    .select()
-    .from(productAttributes)
-    .where(inArray(productAttributes.productId, rows.map((r) => r.id)));
+  const ids = rows.map((r) => r.id);
+  const [variantRows, attrRows, categoryRows, tagJoinRows] = ids.length
+    ? await Promise.all([
+        db.select().from(productVariants).where(inArray(productVariants.productId, ids)),
+        db.select().from(productAttributes).where(inArray(productAttributes.productId, ids)),
+        // The CSV carries slugs, not uuids — it has to stay hand-editable, and
+        // a uuid means nothing to whoever opens it in a spreadsheet.
+        db.select({ id: categories.id, slug: categories.slug }).from(categories),
+        db
+          .select({ productId: productTags.productId, slug: tags.slug })
+          .from(productTags)
+          .innerJoin(tags, eq(productTags.tagId, tags.id))
+          .where(inArray(productTags.productId, ids)),
+      ])
+    : [[], [], [], []];
 
-  // The CSV carries slugs, not uuids — it has to stay hand-editable, and a
-  // uuid means nothing to whoever opens it in a spreadsheet.
-  const categoryRows = await db
-    .select({ id: categories.id, slug: categories.slug })
-    .from(categories);
   const categorySlug = new Map(categoryRows.map((c) => [c.id, c.slug]));
+  const group = <T extends { productId: string }>(list: T[]) => {
+    const out = new Map<string, T[]>();
+    for (const item of list) {
+      const bucket = out.get(item.productId) ?? [];
+      bucket.push(item);
+      out.set(item.productId, bucket);
+    }
+    return out;
+  };
+  const tagSlugsByProduct = group(tagJoinRows);
+  const variantsByProduct = group(variantRows);
+  const attrsByProduct = group(attrRows);
+  const byPosition = (a: { position: number | null }, b: { position: number | null }) =>
+    (a.position ?? 0) - (b.position ?? 0);
 
-  const tagJoinRows = await db
-    .select({ productId: productTags.productId, slug: tags.slug })
-    .from(productTags)
-    .innerJoin(tags, eq(productTags.tagId, tags.id))
-    .where(inArray(productTags.productId, rows.map((r) => r.id)));
-  const tagSlugsByProduct = new Map<string, string[]>();
-  for (const t of tagJoinRows) {
-    const list = tagSlugsByProduct.get(t.productId) ?? [];
-    list.push(t.slug);
-    tagSlugsByProduct.set(t.productId, list);
-  }
+  const date = (d: Date | null) => (d ? d.toISOString() : '');
+  const num = (v: unknown) => (v != null && v !== '' ? String(v) : '');
+  const bool = (v: unknown) => (v ? 'true' : 'false');
 
-  const variantsByProduct = new Map<string, typeof variantRows>();
-  const attrsByProduct = new Map<string, typeof attrRows>();
-  for (const v of variantRows) {
-    (variantsByProduct.get(v.productId) ?? variantsByProduct.set(v.productId, []).get(v.productId)!).push(v);
-  }
-  for (const a of attrRows) {
-    (attrsByProduct.get(a.productId) ?? attrsByProduct.set(a.productId, []).get(a.productId)!).push(a);
-  }
-
-  const header = [
-    'name', 'slug', 'product_type', 'short_description', 'description',
-    'category', 'tags', 'featured', 'new_arrival_pinned',
-    'exclude_from_new_arrivals', 'visibility', 'price', 'compare_at_price',
-    'sale_starts_at', 'sale_ends_at', 'tax_class', 'sku', 'manage_stock',
-    'stock_quantity', 'backorder_policy', 'low_stock_threshold', 'weight',
-    'length_in', 'width_in', 'height_in', 'shipping_class', 'meta_title',
-    'meta_description', 'og_image', 'images', 'status', 'publish_at',
-    'attribute_1_name', 'attribute_1_terms', 'attribute_1_variation',
-    'attribute_2_name', 'attribute_2_terms', 'attribute_2_variation',
-    'attribute_3_name', 'attribute_3_terms', 'attribute_3_variation',
-    'variant_attributes', 'variant_sku', 'variant_price',
-    'variant_compare_at_price', 'variant_stock_quantity', 'variant_in_stock',
-    'variant_image', 'variant_weight',
-  ];
-
-  const out: Array<Array<string | number | boolean | null>> = [header];
-
-  const base = (p: typeof rows[number], v?: typeof variantRows[number] | null) => {
-    const attrs = attrsByProduct.get(p.id) || [];
-    const cell = (i: number) => attrs[i]?.name ?? '';
-    const terms = (i: number) => joinList(attrs[i]?.terms);
-    const variation = (i: number) => (attrs[i]?.usedForVariations ? 'true' : 'false');
-    const date = (d: Date | null) => (d ? d.toISOString() : '');
-    return [
-      p.name,
-      p.slug,
-      p.productType,
-      p.shortDescription,
-      p.description,
-      p.categoryId ? categorySlug.get(p.categoryId) ?? '' : '',
-      joinList(tagSlugsByProduct.get(p.id) ?? []),
-      p.featured ? 'true' : 'false',
-      p.newArrivalPinned ? 'true' : 'false',
-      p.excludeFromNewArrivals ? 'true' : 'false',
-      p.visibility,
-      String(p.price),
-      p.compareAtPrice != null ? String(p.compareAtPrice) : '',
-      date(p.saleStartsAt),
-      date(p.saleEndsAt),
-      p.taxClass || '',
-      p.sku,
-      p.manageStock ? 'true' : 'false',
-      String(p.stockQuantity || 0),
-      p.backorderPolicy || 'no',
-      String(p.lowStockThreshold ?? 5),
-      p.weight != null ? String(p.weight) : '',
-      p.lengthIn != null ? String(p.lengthIn) : '',
-      p.widthIn != null ? String(p.widthIn) : '',
-      p.heightIn != null ? String(p.heightIn) : '',
-      p.shippingClass || '',
-      p.metaTitle || '',
-      p.metaDescription || '',
-      p.ogImage || '',
-      joinList(p.images as string[]),
-      p.status,
-      date(p.publishedAt),
-      cell(0), terms(0), variation(0),
-      cell(1), terms(1), variation(1),
-      cell(2), terms(2), variation(2),
-      v ? Object.entries(v.attributes as Record<string, string>).map(([k, val]) => `${k}:${val}`).join('|') : '',
-      v ? v.sku : '',
-      v && v.price != null ? String(v.price) : '',
-      v && v.compareAtPrice != null ? String(v.compareAtPrice) : '',
-      v ? String(v.stockQuantity || 0) : '',
-      v ? (v.inStock ? 'true' : 'false') : '',
-      v ? v.image || '' : '',
-      v && v.weight != null ? String(v.weight) : '',
-    ];
+  const line = (p: (typeof rows)[number], v?: (typeof variantRows)[number]) => {
+    const attrs = (attrsByProduct.get(p.id) || []).sort(byPosition);
+    const cells: Partial<Record<(typeof CSV_COLUMNS)[number], string>> = {
+      name: p.name,
+      slug: p.slug,
+      product_type: p.productType,
+      short_description: p.shortDescription,
+      description: p.description,
+      category: p.categoryId ? categorySlug.get(p.categoryId) ?? '' : '',
+      tags: joinList((tagSlugsByProduct.get(p.id) ?? []).map((t) => t.slug)),
+      featured: bool(p.featured),
+      new_arrival_pinned: bool(p.newArrivalPinned),
+      exclude_from_new_arrivals: bool(p.excludeFromNewArrivals),
+      visibility: p.visibility,
+      price: num(p.price),
+      compare_at_price: num(p.compareAtPrice),
+      sale_starts_at: date(p.saleStartsAt),
+      sale_ends_at: date(p.saleEndsAt),
+      tax_class: p.taxClass || '',
+      sku: p.sku,
+      manage_stock: bool(p.manageStock),
+      stock_quantity: String(p.stockQuantity || 0),
+      in_stock: bool(p.inStock),
+      backorder_policy: p.backorderPolicy || 'no',
+      low_stock_threshold: String(p.lowStockThreshold ?? 5),
+      weight_oz: num(p.weight),
+      length_in: num(p.lengthIn),
+      width_in: num(p.widthIn),
+      height_in: num(p.heightIn),
+      shipping_class: p.shippingClass || '',
+      meta_title: p.metaTitle || '',
+      meta_description: p.metaDescription || '',
+      og_image: p.ogImage || '',
+      images: joinList(p.images as string[]),
+      status: p.status,
+      publish_at: date(p.publishedAt),
+    };
+    attrs.slice(0, 3).forEach((a, i) => {
+      const n = (i + 1) as 1 | 2 | 3;
+      cells[`attribute_${n}_name`] = a.name;
+      cells[`attribute_${n}_terms`] = joinList(a.terms as string[]);
+      cells[`attribute_${n}_variation`] = bool(a.usedForVariations);
+    });
+    if (v) {
+      cells.variant_attributes = Object.entries(v.attributes as Record<string, string>)
+        .map(([k, val]) => `${k}:${val}`)
+        .join('|');
+      cells.variant_sku = v.sku;
+      cells.variant_price = num(v.price);
+      cells.variant_compare_at_price = num(v.compareAtPrice);
+      cells.variant_stock_quantity = String(v.stockQuantity || 0);
+      cells.variant_in_stock = bool(v.inStock);
+      cells.variant_image = v.image || '';
+      cells.variant_weight_oz = num(v.weight);
+    }
+    return CSV_COLUMNS.map((c) => cells[c] ?? '');
   };
 
+  const out: string[][] = [[...CSV_COLUMNS]];
   for (const p of rows) {
-    const pv = variantsByProduct.get(p.id) || [];
-    if (pv.length === 0) {
-      out.push(base(p));
-    } else {
-      for (const v of pv) out.push(base(p, v));
-    }
+    const pv = (variantsByProduct.get(p.id) || []).sort(byPosition);
+    if (pv.length === 0) out.push(line(p));
+    else for (const v of pv) out.push(line(p, v));
   }
 
   return stringifyCsv(out);
@@ -548,43 +761,74 @@ export interface ImportRowResult {
 }
 
 /**
- * CSV import with a dry-run mode. Each row is validated against the same
- * Zod document schema the builder uses; dry-run reports row-level errors
- * without writing. Import mode creates rows (never updates existing ones).
+ * CSV import with a dry-run mode. Rows are grouped into products — a
+ * variable product is one row per variant sharing a slug — and each product
+ * is validated against the same Zod document schema the builder uses, plus
+ * the slug/SKU uniqueness checks. Import mode creates products (never
+ * updates existing ones).
  */
 export async function importProductsAction(input: {
   rows: string[][];
   dryRun: boolean;
 }): Promise<{ results: ImportRowResult[]; created: number }> {
-  const session = await getSession(true);
-  if (!session) throw new Error('Unauthorized');
+  await requireAdmin();
 
   const { rows, dryRun } = input;
-  const header = rows[0]?.map((h) => h.trim().toLowerCase()) || [];
+  const header = rows[0]?.map((h) => h.replace(/^﻿/, '').trim().toLowerCase()) || [];
   const dataRows = rows.slice(1);
   const results: ImportRowResult[] = [];
 
-  // The CSV addresses taxonomy by slug — a uuid would be unusable in a
-  // spreadsheet. Resolve the whole table once rather than per row. Unknown
-  // slugs are dropped rather than auto-created: silently inventing categories
-  // from a typo is how a catalogue rots.
-  const db0 = getDb();
-  const categoryBySlug = new Map(
-    (await db0.select({ id: categories.id, slug: categories.slug }).from(categories)).map(
-      (c) => [c.slug, c.id]
-    )
-  );
-  const tagBySlug = new Map(
-    (await db0.select({ id: tags.id, slug: tags.slug }).from(tags)).map((t) => [t.slug, t.id])
-  );
+  // Taxonomy is addressed by slug. Unknown category slugs are reported;
+  // unknown tag slugs are dropped rather than auto-created — silently
+  // inventing taxonomy from a typo is how a catalogue rots.
+  const db = getDb();
+  const [categoryRows, tagRows] = await Promise.all([
+    db.select({ id: categories.id, slug: categories.slug }).from(categories),
+    db.select({ id: tags.id, slug: tags.slug }).from(tags),
+  ]);
+  const categoryBySlug = new Map(categoryRows.map((c) => [c.slug, c.id]));
+  const tagBySlug = new Map(tagRows.map((t) => [t.slug, t.id]));
 
-  const get = (row: string[], col: string) => {
-    const idx = header.indexOf(col);
-    return idx >= 0 ? row[idx]?.trim() : '';
+  /** First non-empty value among the given column names (old exports used `weight`). */
+  const get = (row: string[], ...cols: string[]) => {
+    for (const col of cols) {
+      const idx = header.indexOf(col);
+      const value = idx >= 0 ? row[idx]?.trim() ?? '' : '';
+      if (value) return value;
+    }
+    return '';
   };
-  const toBool = (v: string) => v.toLowerCase() === 'true' || v === '1';
+  const toBool = (v: string) => ['true', '1', 'yes'].includes(v.toLowerCase());
   const toNum = (v: string) => (v === '' ? null : Number(v));
-  const toDoc = (row: string[]): ProductDocument => {
+
+  // ── Group rows into products ──
+  interface Group {
+    rowNumber: number;
+    first: string[];
+    variantRows: string[][];
+  }
+  const groups: Group[] = [];
+  const byKey = new Map<string, Group>();
+  dataRows.forEach((row, i) => {
+    if (row.every((c) => c.trim() === '')) return;
+    const key = (get(row, 'slug') || slugifyProductName(get(row, 'name'))).toLowerCase();
+    const hasVariant = Boolean(get(row, 'variant_attributes') || get(row, 'variant_sku'));
+    const owner = key ? byKey.get(key) : undefined;
+    if (owner && hasVariant) {
+      owner.variantRows.push(row);
+      return;
+    }
+    const g: Group = { rowNumber: i + 2, first: row, variantRows: hasVariant ? [row] : [] };
+    groups.push(g);
+    if (key && !owner) byKey.set(key, g);
+  });
+
+  const toDoc = (g: Group): { doc?: ProductDocument; error?: string } => {
+    const row = g.first;
+    const categoryRef = get(row, 'category');
+    const categoryId = categoryRef ? categoryBySlug.get(categoryRef) : undefined;
+    if (categoryRef && !categoryId) return { error: `category: no category with slug "${categoryRef}"` };
+
     const attrSpecs = [1, 2, 3]
       .map((i) => ({
         name: get(row, `attribute_${i}_name`),
@@ -592,22 +836,23 @@ export async function importProductsAction(input: {
         variation: get(row, `attribute_${i}_variation`),
       }))
       .filter((a) => a.name);
-    return productDocumentSchema.parse({
+
+    const parsed = productDocumentSchema.safeParse({
       name: get(row, 'name'),
       slug: get(row, 'slug'),
-      productType: (get(row, 'product_type') || 'simple') as 'simple' | 'variable',
+      productType: get(row, 'product_type') || (g.variantRows.length > 0 ? 'variable' : 'simple'),
       shortDescription: get(row, 'short_description'),
       description: get(row, 'description'),
       images: parseList(get(row, 'images')),
       imageAlts: {},
-      categoryId: categoryBySlug.get(get(row, 'category')) ?? '',
+      categoryId: categoryId ?? '',
       tagIds: parseList(get(row, 'tags'))
         .map((slug) => tagBySlug.get(slug))
         .filter((id): id is string => Boolean(id)),
       featured: toBool(get(row, 'featured')),
       newArrivalPinned: toBool(get(row, 'new_arrival_pinned')),
       excludeFromNewArrivals: toBool(get(row, 'exclude_from_new_arrivals')),
-      visibility: (get(row, 'visibility') || 'public') as 'public' | 'hidden' | 'search_only',
+      visibility: get(row, 'visibility') || 'public',
       price: get(row, 'price'),
       compareAtPrice: get(row, 'compare_at_price') || null,
       saleStartsAt: get(row, 'sale_starts_at') || null,
@@ -618,13 +863,32 @@ export async function importProductsAction(input: {
         terms: parseList(a.terms),
         usedForVariations: toBool(a.variation),
       })),
-      variants: [],
+      colorSwatches: {},
+      variants: g.variantRows.map((r, i) => ({
+        sku: get(r, 'variant_sku'),
+        attributes: Object.fromEntries(
+          parseList(get(r, 'variant_attributes'))
+            .map((pair) => {
+              const at = pair.indexOf(':');
+              return at > 0 ? [pair.slice(0, at).trim(), pair.slice(at + 1).trim()] : ['', ''];
+            })
+            .filter(([k, v]) => k && v)
+        ),
+        price: get(r, 'variant_price') || null,
+        compareAtPrice: get(r, 'variant_compare_at_price') || null,
+        stockQuantity: toNum(get(r, 'variant_stock_quantity')) ?? 0,
+        inStock: get(r, 'variant_in_stock') === '' ? true : toBool(get(r, 'variant_in_stock')),
+        image: get(r, 'variant_image') || undefined,
+        weight: get(r, 'variant_weight_oz', 'variant_weight') || null,
+        position: i,
+      })),
       sku: get(row, 'sku'),
       manageStock: get(row, 'manage_stock') === '' ? true : toBool(get(row, 'manage_stock')),
       stockQuantity: toNum(get(row, 'stock_quantity')) ?? 0,
-      backorderPolicy: (get(row, 'backorder_policy') || 'no') as 'no' | 'notify' | 'yes',
+      inStock: get(row, 'in_stock') === '' ? true : toBool(get(row, 'in_stock')),
+      backorderPolicy: get(row, 'backorder_policy') || 'no',
       lowStockThreshold: toNum(get(row, 'low_stock_threshold')) ?? 5,
-      weight: get(row, 'weight') || null,
+      weight: get(row, 'weight_oz', 'weight') || null,
       lengthIn: get(row, 'length_in') || null,
       widthIn: get(row, 'width_in') || null,
       heightIn: get(row, 'height_in') || null,
@@ -635,100 +899,129 @@ export async function importProductsAction(input: {
       metaTitle: get(row, 'meta_title'),
       metaDescription: get(row, 'meta_description'),
       ogImage: get(row, 'og_image'),
-      status: (get(row, 'status') || 'draft') as 'draft' | 'pending' | 'scheduled' | 'published',
+      status: get(row, 'status') || 'draft',
       publishAt: get(row, 'publish_at') || null,
     });
+    if (!parsed.success) {
+      return {
+        error: Object.entries(flattenIssues(parsed))
+          .map(([path, messages]) => `${path}: ${messages[0]}`)
+          .join('; '),
+      };
+    }
+    const doc = parsed.data;
+    if (!doc.slug) doc.slug = slugifyProductName(doc.name);
+    return { doc };
   };
 
   let created = 0;
+  const slugsInFile = new Set<string>();
 
-  for (let i = 0; i < dataRows.length; i++) {
-    const row = dataRows[i];
-    if (row.every((c) => c === '')) continue;
-    const rowNumber = i + 2; // 1-based + header row
-
-    let doc: ProductDocument;
-    try {
-      doc = toDoc(row);
-    } catch (e: any) {
-      const issues = e?.issues?.map((iss: any) => `${iss.path.join('.')}: ${iss.message}`).join('; ');
-      results.push({ row: rowNumber, ok: false, error: issues || e?.message || 'Invalid row' });
+  for (const g of groups) {
+    const { doc, error } = toDoc(g);
+    if (!doc) {
+      results.push({ row: g.rowNumber, ok: false, error: error || 'Invalid row' });
       continue;
     }
 
-    if (!doc.name) {
-      results.push({ row: rowNumber, ok: false, error: 'name: required' });
+    if (slugsInFile.has(doc.slug)) {
+      results.push({ row: g.rowNumber, ok: false, error: `slug: "${doc.slug}" appears twice in this file` });
+      continue;
+    }
+    slugsInFile.add(doc.slug);
+
+    const [existing] = await db
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.slug, doc.slug))
+      .limit(1);
+    if (existing) {
+      results.push({ row: g.rowNumber, ok: false, error: `slug: "${doc.slug}" already exists` });
       continue;
     }
 
     if (dryRun) {
-      results.push({ row: rowNumber, ok: true, name: doc.name });
+      const conflict = await findSkuConflict(
+        [doc.sku, ...(doc.productType === 'variable' ? doc.variants.map((v) => v.sku) : [])],
+        null
+      );
+      if (conflict) {
+        results.push({
+          row: g.rowNumber,
+          ok: false,
+          error: `sku: "${conflict.sku}" is already used by “${conflict.productName}”`,
+        });
+      } else {
+        results.push({ row: g.rowNumber, ok: true, name: doc.name });
+      }
       continue;
     }
 
-    // Ensure a unique slug on import.
-    if (!doc.slug) {
-      doc.slug = doc.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
-    }
-    const db = getDb();
-    const [existing] = await db.select({ id: products.id }).from(products).where(eq(products.slug, doc.slug)).limit(1);
-    if (existing) {
-      results.push({ row: rowNumber, ok: false, error: `slug: "${doc.slug}" already exists` });
-      continue;
-    }
-
-    try {
-      const saved = await saveProductAction({ document: doc });
-      results.push({ row: rowNumber, ok: true, productId: saved.productId, name: doc.name });
+    const saved = await saveProductAction({ document: doc });
+    if (saved.ok) {
+      results.push({ row: g.rowNumber, ok: true, productId: saved.productId, name: doc.name });
       created++;
-    } catch (e: any) {
-      results.push({ row: rowNumber, ok: false, error: e?.message || 'Failed to save row' });
+    } else {
+      const detail = saved.fieldErrors
+        ? Object.entries(saved.fieldErrors).map(([k, m]) => `${k}: ${m[0]}`).join('; ')
+        : saved.error;
+      results.push({ row: g.rowNumber, ok: false, error: detail });
     }
   }
 
   return { results, created };
 }
 
-// ─── LEGACY ADMIN ACTIONS (kept for the products table) ──
+// ─── ADMIN LIST ───────────────────────────────────────────
+
+export type AdminProductSort =
+  | 'newest'
+  | 'oldest'
+  | 'updated'
+  | 'name'
+  | '-name'
+  | 'price'
+  | '-price'
+  | 'stock'
+  | '-stock';
+
+export type AdminStockFilter = 'in' | 'out' | 'low';
+
+export interface AdminProductRow extends Product {
+  /** Variable products only: number of variants and the price span they sell at. */
+  variantCount: number;
+  priceMin: number;
+  priceMax: number;
+}
 
 export async function fetchAllProductsAdmin(
   page = 1,
   limit = 50,
-  options?: { search?: string; status?: string }
+  options?: {
+    search?: string;
+    status?: string;
+    stock?: AdminStockFilter;
+    categoryId?: string;
+    sort?: AdminProductSort;
+  }
 ) {
-  const session = await getSession(true);
-  if (!session) throw new Error('Unauthorized');
+  await requireAdmin();
 
   const db = getDb();
-  const offset = (page - 1) * limit;
+  const offset = (Math.max(1, page) - 1) * limit;
 
-  const conditions: any[] = [];
-  const search = options?.search?.trim();
-  if (search) {
-    const pattern = `%${search}%`;
-    conditions.push(
-      or(like(products.name, pattern), like(products.sku, pattern)) as any
-    );
-  }
-  if (options?.status) {
-    conditions.push(eq(products.status, options.status as any));
-  }
-  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  // Scheduled products go live by time alone (storefront reads treat a due
+  // schedule as published; there is no cron). Settle the stored status here,
+  // on an admin read rather than a timer, so the list shows what is live.
+  const settled = await db
+    .update(products)
+    .set({ status: 'published', updatedAt: new Date() })
+    .where(and(eq(products.status, 'scheduled'), lte(products.publishedAt, new Date())))
+    .returning({ id: products.id });
+  // Cached storefront reads filled before the publish time still hold the
+  // old answer (a 404 for the product page) until they revalidate.
+  if (settled.length > 0) invalidateProductCaches();
 
-  const [countResult] = await db
-    .select({ count: count() })
-    .from(products)
-    .where(where);
-  const rows = await db
-    .select()
-    .from(products)
-    .where(where)
-    .orderBy(desc(products.createdAt))
-    .limit(limit)
-    .offset(offset);
-
-  // Same two-query hydration the cached reader uses — the admin table shows
-  // category and tag chips, and a per-row lookup would be N+1.
   const categoryRows = await db
     .select({
       id: categories.id,
@@ -739,34 +1032,128 @@ export async function fetchAllProductsAdmin(
     .from(categories);
   const categoryMap = new Map(categoryRows.map((c) => [c.id, c]));
 
-  const tagJoins = rows.length
-    ? await db
-        .select({
-          productId: productTags.productId,
-          id: tags.id,
-          name: tags.name,
-          slug: tags.slug,
-        })
-        .from(productTags)
-        .innerJoin(tags, eq(productTags.tagId, tags.id))
-        .where(inArray(productTags.productId, rows.map((r) => r.id)))
-    : [];
+  const conditions: SQL[] = [];
+  const search = options?.search?.trim();
+  if (search) {
+    // ilike: the old `like` made "abaya" miss "Abaya".
+    const pattern = `%${search.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+    conditions.push(
+      or(
+        ilike(products.name, pattern),
+        ilike(products.sku, pattern),
+        sql`EXISTS (SELECT 1 FROM product_variants pv WHERE pv.product_id = ${products.id} AND pv.sku ILIKE ${pattern})`
+      )!
+    );
+  }
+  if (options?.status && ['draft', 'pending', 'scheduled', 'published'].includes(options.status)) {
+    conditions.push(eq(products.status, options.status as ProductStatus));
+  }
+  if (options?.stock === 'in') conditions.push(eq(products.inStock, true));
+  if (options?.stock === 'out') conditions.push(eq(products.inStock, false));
+  if (options?.stock === 'low') {
+    conditions.push(
+      sql`${products.manageStock} = true AND ${products.stockQuantity} > 0 AND ${products.stockQuantity} <= coalesce(${products.lowStockThreshold}, 5)`
+    );
+  }
+  if (options?.categoryId && categoryMap.has(options.categoryId)) {
+    // The chosen category and everything below it.
+    const ids = new Set([options.categoryId]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const c of categoryRows) {
+        if (c.parentId && ids.has(c.parentId) && !ids.has(c.id)) {
+          ids.add(c.id);
+          grew = true;
+        }
+      }
+    }
+    conditions.push(inArray(products.categoryId, [...ids]));
+  }
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const priceNum = sql`CAST(${products.price} AS NUMERIC)`;
+  const orderBy = (() => {
+    switch (options?.sort) {
+      case 'oldest': return [asc(products.createdAt)];
+      case 'updated': return [desc(products.updatedAt)];
+      case 'name': return [asc(products.name)];
+      case '-name': return [desc(products.name)];
+      case 'price': return [asc(priceNum)];
+      case '-price': return [desc(priceNum)];
+      case 'stock': return [asc(products.stockQuantity), asc(products.name)];
+      case '-stock': return [desc(products.stockQuantity), asc(products.name)];
+      default: return [desc(products.createdAt)];
+    }
+  })();
+
+  const [[countResult], rows] = await Promise.all([
+    db.select({ count: count() }).from(products).where(where),
+    db.select().from(products).where(where).orderBy(...orderBy).limit(limit).offset(offset),
+  ]);
+
+  const ids = rows.map((r) => r.id);
+  const variableIds = rows.filter((r) => r.productType === 'variable').map((r) => r.id);
+  const [tagJoins, variantRows] = await Promise.all([
+    ids.length
+      ? db
+          .select({ productId: productTags.productId, id: tags.id, name: tags.name, slug: tags.slug })
+          .from(productTags)
+          .innerJoin(tags, eq(productTags.tagId, tags.id))
+          .where(inArray(productTags.productId, ids))
+      : Promise.resolve([]),
+    variableIds.length
+      ? db
+          .select({
+            productId: productVariants.productId,
+            price: productVariants.price,
+            stockQuantity: productVariants.stockQuantity,
+            inStock: productVariants.inStock,
+          })
+          .from(productVariants)
+          .where(inArray(productVariants.productId, variableIds))
+      : Promise.resolve([]),
+  ]);
+
   const tagsByProduct = new Map<string, Array<{ id: string; name: string; slug: string }>>();
   for (const t of tagJoins) {
     const list = tagsByProduct.get(t.productId) ?? [];
     list.push({ id: t.id, name: t.name, slug: t.slug });
     tagsByProduct.set(t.productId, list);
   }
+  const variantsByProduct = new Map<string, typeof variantRows>();
+  for (const v of variantRows) {
+    const list = variantsByProduct.get(v.productId) ?? [];
+    list.push(v);
+    variantsByProduct.set(v.productId, list);
+  }
 
+  const items: AdminProductRow[] = rows.map((r) => {
+    const product = mapProduct(r, {
+      category: buildCategoryRef(categoryMap, r.categoryId),
+      tags: tagsByProduct.get(r.id) ?? [],
+    });
+    const vs = r.productType === 'variable' ? variantsByProduct.get(r.id) ?? [] : [];
+    const prices = vs.map((v) => (v.price != null ? parseFloat(v.price) : product.price));
+    if (vs.length > 0) {
+      // Older variable rows were saved before the product row carried the
+      // variant totals; read them off the variants so the list is accurate.
+      if (product.manageStock) product.stockQuantity = vs.reduce((n, v) => n + (v.stockQuantity || 0), 0);
+      product.inStock = vs.some((v) => v.inStock);
+    }
+    return {
+      ...product,
+      variantCount: vs.length,
+      priceMin: prices.length ? Math.min(...prices) : product.price,
+      priceMax: prices.length ? Math.max(...prices) : product.price,
+    };
+  });
+
+  const totalItems = countResult?.count || 0;
   return {
-    items: rows.map((r) =>
-      mapProduct(r, {
-        category: buildCategoryRef(categoryMap, r.categoryId),
-        tags: tagsByProduct.get(r.id) ?? [],
-      })
-    ),
-    totalItems: countResult?.count || 0,
-    totalPages: Math.ceil((countResult?.count || 0) / limit),
+    items,
+    totalItems,
+    totalPages: Math.ceil(totalItems / limit),
     page,
     limit,
   };
@@ -776,216 +1163,70 @@ export async function fetchAllProductsAdmin(
 export async function bulkUpdateProductsAction(input: {
   ids: string[];
   action: 'publish' | 'draft' | 'feature' | 'unfeature' | 'delete';
-}): Promise<{ updated: number }> {
-  const session = await getSession(true);
-  if (!session) throw new Error('Unauthorized');
+}): Promise<{ updated: number; skipped: number }> {
+  await requireAdmin();
 
-  if (!Array.isArray(input.ids) || input.ids.length === 0) {
-    return { updated: 0 };
-  }
+  const ids = Array.isArray(input.ids) ? input.ids.filter((id) => UUID_RE.test(id)) : [];
+  if (ids.length === 0) return { updated: 0, skipped: 0 };
 
   const db = getDb();
   let updated = 0;
+  let skipped = 0;
 
   if (input.action === 'delete') {
     const deleted = await db
       .delete(products)
-      .where(inArray(products.id, input.ids))
+      .where(inArray(products.id, ids))
       .returning({ id: products.id });
     updated = deleted.length;
+  } else if (input.action === 'publish') {
+    // Only rows that are not live yet (re-publishing must not reset
+    // published_at and reshuffle New Arrivals), and only rows the builder
+    // would let through: a price and a category.
+    const rows = await db
+      .update(products)
+      .set({ status: 'published', publishedAt: new Date(), updatedAt: new Date() })
+      .where(
+        and(
+          inArray(products.id, ids),
+          ne(products.status, 'published'),
+          gt(sql`CAST(${products.price} AS NUMERIC)`, 0),
+          isNotNull(products.categoryId)
+        )
+      )
+      .returning({ id: products.id });
+    updated = rows.length;
+    const [{ live }] = await db
+      .select({ live: count() })
+      .from(products)
+      .where(and(inArray(products.id, ids), eq(products.status, 'published')));
+    skipped = ids.length - live;
   } else {
-    const patch: Record<string, unknown> = { updatedAt: new Date() };
-    if (input.action === 'publish') {
-      patch.status = 'published';
-      patch.publishedAt = new Date();
-    } else if (input.action === 'draft') {
-      patch.status = 'draft';
-    } else if (input.action === 'feature') {
-      patch.featured = true;
-    } else if (input.action === 'unfeature') {
-      patch.featured = false;
-    }
+    const patch =
+      input.action === 'draft'
+        ? { status: 'draft' as const, publishedAt: null, updatedAt: new Date() }
+        : { featured: input.action === 'feature', updatedAt: new Date() };
     const rows = await db
       .update(products)
       .set(patch)
-      .where(inArray(products.id, input.ids))
+      .where(inArray(products.id, ids))
       .returning({ id: products.id });
     updated = rows.length;
   }
 
   if (updated > 0) invalidateProductCaches();
-  return { updated };
+  return { updated, skipped };
 }
 
 export async function deleteProductAction(id: string) {
-  const session = await getSession(true);
-  if (!session) throw new Error('Unauthorized');
+  await requireAdmin();
+  if (!UUID_RE.test(id)) return false;
 
   const db = getDb();
-  const [deleted] = await db.delete(products).where(eq(products.id, id)).returning();
+  const [deleted] = await db
+    .delete(products)
+    .where(eq(products.id, id))
+    .returning({ id: products.id });
   if (deleted) invalidateProductCaches(deleted.id);
   return !!deleted;
-}
-
-// ─── BACKWARD-COMPAT (lib/api.ts) ────────────────────────
-
-/**
- * Thin wrappers so lib/api.ts keeps compiling while the builder migrates
- * callers onto saveProductAction. FormData fields map onto the document.
- */
-export async function createProductAction(data: Record<string, any>) {
-  const document = productDocumentSchema.parse({
-    ...defaultDocument(),
-    name: data.name || '',
-    slug: data.slug || '',
-    productType: data.productType || 'simple',
-    shortDescription: data.shortDescription || '',
-    description: data.description || '',
-    images: parseJsonField(data.images, []),
-    imageAlts: {},
-    categoryId: data.categoryId || '',
-    tagIds: parseJsonField(data.tagIds, []),
-    featured: data.featured === true || data.featured === 'true',
-    visibility: data.visibility || 'public',
-    price: String(data.price || '0'),
-    compareAtPrice: data.compareAtPrice ? String(data.compareAtPrice) : null,
-    sku: data.sku || '',
-    manageStock: data.manageStock === undefined ? true : data.manageStock === true || data.manageStock === 'true',
-    stockQuantity: Number(data.stockQuantity || 0),
-    status: data.status || 'draft',
-    publishAt: null,
-  });
-  return saveProductAction({ document });
-}
-
-export async function updateProductAction(id: string, data: Record<string, any>) {
-  const session = await getSession(true);
-  if (!session) throw new Error('Unauthorized');
-
-  const db = getDb();
-  const [row] = await db.select().from(products).where(eq(products.id, id)).limit(1);
-  if (!row) throw new Error('Product not found');
-
-  const existing = mapProduct(row);
-  const document = productDocumentSchema.parse({
-    ...productToDocumentSafe(existing),
-    name: data.name ?? existing.name,
-    slug: data.slug ?? existing.slug,
-    productType: data.productType ?? existing.productType,
-    shortDescription: data.shortDescription ?? existing.shortDescription,
-    description: data.description ?? existing.description,
-    images: data.images !== undefined ? parseJsonField(data.images, existing.images) : existing.images,
-    imageAlts: existing.imageAlts || {},
-    categoryId: (data.categoryId as string) ?? existing.category?.id ?? '',
-    tagIds:
-      data.tagIds !== undefined
-        ? parseJsonField(data.tagIds, [])
-        : (existing.tags || []).map((t) => t.id),
-    featured: data.featured !== undefined ? data.featured === true || data.featured === 'true' : existing.featured,
-    newArrivalPinned: existing.newArrivalPinned ?? false,
-    excludeFromNewArrivals: existing.excludeFromNewArrivals ?? false,
-    visibility: data.visibility ?? existing.visibility,
-    price: data.price !== undefined ? String(data.price) : String(existing.price),
-    compareAtPrice: data.compareAtPrice !== undefined ? (data.compareAtPrice ? String(data.compareAtPrice) : null) : (existing.compareAtPrice != null ? String(existing.compareAtPrice) : null),
-    sku: data.sku ?? existing.sku,
-    manageStock: existing.manageStock ?? true,
-    stockQuantity: data.stockQuantity !== undefined ? Number(data.stockQuantity) : existing.stockQuantity,
-    status: data.status ?? existing.status,
-    publishAt: existing.publishedAt ?? null,
-  });
-  return saveProductAction({ productId: id, document });
-}
-
-function parseJsonField(value: any, fallback: any): any {
-  if (value === undefined || value === null) return fallback;
-  if (typeof value === 'string') {
-    try {
-      return JSON.parse(value);
-    } catch {
-      return fallback;
-    }
-  }
-  return value;
-}
-
-function defaultDocument(): Record<string, any> {
-  return {
-    tagIds: [],
-    featured: false,
-    newArrivalPinned: false,
-    excludeFromNewArrivals: false,
-    visibility: 'public',
-    saleStartsAt: null,
-    saleEndsAt: null,
-    taxClass: '',
-    attributes: [],
-    variants: [],
-    backorderPolicy: 'no',
-    lowStockThreshold: 5,
-    weight: null,
-    lengthIn: null,
-    widthIn: null,
-    heightIn: null,
-    shippingClass: '',
-    upsellIds: [],
-    crossSellIds: [],
-    similarProductIds: [],
-    metaTitle: '',
-    metaDescription: '',
-    ogImage: '',
-  };
-}
-
-function productToDocumentSafe(p: Product): Record<string, any> {
-  return {
-    name: p.name,
-    slug: p.slug,
-    productType: p.productType,
-    shortDescription: p.shortDescription,
-    description: p.description,
-    images: p.images || [],
-    imageAlts: p.imageAlts || {},
-    categoryId: p.category?.id ?? '',
-    tagIds: (p.tags || []).map((t) => t.id),
-    featured: p.featured,
-    newArrivalPinned: p.newArrivalPinned ?? false,
-    excludeFromNewArrivals: p.excludeFromNewArrivals ?? false,
-    visibility: p.visibility,
-    price: String(p.price),
-    compareAtPrice: p.compareAtPrice != null ? String(p.compareAtPrice) : null,
-    saleStartsAt: p.saleStartsAt ?? null,
-    saleEndsAt: p.saleEndsAt ?? null,
-    taxClass: p.taxClass || '',
-    attributes: [],
-    variants: [],
-    sku: p.sku,
-    manageStock: p.manageStock,
-    stockQuantity: p.stockQuantity,
-    backorderPolicy: p.backorderPolicy,
-    lowStockThreshold: p.lowStockThreshold,
-    weight: p.weight != null ? String(p.weight) : null,
-    lengthIn: p.lengthIn != null ? String(p.lengthIn) : null,
-    widthIn: p.widthIn != null ? String(p.widthIn) : null,
-    heightIn: p.heightIn != null ? String(p.heightIn) : null,
-    shippingClass: p.shippingClass || '',
-    upsellIds: p.upsellIds || [],
-    crossSellIds: p.crossSellIds || [],
-    similarProductIds: p.similarProducts || [],
-    metaTitle: p.metaTitle || '',
-    metaDescription: p.metaDescription || '',
-    ogImage: p.ogImage || '',
-    status: p.status,
-    publishAt: p.publishedAt ?? null,
-  };
-}
-
-// ─── CATEGORY HELPERS ────────────────────────────────────
-
-/** Admin list of categories (for the org section, backed by the table). */
-export async function fetchCategoriesAdmin() {
-  const session = await getSession(true);
-  if (!session) throw new Error('Unauthorized');
-
-  const db = getDb();
-  return db.select().from(categories).orderBy(categories.position);
 }

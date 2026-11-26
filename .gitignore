@@ -5,6 +5,8 @@ node_modules
 
 # Testing
 coverage
+playwright-report/
+test-results/
 
 # Next.js
 .next/
@@ -44,9 +46,6 @@ next-env.d.ts
 # PocketBase (legacy)
 pocketbase/pb_data/
 
-# Drizzle
-drizzle/
-
 # IDE
 .idea
 .vscode
@@ -71,3 +70,5 @@ IMPLEMENTATION_PLAN_APP.md
 scripts/backups/
 !scripts/backups/photo-manifest.json
 PLAN_STAGE10_FINISH.md
+*.local.md
+loadtest/results/

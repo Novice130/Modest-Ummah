@@ -58,7 +58,7 @@ const steps = [
   ['Index orders.payment', 'CREATE INDEX idx_orders_payment_status ON orders (payment_status)'],
   ['Index orders.created_at', 'CREATE INDEX idx_orders_created_at ON orders (created_at)'],
   
-  // Seed admin (hash for "ModestAdmin2026")
+  // Seed admin. Bootstrap only: change this password immediately after first use.
   ['Seed admin', "INSERT INTO admins (email, name, password_hash) VALUES ('admin@modestummah.com', 'Admin', '$2a$12$LK8W.j/DcTgEwBqGLhLsR.qKHdCT9UvR8l8Lx5jBv.fYwv5qZkKOy') ON CONFLICT (email) DO NOTHING"],
 ];
 

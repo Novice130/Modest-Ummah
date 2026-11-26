@@ -25,13 +25,17 @@ import {
 import { useCartStore, useWishlistStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
 import { formatPrice, cn, getImageUrl } from '@/lib/utils';
-import type { Product } from '@/types';
+import { findVariantByOptions } from '@/lib/variant-options';
+import type { Product, StorefrontVariant } from '@/types';
+import { trackProductViewed } from '@/lib/analytics';
 
 interface ProductInfoProps {
   product: Product;
+  /** Omitted by the admin builder's preview, which has no saved variants. */
+  variants?: StorefrontVariant[];
 }
 
-export default function ProductInfo({ product }: ProductInfoProps) {
+export default function ProductInfo({ product, variants = [] }: ProductInfoProps) {
   const router = useRouter();
   const [selectedColor, setSelectedColor] = useState(product.colors?.[0]?.name || '');
   const [selectedSize, setSelectedSize] = useState(
@@ -49,15 +53,36 @@ export default function ProductInfo({ product }: ProductInfoProps) {
     setMounted(true);
   }, []);
 
+  useEffect(() => trackProductViewed(product.id, product.price), [product.id, product.price]);
+
   const isSaved = mounted ? isInWishlist(product.id) : false;
 
+  const hasVariants = product.productType === 'variable' && variants.length > 0;
+  const sizeRequired = product.sizes?.length > 0 && !product.sizes.includes('One Size');
+  const activeVariant = hasVariants
+    ? findVariantByOptions(variants, { size: selectedSize, color: selectedColor })
+    : undefined;
+  // Every pick made, and the picks are not a variant that exists.
+  const comboUnavailable = hasVariants && !activeVariant && (!sizeRequired || Boolean(selectedSize));
+
+  // Display only: the server resolves the charged price from the variant id.
+  const price = activeVariant?.price ?? product.price;
+  const compareAtPrice = activeVariant
+    ? activeVariant.compareAtPrice ?? (activeVariant.price === null ? product.compareAtPrice : undefined)
+    : product.compareAtPrice;
+  const sku = activeVariant?.sku ?? product.sku;
+  const inStock = !comboUnavailable && (activeVariant ? activeVariant.inStock : product.inStock);
+  const stockQuantity = activeVariant ? activeVariant.stockQuantity : product.stockQuantity;
+  const lowStock =
+    product.manageStock !== false && stockQuantity > 0 && stockQuantity <= product.lowStockThreshold;
+
   const discount =
-    product.compareAtPrice && product.compareAtPrice > product.price
-      ? Math.round(((product.compareAtPrice - product.price) / product.compareAtPrice) * 100)
+    compareAtPrice && compareAtPrice > price
+      ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100)
       : null;
 
   const handleAddToCart = ({ checkout = false }: { checkout?: boolean } = {}) => {
-    if (product.sizes?.length > 0 && !product.sizes.includes('One Size') && !selectedSize) {
+    if (sizeRequired && !selectedSize) {
       toast({
         title: 'Please select a size',
         description: 'Choose a size before proceeding.',
@@ -66,13 +91,23 @@ export default function ProductInfo({ product }: ProductInfoProps) {
       return;
     }
 
-    const firstImage = product.images?.[0];
+    if (hasVariants && !activeVariant) {
+      toast({
+        title: 'This combination is not available',
+        description: 'Choose a different size or color.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const firstImage = activeVariant?.image || product.images?.[0];
     const imageSrc = firstImage ? getImageUrl(firstImage) : undefined;
 
     addItem({
       productId: product.id,
+      variantId: activeVariant?.id,
       name: product.name,
-      price: product.price,
+      price,
       quantity,
       color: selectedColor || undefined,
       size: selectedSize || undefined,
@@ -127,7 +162,7 @@ export default function ProductInfo({ product }: ProductInfoProps) {
         <span className="uppercase tracking-wider font-semibold">
           {product.category?.name ?? 'Modest Ummah'}
         </span>
-        {product.sku && <span>SKU: {product.sku}</span>}
+        {sku && <span>SKU: {sku}</span>}
       </div>
 
       {/* Title */}
@@ -142,11 +177,11 @@ export default function ProductInfo({ product }: ProductInfoProps) {
             discount ? 'text-[#2E7D5B] dark:text-[#5FBE92]' : 'text-foreground'
           }`}
         >
-          {formatPrice(product.price)}
+          {formatPrice(price)}
         </span>
-        {product.compareAtPrice && product.compareAtPrice > product.price && (
+        {compareAtPrice && compareAtPrice > price && (
           <span className="text-base text-muted-foreground line-through font-normal">
-            {formatPrice(product.compareAtPrice)}
+            {formatPrice(compareAtPrice)}
           </span>
         )}
         {discount && discount > 0 && (
@@ -158,22 +193,24 @@ export default function ProductInfo({ product }: ProductInfoProps) {
 
       {/* Stock availability */}
       <div className="flex items-center gap-2 text-xs">
-        {product.inStock ? (
+        {inStock ? (
           <>
             <span className="w-2 h-2 rounded-full bg-[#2E7D5B] dark:bg-[#5FBE92]" />
             <span className="font-medium text-[#2E7D5B] dark:text-[#5FBE92]">
               In Stock & Ready to Ship
             </span>
-            {product.stockQuantity && product.stockQuantity <= 5 && (
+            {lowStock && (
               <span className="text-amber-600 dark:text-amber-400 font-semibold">
-                — Only {product.stockQuantity} left!
+                — Only {stockQuantity} left!
               </span>
             )}
           </>
         ) : (
           <>
             <span className="w-2 h-2 rounded-full bg-red-500" />
-            <span className="font-medium text-red-500">Currently Sold Out</span>
+            <span className="font-medium text-red-500">
+              {comboUnavailable ? 'This combination is not available' : 'Currently Sold Out'}
+            </span>
           </>
         )}
       </div>
@@ -267,7 +304,7 @@ export default function ProductInfo({ product }: ProductInfoProps) {
             size="lg"
             variant="outline"
             onClick={() => handleAddToCart({ checkout: false })}
-            disabled={!product.inStock}
+            disabled={!inStock}
             className="h-12 rounded-full font-semibold border-2 border-foreground hover:bg-foreground hover:text-background transition-all"
           >
             <ShoppingBag className="h-4 w-4 mr-2" />
@@ -279,7 +316,7 @@ export default function ProductInfo({ product }: ProductInfoProps) {
             type="button"
             size="lg"
             onClick={() => handleAddToCart({ checkout: true })}
-            disabled={!product.inStock}
+            disabled={!inStock}
             className="h-12 rounded-full font-semibold bg-foreground text-background hover:bg-foreground/90 shadow-sm transition-all"
           >
             <Zap className="h-4 w-4 mr-2 fill-current" />
@@ -332,12 +369,12 @@ export default function ProductInfo({ product }: ProductInfoProps) {
         <div className="flex flex-col items-center gap-1.5 p-1 border-x border-black/[0.06] dark:border-white/[0.08]">
           <RotateCcw className="h-4 w-4 text-[#2E7D5B] dark:text-[#5FBE92]" />
           <span className="text-[11px] font-semibold text-foreground">30-Day Returns</span>
-          <span className="text-[10px] text-muted-foreground">Hassle-free guarantee</span>
+          <span className="text-[10px] text-muted-foreground">Unworn, with tags attached</span>
         </div>
         <div className="flex flex-col items-center gap-1.5 p-1">
           <ShieldCheck className="h-4 w-4 text-[#2E7D5B] dark:text-[#5FBE92]" />
           <span className="text-[11px] font-semibold text-foreground">Secure Checkout</span>
-          <span className="text-[10px] text-muted-foreground">Apple-grade Stripe</span>
+          <span className="text-[10px] text-muted-foreground">Payments by Stripe</span>
         </div>
       </div>
 
@@ -350,12 +387,12 @@ export default function ProductInfo({ product }: ProductInfoProps) {
           </AccordionTrigger>
           <AccordionContent className="text-xs sm:text-sm text-muted-foreground leading-relaxed pt-1 space-y-2">
             {product.description ? (
-              <p>{product.description}</p>
+              <p className="whitespace-pre-line">{product.description}</p>
             ) : (
-              <p>{product.shortDescription || 'Crafted with premium cubic zirconia and fine craftsmanship.'}</p>
+              <p className="whitespace-pre-line">{product.shortDescription || 'Crafted with premium cubic zirconia and fine craftsmanship.'}</p>
             )}
             {product.shortDescription && product.description && (
-              <p className="font-medium text-foreground">{product.shortDescription}</p>
+              <p className="font-medium text-foreground whitespace-pre-line">{product.shortDescription}</p>
             )}
           </AccordionContent>
         </AccordionItem>
@@ -367,10 +404,7 @@ export default function ProductInfo({ product }: ProductInfoProps) {
           </AccordionTrigger>
           <AccordionContent className="text-xs sm:text-sm text-muted-foreground leading-relaxed pt-1 space-y-2">
             <p>
-              • <strong>Dispatch:</strong> Dispatched in 1-2 business days with tracking.
-            </p>
-            <p>
-              • <strong>Packaging:</strong> Shipped in our signature luxury presentation box.
+              • <strong>Delivery:</strong> US standard shipping takes 5-10 business days. You will receive a tracking number by email when your order ships.
             </p>
             <p>
               • <strong>Returns:</strong> 30-day returns accepted on unworn pieces in original packaging.

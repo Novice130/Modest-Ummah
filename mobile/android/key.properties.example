@@ -1,0 +1,7 @@
+# Copy to key.properties (gitignored) and fill in. Release builds fail without it.
+# storeFile resolves from mobile/android. Keep the keystore out of git; *.jks and
+# *.keystore are ignored.
+storeFile=upload-keystore.jks
+storePassword=
+keyAlias=upload
+keyPassword=

@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import Link from 'next/link';
+import * as Sentry from '@sentry/nextjs';
 import { Button } from '@/components/ui/button';
 import { RefreshCw, Home } from 'lucide-react';
 
@@ -16,6 +17,7 @@ export default function Error({
   // to the shopper. The digest identifies the incident in the logs.
   useEffect(() => {
     console.error(error);
+    Sentry.captureException(error);
   }, [error]);
 
   return (

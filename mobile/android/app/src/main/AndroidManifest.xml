@@ -1,6 +1,12 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Release builds need this; only the debug/profile manifests had it. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- No backup: the auth token lives in secure storage and must not be
+         extractable through adb/cloud backup. -->
     <application
-        android:label="modest_ummah"
+        android:label="Modest Ummah"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity
@@ -40,6 +46,11 @@
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
+        </intent>
+        <!-- url_launcher: the privacy policy and terms open in the browser. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
         </intent>
     </queries>
 </manifest>

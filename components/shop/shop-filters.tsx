@@ -105,7 +105,7 @@ export default function ShopFilters() {
     ([key]) => !['page', 'sort'].includes(key)
   );
 
-  const FiltersContent = () => (
+  const filtersContent = (
     <div className="space-y-4">
       {/* Active Filters */}
       {activeFilters.length > 0 && (
@@ -264,7 +264,7 @@ export default function ShopFilters() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="font-heading font-semibold">Filters</h2>
         </div>
-        <FiltersContent />
+        {filtersContent}
       </div>
 
       {/* Mobile Filters */}
@@ -286,7 +286,7 @@ export default function ShopFilters() {
               <DialogHeader>
                 <DialogTitle>Filters</DialogTitle>
               </DialogHeader>
-              <FiltersContent />
+              {filtersContent}
             </DialogContent>
           </Dialog>
 

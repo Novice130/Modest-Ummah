@@ -270,6 +270,10 @@ class OrderSummary {
   final int itemCount;
   final String? trackingNumber;
 
+  /// The row written when checkout starts. Until the Stripe webhook moves it
+  /// on, nothing has been paid for, and most of these are abandoned checkouts.
+  bool get isAwaitingPayment => status == 'pending_payment';
+
   factory OrderSummary.fromJson(Map<String, dynamic> json) {
     final items = (json['items'] as List?) ?? [];
     return OrderSummary(

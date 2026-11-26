@@ -29,6 +29,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useCartStore, useAuthStore } from '@/lib/store';
 import { formatPrice, generateOrderId, getValidImageSrc } from '@/lib/utils';
+import { markPaymentReady, trackCheckoutStarted } from '@/lib/analytics';
 
 const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
 
@@ -174,6 +175,7 @@ export default function CheckoutForm() {
   // Wait for hydration before checking cart
   useEffect(() => {
     setMounted(true);
+    trackCheckoutStarted(useCartStore.getState().items);
   }, []);
 
   useEffect(() => {
@@ -185,6 +187,7 @@ export default function CheckoutForm() {
 
   // Calculate shipping and tax when address is submitted
   const onSubmitInfo = async (data: CheckoutFormData) => {
+    setApiError(null);
     setIsCalculating(true);
     setAddressData(data);
     
@@ -218,6 +221,11 @@ export default function CheckoutForm() {
       });
       
       const shippingData = await shippingResponse.json();
+      if (shippingResponse.status === 422) {
+        // A refusal, not an outage: stop here rather than use the fallback rates.
+        setApiError(shippingData.error);
+        return;
+      }
       if (shippingData.success && shippingData.rates.length > 0) {
         setShippingRates(shippingData.rates);
         // Auto-select cheapest or free shipping
@@ -341,6 +349,7 @@ export default function CheckoutForm() {
       if (typeof resolvedTax === 'number') setServerTax(resolvedTax);
 
       setClientSecret(clientSecret);
+      markPaymentReady(clientSecret, resolvedTotal, items);
       setStep('payment');
     } catch (error: any) {
       console.error('Error creating payment intent:', error);
@@ -543,6 +552,11 @@ export default function CheckoutForm() {
               </CardContent>
             </Card>
 
+            {apiError && (
+              <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm" role="alert">
+                {apiError}
+              </div>
+            )}
             <Button type="submit" size="lg" className="w-full" disabled={isCalculating}>
               {isCalculating ? (
                 <>

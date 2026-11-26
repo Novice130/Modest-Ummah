@@ -35,7 +35,12 @@ final accountRepositoryProvider = Provider<AccountRepository>(
 // ─── Auth ────────────────────────────────────────────────
 
 class AuthState {
-  const AuthState({this.user, this.loading = false, this.restored = false});
+  const AuthState({
+    this.user,
+    this.loading = false,
+    this.restored = false,
+    this.restoreFailed = false,
+  });
 
   final AppUser? user;
   final bool loading;
@@ -43,6 +48,10 @@ class AuthState {
   /// False until the stored token has been checked, so the UI can avoid
   /// flashing a signed-out state on launch.
   final bool restored;
+
+  /// A token is stored but could not be checked (offline, or a server error).
+  /// The session is kept: only the server saying 401 ends it.
+  final bool restoreFailed;
 
   bool get isSignedIn => user != null;
 
@@ -56,28 +65,56 @@ class AuthState {
 
 class AuthNotifier extends StateNotifier<AuthState> {
   AuthNotifier(this._ref) : super(const AuthState()) {
-    _restore();
+    _restoring = _restore();
   }
 
   final Ref _ref;
+  late Future<void> _restoring;
 
   SecureStore get _store => _ref.read(secureStoreProvider);
   AccountRepository get _repo => _ref.read(accountRepositoryProvider);
 
   Future<void> _restore() async {
-    final token = await _store.readToken();
-    if (token == null || token.isEmpty) {
-      state = state.copyWith(restored: true);
-      return;
-    }
     try {
+      final token = await _store.readToken();
+      if (!mounted) return;
+      if (token == null || token.isEmpty) {
+        state = const AuthState(restored: true);
+        return;
+      }
       final user = await _repo.me();
-      state = state.copyWith(user: user, restored: true);
-    } catch (_) {
-      // Expired or revoked. Browsing works signed out, so this is not fatal.
-      await _store.clearToken();
-      state = const AuthState(restored: true);
+      if (mounted) state = AuthState(user: user, restored: true);
+    } on ApiException catch (e) {
+      if (e.isUnauthenticated) {
+        // Expired or revoked. Browsing works signed out, so this is not fatal.
+        await _store.clearToken();
+        if (mounted) state = const AuthState(restored: true);
+      } else {
+        _markRestoreFailed();
+      }
+    } catch (e) {
+      debugPrint('session restore failed: $e');
+      _markRestoreFailed();
     }
+  }
+
+  void _markRestoreFailed() {
+    // A sign-in that finished while the check was in flight wins.
+    if (!mounted || state.isSignedIn) return;
+    state = const AuthState(restored: true, restoreFailed: true);
+  }
+
+  /// Checks the stored token again after a failed restore.
+  Future<void> retryRestore() {
+    state = const AuthState();
+    return _restoring = _restore();
+  }
+
+  /// Completes once it is known whether anyone is signed in, retrying once if
+  /// the earlier check could not reach the server.
+  Future<void> settled() async {
+    await _restoring;
+    if (state.restoreFailed) await retryRestore();
   }
 
   Future<void> signIn(String email, String password) async {
@@ -384,9 +421,11 @@ final savedProductsProvider = FutureProvider<List<Product>>((ref) async {
     slugs.map((slug) async {
       try {
         return await repo.product(slug);
-      } catch (_) {
-        // A saved product that was unpublished should drop out quietly.
-        return null;
+      } on ApiException catch (e) {
+        // A saved product that was unpublished should drop out quietly. Any
+        // other failure surfaces, or an outage would read as an empty list.
+        if (e.isNotFound) return null;
+        rethrow;
       }
     }),
   );

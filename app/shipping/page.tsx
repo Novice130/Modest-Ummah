@@ -7,12 +7,9 @@ export const metadata: Metadata = {
 };
 
 const rows = [
-  { region: 'United States (standard)', time: '5-10 business days', cost: '$9.99 — free over $75' },
+  { region: 'United States (standard)', time: '5-10 business days', cost: '$9.99 — free on orders $75+ after discounts' },
   { region: 'United States (express)', time: '2-4 business days', cost: '$14.99' },
-  { region: 'Canada', time: '7-14 business days', cost: 'Calculated at checkout' },
-  { region: 'United Kingdom & Europe', time: '7-14 business days', cost: 'Calculated at checkout' },
-  { region: 'Gulf (UAE, Saudi Arabia, etc.)', time: '7-14 business days', cost: 'Calculated at checkout' },
-  { region: 'Rest of world', time: '10-21 business days', cost: 'Calculated at checkout' },
+  { region: 'International (outside the US)', time: 'By email quote', cost: 'Email support@modestummah.com' },
 ];
 
 export default function ShippingPage() {
@@ -20,7 +17,7 @@ export default function ShippingPage() {
     <div className="container-custom py-16 max-w-3xl">
       <h1 className="font-heading text-3xl md:text-4xl mb-4">Shipping Info</h1>
       <p className="text-muted-foreground mb-8">
-        Everything you need to know about delivery times and rates.
+        Everything you need to know about United States shipping rates, delivery estimates, and international orders.
       </p>
 
       <div className="border rounded-lg overflow-x-auto mb-8">
@@ -48,8 +45,8 @@ export default function ShippingPage() {
         <section>
           <h2 className="font-heading text-xl mb-3">Free shipping</h2>
           <p className="text-muted-foreground">
-            Orders over $75 ship free within the United States. The discount is applied
-            automatically at checkout.
+            Orders of $75 or more after discounts ship free via standard shipping within the
+            United States. Free shipping is applied automatically at checkout.
           </p>
         </section>
         <section>
@@ -64,10 +61,15 @@ export default function ShippingPage() {
           </p>
         </section>
         <section>
-          <h2 className="font-heading text-xl mb-3">Customs and duties</h2>
+          <h2 className="font-heading text-xl mb-3">International orders &amp; customs</h2>
           <p className="text-muted-foreground">
-            International orders may be subject to import duties and taxes, which are the
-            responsibility of the recipient.
+            Checkout currently supports shipping within the United States only. For an
+            international order, please email{' '}
+            <a href="mailto:support@modestummah.com" className="text-sage-600 hover:underline">
+              support@modestummah.com
+            </a>{' '}
+            with your items and destination for a custom shipping quote. International
+            recipients are responsible for any import duties and taxes.
           </p>
         </section>
         <section>

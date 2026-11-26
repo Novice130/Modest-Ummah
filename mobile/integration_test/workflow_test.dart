@@ -3,8 +3,18 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
 import 'package:modest_ummah/main.dart' as app;
 
+import '../test/support/live_test_guard.dart';
+
 void main() {
   IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  // This flow registers a real user and starts a real PaymentIntent.
+  final refusal = liveTestRefusal();
+  if (refusal != null) {
+    testWidgets('live workflow test', (_) async {}, skip: true);
+    debugPrint(refusal);
+    return;
+  }
 
   testWidgets('Complete workflow test: Browse, Sign up, Add to Cart, Checkout', (tester) async {
     // 1. Launch App
@@ -83,7 +93,6 @@ void main() {
     debugPrint('Step 4 PASSED: Navigated back to Shop tab');
 
     // 5. Open First Product
-    final firstProduct = find.byType(GestureDetector).first;
     // Tap the first product card title or image
     final productTextFinder = find.textContaining('CZ Statement Ring');
     if (productTextFinder.evaluate().isNotEmpty) {

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { Mail, MapPin, Facebook, Instagram, Twitter, Youtube, Loader2, Check } from 'lucide-react';
+import { Mail, Loader2, Check } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
@@ -36,13 +36,6 @@ const footerLinks = {
     ],
   },
 };
-
-const socialLinks = [
-  { name: 'Facebook', icon: Facebook, href: 'https://facebook.com' },
-  { name: 'Instagram', icon: Instagram, href: 'https://instagram.com' },
-  { name: 'Twitter', icon: Twitter, href: 'https://twitter.com' },
-  { name: 'YouTube', icon: Youtube, href: 'https://youtube.com' },
-];
 
 export default function Footer() {
   const { toast } = useToast();
@@ -79,7 +72,7 @@ export default function Footer() {
               Join the Modest Ummah Family
             </h3>
             <p className="text-white/70 mb-6">
-              Subscribe to receive updates, access to exclusive deals, and more.
+              Subscribe to receive updates from Modest Ummah.
             </p>
             <form onSubmit={handleSubscribe} className="flex flex-col sm:flex-row gap-3 max-w-md mx-auto">
               <Input
@@ -105,9 +98,9 @@ export default function Footer() {
 
       {/* Main Footer */}
       <div className="container-custom py-12">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-8">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-8">
           {/* Brand */}
-          <div className="col-span-2 md:col-span-4 lg:col-span-1">
+          <div className="col-span-2 md:col-span-3 lg:col-span-1">
             <Link href="/" className="inline-flex items-center space-x-3 mb-4 group">
               <img src="/images/logo.png" alt="Modest Ummah" className="h-9 w-9 rounded-full shadow-sm ring-1 ring-white/20 transition-transform group-hover:scale-105" />
               <span className="font-heading text-2xl font-bold">Modest Ummah</span>
@@ -122,10 +115,6 @@ export default function Footer() {
                 <a href="mailto:support@modestummah.com" className="hover:text-white">
                   support@modestummah.com
                 </a>
-              </div>
-              <div className="flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                <span>New York, NY</span>
               </div>
             </div>
           </div>
@@ -148,25 +137,6 @@ export default function Footer() {
               </ul>
             </div>
           ))}
-
-          {/* Social */}
-          <div>
-            <h4 className="font-heading font-semibold mb-4">Follow Us</h4>
-            <div className="flex gap-4">
-              {socialLinks.map((social) => (
-                <a
-                  key={social.name}
-                  href={social.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-white/70 hover:text-white transition-colors"
-                  aria-label={social.name}
-                >
-                  <social.icon className="h-5 w-5" />
-                </a>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 
@@ -179,7 +149,6 @@ export default function Footer() {
               <img src="/images/payment/visa.svg" alt="Visa" className="h-6" />
               <img src="/images/payment/mastercard.svg" alt="Mastercard" className="h-6" />
               <img src="/images/payment/amex.svg" alt="American Express" className="h-6" />
-              <img src="/images/payment/paypal.svg" alt="PayPal" className="h-6" />
             </div>
           </div>
         </div>

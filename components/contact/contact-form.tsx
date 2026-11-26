@@ -24,7 +24,7 @@ export function ContactForm() {
       await submitContactAction({ firstName, lastName, email, subject, message });
       toast({
         title: 'Message sent',
-        description: 'We will get back to you within 24 hours.',
+        description: 'We have received your message and will reply by email.',
       });
       setFirstName('');
       setLastName('');

@@ -14,6 +14,7 @@ export function AuthProvider({ children, initialUser }: AuthProviderProps) {
   const initialized = useRef(false);
 
   // Synchronously initialize the store directly on mount to prevent flash
+  // eslint-disable-next-line react-hooks/refs -- one-time sync store init before first paint, intentional
   if (!initialized.current) {
     useAuthStore.setState({ user: initialUser, isLoading: false });
     initialized.current = true;

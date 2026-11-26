@@ -3,6 +3,7 @@ import { users } from '@/lib/schema';
 import { verifyPassword, createToken } from '@/lib/auth';
 import { eq } from 'drizzle-orm';
 import { json, apiError } from '@/lib/api/v1/http';
+import { rateLimitV1Route } from '@/lib/rate-limit-guards';
 
 /**
  * POST /api/v1/auth/login  { email, password } -> { token, user }
@@ -13,6 +14,8 @@ import { json, apiError } from '@/lib/api/v1/http';
 export async function POST(request: Request) {
   try {
     const { email, password } = await request.json();
+    const limited = rateLimitV1Route(request, 'login', email);
+    if (limited) return limited;
     if (!email || !password) {
       return apiError(400, 'Email and password are required', 'missing_fields');
     }

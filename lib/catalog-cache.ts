@@ -1,11 +1,21 @@
 'use cache';
 
 import { getDb } from '@/lib/db';
-import { categories, productTags, products, tags } from '@/lib/schema';
-import { eq, inArray, like, or, desc, asc, and, count, sql } from 'drizzle-orm';
+import { categories, productTags, products, productVariants, tags } from '@/lib/schema';
+import { eq, ne, inArray, ilike, or, desc, asc, and, count, sql } from 'drizzle-orm';
 import { tagProductCatalogue, productCacheProfile, tagTaxonomy } from '@/lib/cache';
 import { buildCategoryRef, mapProduct } from '@/lib/product-mapper';
-import type { CategoryNode, Product, TagRef } from '@/types';
+import { liveCondition } from '@/lib/product-live';
+import type { CategoryNode, Product, StorefrontVariant, TagRef } from '@/types';
+
+/**
+ * Catalogue visibility, as in WooCommerce: "public" shows everywhere,
+ * "search_only" only in search results, "hidden" in neither (still reachable
+ * by its URL, so getProductCached does not filter on it).
+ */
+function listedCondition(inSearch: boolean) {
+  return inSearch ? ne(products.visibility, 'hidden') : eq(products.visibility, 'public');
+}
 
 /**
  * Cached catalogue reads. Lives in its own file because 'use cache' and
@@ -126,7 +136,7 @@ export async function getProductsCached({
   const offset = (page - 1) * limit;
 
   const conditions = [];
-  if (!includeUnpublished) conditions.push(eq(products.status, 'published'));
+  if (!includeUnpublished) conditions.push(liveCondition(), listedCondition(Boolean(search)));
 
   if (category) {
     const ids = await descendantCategoryIds(category);
@@ -147,7 +157,7 @@ export async function getProductsCached({
 
   if (search) {
     const searchPattern = `%${search}%`;
-    conditions.push(or(like(products.name, searchPattern), like(products.sku, searchPattern), like(products.description, searchPattern)));
+    conditions.push(or(ilike(products.name, searchPattern), ilike(products.sku, searchPattern), ilike(products.description, searchPattern)));
   }
 
   if (minPrice) {
@@ -184,7 +194,7 @@ export async function getProductCached(idOrSlug: string, includeUnpublished = fa
   const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrSlug);
 
   const conditions: any[] = [];
-  if (!includeUnpublished) conditions.push(eq(products.status, 'published'));
+  if (!includeUnpublished) conditions.push(liveCondition());
 
   let result;
   if (isUUID) {
@@ -194,11 +204,41 @@ export async function getProductCached(idOrSlug: string, includeUnpublished = fa
     [result] = await db.select().from(products).where(and(eq(products.slug, idOrSlug), ...conditions)).limit(1);
   }
 
-  if (result) tagProductCatalogue(result.id);
+  // A miss is tagged too: otherwise the cached null for a draft or
+  // not-yet-due product's URL survives the publish that should replace it.
+  tagProductCatalogue(result?.id);
   tagTaxonomy();
   if (!result) return null;
   const [hydrated] = await hydrate([result]);
   return hydrated ?? null;
+}
+
+/**
+ * A product's variants for the storefront picker. Tagged like the product, so
+ * a save refreshes it; stock can be as stale as the product's own (a sale does
+ * not invalidate the cache).
+ */
+export async function getProductVariantsCached(productId: string): Promise<StorefrontVariant[]> {
+  tagProductCatalogue(productId);
+  productCacheProfile();
+
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(productVariants)
+    .where(eq(productVariants.productId, productId))
+    .orderBy(asc(productVariants.position));
+
+  return rows.map((v) => ({
+    id: v.id,
+    sku: v.sku,
+    attributes: v.attributes,
+    price: v.price !== null ? parseFloat(v.price) : null,
+    compareAtPrice: v.compareAtPrice !== null ? parseFloat(v.compareAtPrice) : null,
+    stockQuantity: v.stockQuantity ?? 0,
+    inStock: v.inStock ?? true,
+    image: v.image,
+  }));
 }
 
 export async function getNewArrivalsCached(limit = 8) {
@@ -211,7 +251,8 @@ export async function getNewArrivalsCached(limit = 8) {
     .select()
     .from(products)
     .where(and(
-      eq(products.status, 'published'),
+      liveCondition(),
+      listedCondition(false),
       eq(products.excludeFromNewArrivals, false)
     ))
     .orderBy(desc(products.newArrivalPinned), desc(products.publishedAt))
@@ -241,7 +282,8 @@ export async function getRelatedCached(
     .from(products)
     .where(and(
       eq(products.categoryId, categoryId),
-      eq(products.status, 'published'),
+      liveCondition(),
+      listedCondition(false),
       sql`${products.id} != ${currentProductId}`
     ))
     .orderBy(desc(products.publishedAt))
@@ -261,13 +303,31 @@ export async function getSearchCached(query: string) {
     .select()
     .from(products)
     .where(and(
-      eq(products.status, 'published'),
-      or(like(products.name, searchPattern), like(products.description, searchPattern))
+      liveCondition(),
+      listedCondition(true),
+      or(ilike(products.name, searchPattern), ilike(products.description, searchPattern))
     ))
     .orderBy(desc(products.publishedAt))
     .limit(20);
 
   return hydrate(items);
+}
+
+/**
+ * Slugs for /sitemap.xml: live, publicly listed products only. Filled on demand
+ * when a crawler asks and the entry is stale, never on a timer, so Neon compute
+ * can still suspend between visits.
+ */
+export async function getSitemapProductsCached(): Promise<Array<{ slug: string; updatedAt: string }>> {
+  tagProductCatalogue();
+  productCacheProfile();
+
+  const rows = await getDb()
+    .select({ slug: products.slug, updatedAt: products.updatedAt })
+    .from(products)
+    .where(and(liveCondition(), listedCondition(false)));
+
+  return rows.map((r) => ({ slug: r.slug, updatedAt: r.updatedAt.toISOString() }));
 }
 
 /**

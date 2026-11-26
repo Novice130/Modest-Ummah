@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -24,7 +23,6 @@ const loginSchema = z.object({
 type LoginFormData = z.infer<typeof loginSchema>;
 
 export default function LoginForm() {
-  const router = useRouter();
   const { toast } = useToast();
   const { setUser } = useAuthStore();
   const { syncWithServer } = useCartStore();
@@ -63,8 +61,9 @@ export default function LoginForm() {
         description: 'You have successfully signed in.',
       });
 
-      router.refresh();
-      router.push('/account');
+      // Full load: the session cookie was just set, and a client push
+      // races the refresh Next runs for it.
+      window.location.assign('/account');
     } catch (error: any) {
       toast({
         title: 'Sign in failed',
@@ -108,6 +107,9 @@ export default function LoginForm() {
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Password</Label>
+              <Link href="/auth/forgot-password" className="text-sm text-sage-600 hover:underline">
+                Forgot password?
+              </Link>
             </div>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

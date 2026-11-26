@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -33,7 +32,6 @@ const registerSchema = z.object({
 type RegisterFormData = z.infer<typeof registerSchema>;
 
 export default function RegisterForm() {
-  const router = useRouter();
   const { toast } = useToast();
   const { setUser } = useAuthStore();
   const [isLoading, setIsLoading] = useState(false);
@@ -75,8 +73,9 @@ export default function RegisterForm() {
         description: 'Welcome to Modest Ummah.',
       });
 
-      router.refresh();
-      router.push('/account');
+      // Full load: the session cookie was just set, and a client push
+      // races the refresh Next runs for it.
+      window.location.assign('/account');
     } catch (error: any) {
       toast({
         title: 'Registration failed',

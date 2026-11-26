@@ -23,7 +23,7 @@ export default async function EditProductPage({ params }: EditProductPageProps) 
       init={{
         productId: id,
         product: data.product,
-        variants: data.variants as any,
+        variants: data.variants,
         attributes: data.attributes,
       }}
     />

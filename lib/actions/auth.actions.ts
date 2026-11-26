@@ -2,77 +2,43 @@
 
 import { cookies } from 'next/headers';
 import { headers } from 'next/headers';
-import { verifyToken, clearAuthCookie, createAuthCookie } from '@/lib/auth';
+import { clearAuthCookie, createAuthCookie } from '@/lib/auth';
+import { clearSession } from '@/lib/session';
+import { setSessionCookie } from '@/lib/session-cookie';
 import { getDb } from '@/lib/db';
 import { users, admins } from '@/lib/schema';
 import { eq } from 'drizzle-orm';
 import type { TokenPayload } from '@/lib/auth';
 import { adminIsLocked, recordAdminAttempt } from '@/lib/admin-login-guard';
+import { clientIpFromHeaders, ipLimitKey } from '@/lib/client-ip';
+import { rateLimitAction } from '@/lib/rate-limit-guards';
+import { adminTotpStage, type AdminTotpStage } from '@/lib/admin-2fa';
+import { MIN_PASSWORD_LENGTH } from '@/lib/account';
 
-export async function getSession(isAdmin = false) {
-  const cookieName = isAdmin ? 'admin_token' : 'auth_token';
-  const cookieStore = await cookies();
-  const token = cookieStore.get(cookieName)?.value;
-  
-  if (!token) return null;
-  
-  const payload = await verifyToken(token);
-  if (!payload) return null;
-
-  const db = getDb();
-
-  // Validate existence in DB
-  if (isAdmin && payload.type === 'admin') {
-    const [admin] = await db.select().from(admins).where(eq(admins.email, payload.email)).limit(1);
-    if (!admin) return null;
-    return {
-      id: admin.id,
-      email: admin.email,
-      name: admin.name || '',
-      type: 'admin',
-    };
-  } else if (!isAdmin && payload.type === 'user') {
-    const [user] = await db.select().from(users).where(eq(users.id, payload.sub)).limit(1);
-    if (!user) return null;
-    // Retired by a password change since this cookie was issued.
-    if (user.tokenVersion !== (payload.ver ?? 0)) return null;
-    return {
-      id: user.id,
-      email: user.email,
-      name: user.name || '',
-      avatar: user.avatar || undefined,
-      verified: user.verified || false,
-      type: 'user',
-    };
-  }
-
-  return null;
+/**
+ * Browser-callable sign-out. Only deletes the caller's own session cookie
+ * (user or admin), so it is safe as a public Server Action. Session reads and
+ * other helpers live in lib/session.ts, which is not a 'use server' file.
+ */
+export async function signOutAction(isAdmin = false): Promise<void> {
+  await clearSession(isAdmin === true);
 }
 
-export async function clearSession(isAdmin = false) {
-  const cookieName = isAdmin ? 'admin_token' : 'auth_token';
-  const cookieStore = await cookies();
-  cookieStore.delete(cookieName);
-}
-
-export async function setSession(token: string, isAdmin = false) {
-  const maxAge = isAdmin ? 86400 : 604800; // 24h or 7d
-  const cookieName = isAdmin ? 'admin_token' : 'auth_token';
-  
-  const cookieStore = await cookies();
-  cookieStore.set(cookieName, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    maxAge: maxAge,
-    path: '/',
-  });
-}
-
-import { verifyPassword, createToken, hashPassword } from '@/lib/auth';
+import {
+  verifyPassword,
+  createToken,
+  hashPassword,
+  isAdmin2faRequired,
+  createAdminPendingToken,
+  ADMIN_PENDING_COOKIE,
+  ADMIN_PENDING_MAX_AGE_SECONDS,
+} from '@/lib/auth';
 
 export async function signInAction(email: string, password: string) {
   if (!email || !password) return { error: 'Email and password are required' };
+
+  const limited = await rateLimitAction('login', { email });
+  if (limited) return { error: limited };
 
   try {
     const db = getDb();
@@ -91,7 +57,7 @@ export async function signInAction(email: string, password: string) {
       ver: user.tokenVersion,
     });
 
-    await setSession(token, false);
+    await setSessionCookie(token, false);
 
     const { passwordHash: _, ...safeUser } = user;
     return {
@@ -106,15 +72,24 @@ export async function signInAction(email: string, password: string) {
   }
 }
 
-export async function adminSignInAction(email: string, password: string) {
+export async function adminSignInAction(
+  email: string,
+  password: string
+): Promise<
+  | { id: string; email: string; name: string }
+  | { twoFactor: AdminTotpStage }
+  | { error: string }
+> {
   if (!email || !password) return { error: 'Email and password required' };
 
   const normalizedEmail = email.toLowerCase().trim();
   const headersList = await headers();
-  const ip =
-    headersList.get('x-forwarded-for')?.split(',')[0]?.trim() ||
-    headersList.get('x-real-ip') ||
-    'unknown';
+  const ip = ipLimitKey(clientIpFromHeaders(headersList));
+
+  // In memory, ahead of the guard's queries: a flood stops here without waking
+  // the database.
+  const limited = await rateLimitAction('adminLogin');
+  if (limited) return { error: limited };
 
   try {
     if (await adminIsLocked(normalizedEmail, ip)) {
@@ -138,6 +113,21 @@ export async function adminSignInAction(email: string, password: string) {
       return { error: 'Invalid credentials' };
     }
 
+    // Fails closed: if the table is missing the catch below refuses the sign-in.
+    // The way out is to unset ADMIN_2FA_REQUIRED, see docs/admin-2fa.md.
+    if (isAdmin2faRequired()) {
+      const stage = await adminTotpStage(admin.id);
+      const cookieStore = await cookies();
+      cookieStore.set(ADMIN_PENDING_COOKIE, await createAdminPendingToken(admin.id), {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: ADMIN_PENDING_MAX_AGE_SECONDS,
+        path: '/',
+      });
+      return { twoFactor: stage };
+    }
+
     const token = await createToken({
       sub: admin.id,
       email: admin.email,
@@ -145,7 +135,7 @@ export async function adminSignInAction(email: string, password: string) {
       type: 'admin',
     }, true);
 
-    await setSession(token, true);
+    await setSessionCookie(token, true);
 
     return { id: admin.id, email: admin.email, name: admin.name || '' };
   } catch (e) {
@@ -156,6 +146,12 @@ export async function adminSignInAction(email: string, password: string) {
 
 export async function signUpAction(email: string, password: string, name: string) {
   if (!email || !password || !name) return { error: 'All fields are required' };
+  if (password.length < MIN_PASSWORD_LENGTH) {
+    return { error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` };
+  }
+
+  const limited = await rateLimitAction('register', { email });
+  if (limited) return { error: limited };
 
   try {
     const db = getDb();
@@ -179,7 +175,7 @@ export async function signUpAction(email: string, password: string, name: string
       ver: user.tokenVersion,
     });
 
-    await setSession(token, false);
+    await setSessionCookie(token, false);
 
     const { passwordHash: _, ...safeUser } = user;
     return {

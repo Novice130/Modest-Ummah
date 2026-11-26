@@ -7,7 +7,7 @@
  * the customer's view of themselves, so the session check differs (getSession()
  * without the admin flag) and the write surface is much smaller.
  */
-import { getSession, clearSession } from './auth.actions';
+import { getSession, clearSession } from '@/lib/session';
 import { updateUserName, changeUserPassword, type AccountProfile } from '@/lib/account';
 
 export async function updateProfileAction(input: { name: string }): Promise<AccountProfile> {

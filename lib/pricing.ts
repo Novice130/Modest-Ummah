@@ -1,11 +1,14 @@
 import { getDb } from '@/lib/db';
 import { categories, products, productVariants } from '@/lib/schema';
-import { inArray } from 'drizzle-orm';
+import { getTableColumns, inArray, sql } from 'drizzle-orm';
 import { getShippingRates, getFreeShippingInfo } from '@/lib/shipping';
 import { computeParcelFromWeights, DEFAULT_ITEM_WEIGHT_OZ } from '@/lib/parcel';
 import { toCarrierAddress } from '@/lib/address';
 import { calculateTax } from '@/lib/taxcloud';
 import { evaluateCoupon } from '@/lib/coupons';
+import { priceForSaleWindow } from '@/lib/sale-window';
+import { liveCondition } from '@/lib/product-live';
+import { findVariantByOptions, variantOptions } from '@/lib/variant-options';
 import type { OrderItem, ShippingAddressDB } from '@/lib/schema';
 
 export const MAX_QTY = 99;
@@ -31,8 +34,28 @@ export interface ResolvedOrder {
   couponCode: string | null;
 }
 
+/**
+ * A checkout the shopper has to change: the cart, a product, its options, the
+ * coupon or the address. The message is safe to show; the checkout route
+ * answers 409 with it, and any other error gets a generic 500.
+ */
+export class CheckoutRejectedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CheckoutRejectedError';
+  }
+}
+
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+function checkedOption(value: unknown, allowed: string[], label: string): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (typeof value !== 'string' || !allowed.includes(value)) {
+    throw new CheckoutRejectedError(`The selected ${label} is no longer available. Please update your cart.`);
+  }
+  return value;
 }
 
 export function normalizeShippingAddress(raw: unknown): ShippingAddressDB {
@@ -63,16 +86,18 @@ export async function resolveCheckoutOrder(input: {
 
   const items = Array.isArray(input.items) ? input.items : [];
   if (items.length === 0) {
-    throw new Error('Cart is empty');
+    throw new CheckoutRejectedError('Cart is empty');
   }
 
   const productIds = [...new Set(items.map((i) => i.productId).filter(Boolean))];
   if (productIds.length === 0) {
-    throw new Error('Cart items are missing product IDs');
+    throw new CheckoutRejectedError('Cart items are missing product IDs');
   }
 
+  // isLive is the storefront's own rule, evaluated by the database so a due
+  // scheduled product stays buyable and a draft does not.
   const rows = await db
-    .select()
+    .select({ ...getTableColumns(products), isLive: sql<boolean>`${liveCondition()}` })
     .from(products)
     .where(inArray(products.id, productIds));
 
@@ -89,17 +114,12 @@ export async function resolveCheckoutOrder(input: {
     return id ? categorySlug.get(id) ?? '' : '';
   };
 
-  // Variant prices override the parent price. One query for all variants
-  // referenced by this cart.
-  const variantIds = [
-    ...new Set(items.map((i) => i.variantId).filter(Boolean)),
-  ] as string[];
-  const variantRows = variantIds.length
-    ? await db
-        .select()
-        .from(productVariants)
-        .where(inArray(productVariants.id, variantIds))
-    : [];
+  // Variant prices override the parent price. One query for every variant of
+  // the products in this cart: a line may name its variant by id or by options.
+  const variantRows = await db
+    .select()
+    .from(productVariants)
+    .where(inArray(productVariants.productId, productIds));
   const variantById = new Map(variantRows.map((v) => [v.id, v]));
 
   const resolvedItems: OrderItem[] = [];
@@ -107,11 +127,15 @@ export async function resolveCheckoutOrder(input: {
   for (const item of items) {
     const product = byId.get(item.productId);
     if (!product) {
-      throw new Error('A product in your cart no longer exists');
+      throw new CheckoutRejectedError('A product in your cart no longer exists');
+    }
+
+    if (product.isLive !== true) {
+      throw new CheckoutRejectedError(`${product.name} is not available for purchase`);
     }
 
     if (!Number.isInteger(item.quantity) || item.quantity < 1) {
-      throw new Error('Invalid quantity');
+      throw new CheckoutRejectedError('Invalid quantity');
     }
 
     const quantity = Math.min(item.quantity, MAX_QTY);
@@ -119,30 +143,77 @@ export async function resolveCheckoutOrder(input: {
     let price: number;
     let sku: string | undefined;
     let image: string | undefined = item.image;
-    let variantId: string | undefined;
 
+    // A line that names options but no id (a cart saved before the picker sent
+    // ids) is resolved to its variant. A line with neither stays at the parent
+    // price: the mobile app has no variant picker and sends only product id and
+    // quantity, so rejecting it would stop mobile sales of variable products.
+    let variant: (typeof variantRows)[number] | undefined;
     if (item.variantId) {
-      const variant = variantById.get(item.variantId);
+      variant = variantById.get(item.variantId);
       if (!variant || variant.productId !== product.id) {
-        throw new Error('A product variant in your cart no longer exists');
+        throw new CheckoutRejectedError('A product variant in your cart no longer exists');
       }
+    } else if (product.productType === 'variable' && (item.size || item.color)) {
+      const siblings = variantRows.filter((v) => v.productId === product.id);
+      if (siblings.length > 0) {
+        variant = findVariantByOptions(siblings, item);
+        if (!variant) {
+          throw new CheckoutRejectedError(
+            `The selected options for ${product.name} are no longer available`
+          );
+        }
+      }
+    }
+
+    // Purchasable, by the same rule inventory.ts writes: in_stock is
+    // quantity > 0 (or the manual flag when stock is not managed), and
+    // backorders keep a line buyable at zero.
+    const backorders = (product.backorderPolicy ?? 'no') !== 'no';
+    const stocked = variant ? variant.inStock !== false : product.inStock !== false;
+    if (!backorders && !stocked) {
+      throw new CheckoutRejectedError(`${product.name} is out of stock`);
+    }
+
+    // What ships is the variant that was priced, so its own Size/Color go on
+    // the order rather than the labels the client sent.
+    const options = variantOptions(variant?.attributes);
+
+    if (variant) {
       price = variant.price !== null && variant.price !== undefined
         ? parseFloat(variant.price as string)
         : parseFloat(product.price as string);
       sku = variant.sku;
-      image = variant.image || item.image;
-      variantId = variant.id;
     } else {
       price = parseFloat(product.price as string);
       sku = product.sku || undefined;
     }
 
+    price = priceForSaleWindow(price, product, variant);
+
+    // Nothing descriptive is taken from the client: the image comes from the
+    // catalogue and options not defined by the variant must exist on the product.
+    image = variant?.image || product.images?.[0] || undefined;
+    const variantAttrOptions = Object.values(variant?.attributes || {});
+    const color =
+      options.color ??
+      checkedOption(
+        item.color,
+        [...(product.colors || []).map((c) => c.name), ...variantAttrOptions],
+        'color'
+      );
+    const size =
+      options.size ??
+      checkedOption(item.size, [...(product.sizes || []), ...variantAttrOptions], 'size');
+
+    // A missing or zero price is a catalogue mistake, never a free item.
+    if (!Number.isFinite(price) || price <= 0) {
+      throw new CheckoutRejectedError(`${product.name} is not available for purchase`);
+    }
+
     // Snapshot the per-unit weight onto the line item so the order still
     // reports what it was priced and shipped at after the product is edited.
-    const variantWeight = item.variantId
-      ? variantById.get(item.variantId)?.weight
-      : null;
-    const rawWeight = variantWeight ?? product.weight;
+    const rawWeight = variant?.weight ?? product.weight;
     const parsedWeight = rawWeight != null ? parseFloat(rawWeight as string) : NaN;
     const weightOz = Number.isFinite(parsedWeight) && parsedWeight > 0
       ? parsedWeight
@@ -150,12 +221,12 @@ export async function resolveCheckoutOrder(input: {
 
     resolvedItems.push({
       productId: product.id,
-      variantId,
+      variantId: variant?.id,
       name: product.name,
-      price: round2(price || 0),
+      price: round2(price),
       quantity,
-      color: item.color,
-      size: item.size,
+      color,
+      size,
       image,
       sku,
       weightOz,
@@ -180,14 +251,14 @@ export async function resolveCheckoutOrder(input: {
     }))
   );
   if (!coupon.ok) {
-    throw new Error(coupon.error || 'Invalid coupon');
+    throw new CheckoutRejectedError(coupon.error || 'Invalid coupon');
   }
   const discount = round2(coupon.discount || 0);
   const taxableSubtotal = Math.max(0, subtotal - discount);
 
   const address = normalizeShippingAddress(input.shippingAddress);
   if (!address.address1 || !address.city || !address.state || !address.postalCode) {
-    throw new Error('Shipping address is incomplete');
+    throw new CheckoutRejectedError('Shipping address is incomplete');
   }
 
   // Real weights from the snapshots taken above, via the shared calculator.
@@ -201,14 +272,20 @@ export async function resolveCheckoutOrder(input: {
     package: parcel,
   });
 
+  // No rate means no way to ship there, never a US rate as a stand-in.
+  if (ratesResult.rates.length === 0) {
+    throw new CheckoutRejectedError(ratesResult.error || 'Shipping is not available for this address');
+  }
+
   const selected =
     ratesResult.rates.find((r) => r.service === input.shippingService) ||
     ratesResult.rates[0];
 
-  const freeShipping = getFreeShippingInfo(taxableSubtotal);
-  const shipping = freeShipping.eligible
-    ? 0
-    : round2(selected?.rate ?? 9.99);
+  // Free shipping covers standard only (app/shipping/page.tsx), which is the
+  // cheapest rate; the checkout form shows it the same way.
+  const freeShipping = getFreeShippingInfo(taxableSubtotal, address.country);
+  const shippingIsFree = freeShipping.eligible && selected === ratesResult.rates[0];
+  const shipping = shippingIsFree ? 0 : round2(selected.rate);
 
   const taxResult = await calculateTax({
     items: resolvedItems.map((item) => {
@@ -241,7 +318,7 @@ export async function resolveCheckoutOrder(input: {
     tax,
     total: round2(taxableSubtotal + shipping + tax),
     taxEstimate: tax,
-    shippingService: freeShipping.eligible ? 'standard' : (selected?.service || 'standard'),
+    shippingService: shippingIsFree ? 'standard' : selected.service,
     couponCode: coupon.couponCode || null,
   };
 }

@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Star,
+  X,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -54,11 +55,15 @@ import {
   bulkUpdateProductsAction,
   exportProductsCsv,
   importProductsAction,
+  type AdminProductRow,
+  type AdminProductSort,
+  type AdminStockFilter,
 } from '@/lib/actions/product.actions';
+import { fetchCategoryTree } from '@/lib/actions/category.actions';
 import { parseCsv } from '@/lib/csv';
 import { csvTemplate } from '@/lib/product-builder-schema';
 import { getImageUrl, formatPrice, cn } from '@/lib/utils';
-import type { Product } from '@/types';
+import type { CategoryNode } from '@/types';
 
 interface ImportResult {
   row: number;
@@ -67,49 +72,168 @@ interface ImportResult {
   name?: string;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  published: 'bg-green-500 text-white',
+const STATUS_STYLES: Record<string, string> = {
+  published: 'bg-green-600 text-white',
   draft: 'bg-muted text-muted-foreground',
   pending: 'bg-gold-200 text-mocha-700',
-  scheduled: 'bg-blue-500 text-white',
+  scheduled: 'bg-blue-600 text-white',
 };
 
+const STATUS_LABELS: Record<string, string> = {
+  published: 'Published',
+  draft: 'Draft',
+  pending: 'Pending review',
+  scheduled: 'Scheduled',
+};
+
+const SORTS: Array<{ value: AdminProductSort; label: string }> = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+  { value: 'updated', label: 'Recently edited' },
+  { value: 'name', label: 'Name A–Z' },
+  { value: '-name', label: 'Name Z–A' },
+  { value: 'price', label: 'Price low–high' },
+  { value: '-price', label: 'Price high–low' },
+  { value: 'stock', label: 'Stock low–high' },
+  { value: '-stock', label: 'Stock high–low' },
+];
+
 const PAGE_SIZE = 25;
+
+type BulkAction = 'publish' | 'draft' | 'feature' | 'unfeature' | 'delete';
+
+function flattenCategories(nodes: CategoryNode[], depth = 0): Array<{ id: string; label: string }> {
+  return nodes.flatMap((n) => [
+    { id: n.id, label: `${' '.repeat(depth * 3)}${n.name}` },
+    ...flattenCategories(n.children, depth + 1),
+  ]);
+}
+
+function downloadText(text: string, filename: string) {
+  const blob = new Blob(['﻿' + text], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Stock cell: what a shopper would actually see, plus the count. */
+function StockCell({ product }: { product: AdminProductRow }) {
+  const qty = product.stockQuantity || 0;
+  const perVariant = product.variantCount > 0 ? ` · ${product.variantCount} variants` : '';
+  if (!product.manageStock) {
+    return (
+      <span className={product.inStock ? 'text-foreground' : 'text-destructive'}>
+        {product.inStock ? 'In stock' : 'Out of stock'}
+        <span className="block text-xs text-muted-foreground">Not tracked{perVariant}</span>
+      </span>
+    );
+  }
+  if (!product.inStock) {
+    return (
+      <span className="text-destructive font-medium">
+        Out of stock<span className="block text-xs font-normal text-muted-foreground">0{perVariant}</span>
+      </span>
+    );
+  }
+  if (qty <= 0) {
+    return (
+      <span className="text-amber-700 dark:text-amber-400">
+        On backorder<span className="block text-xs text-muted-foreground">0{perVariant}</span>
+      </span>
+    );
+  }
+  const low = qty <= (product.lowStockThreshold ?? 5);
+  return (
+    <span className={low ? 'text-amber-700 dark:text-amber-400 font-medium' : undefined}>
+      {qty} in stock
+      <span className="block text-xs font-normal text-muted-foreground">
+        {low ? 'Low stock' : ''}
+        {low && perVariant ? ' · ' : ''}
+        {perVariant.replace(/^ · /, '')}
+      </span>
+    </span>
+  );
+}
+
+function PriceCell({ product }: { product: AdminProductRow }) {
+  if (product.variantCount > 0 && product.priceMin !== product.priceMax) {
+    return (
+      <span>
+        {formatPrice(product.priceMin)} – {formatPrice(product.priceMax)}
+      </span>
+    );
+  }
+  return (
+    <span>
+      {formatPrice(product.priceMin)}
+      {product.compareAtPrice && product.compareAtPrice > product.price && (
+        <span className="block text-xs text-muted-foreground line-through">
+          {formatPrice(product.compareAtPrice)}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function isLive(product: AdminProductRow) {
+  return (
+    product.status === 'published' ||
+    (product.status === 'scheduled' && !!product.publishedAt && new Date(product.publishedAt) <= new Date())
+  );
+}
 
 export default function AdminProductsPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [products, setProducts] = useState<Product[]>([]);
+  const [products, setProducts] = useState<AdminProductRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [stockFilter, setStockFilter] = useState<'all' | AdminStockFilter>('all');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [sort, setSort] = useState<AdminProductSort>('newest');
+  const [categoryOptions, setCategoryOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [page, setPage] = useState(1);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleting, setDeleting] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState<string | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<Product | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<AdminProductRow | null>(null);
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [importResults, setImportResults] = useState<ImportResult[] | null>(null);
   const [importRows, setImportRows] = useState<string[][] | null>(null);
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  const filtersActive =
+    debouncedSearch.trim() !== '' || statusFilter !== 'all' || stockFilter !== 'all' || categoryFilter !== 'all';
 
   // Debounce the search input before hitting the server.
   useEffect(() => {
-    if (searchTimer.current) clearTimeout(searchTimer.current);
-    searchTimer.current = setTimeout(() => {
+    const timer = setTimeout(() => {
       setDebouncedSearch(search);
       setPage(1);
     }, 300);
-    return () => {
-      if (searchTimer.current) clearTimeout(searchTimer.current);
-    };
+    return () => clearTimeout(timer);
   }, [search]);
+
+  useEffect(() => {
+    fetchCategoryTree()
+      .then((tree) => setCategoryOptions(flattenCategories(tree)))
+      .catch(() => {});
+  }, []);
+
+  // A selection only makes sense for the rows on screen.
+  useEffect(() => {
+    setSelectedIds(new Set());
+  }, [page, debouncedSearch, statusFilter, stockFilter, categoryFilter, sort]);
 
   const loadProducts = useCallback(async () => {
     setLoading(true);
@@ -118,7 +242,15 @@ export default function AdminProductsPage() {
       const result = await fetchAllProductsAdmin(page, PAGE_SIZE, {
         search: debouncedSearch,
         status: statusFilter !== 'all' ? statusFilter : undefined,
+        stock: stockFilter !== 'all' ? stockFilter : undefined,
+        categoryId: categoryFilter !== 'all' ? categoryFilter : undefined,
+        sort,
       });
+      // Deleting the last row of the last page leaves an empty page behind.
+      if (result.items.length === 0 && page > 1 && result.totalItems > 0) {
+        setPage(Math.max(1, result.totalPages));
+        return;
+      }
       setProducts(result.items);
       setTotalItems(result.totalItems);
       setTotalPages(Math.max(1, result.totalPages));
@@ -127,11 +259,20 @@ export default function AdminProductsPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, debouncedSearch, statusFilter]);
+  }, [page, debouncedSearch, statusFilter, stockFilter, categoryFilter, sort]);
 
   useEffect(() => {
     loadProducts();
   }, [loadProducts]);
+
+  const resetFilters = () => {
+    setSearch('');
+    setDebouncedSearch('');
+    setStatusFilter('all');
+    setStockFilter('all');
+    setCategoryFilter('all');
+    setPage(1);
+  };
 
   const toggleSelect = (id: string) => {
     setSelectedIds((prev) => {
@@ -142,24 +283,29 @@ export default function AdminProductsPage() {
     });
   };
 
+  const allSelected = products.length > 0 && products.every((p) => selectedIds.has(p.id));
   const toggleSelectAll = () => {
-    setSelectedIds((prev) =>
-      prev.size === products.length
-        ? new Set()
-        : new Set(products.map((p) => p.id))
-    );
+    setSelectedIds(allSelected ? new Set() : new Set(products.map((p) => p.id)));
   };
 
-  async function handleBulk(action: 'publish' | 'draft' | 'feature' | 'unfeature' | 'delete') {
+  async function handleBulk(action: BulkAction) {
     if (selectedIds.size === 0) return;
     setBulkBusy(true);
     try {
-      const result = await bulkUpdateProductsAction({
-        ids: Array.from(selectedIds),
-        action,
-      });
+      const result = await bulkUpdateProductsAction({ ids: Array.from(selectedIds), action });
+      const noun = (n: number) => `${n} product${n === 1 ? '' : 's'}`;
       toast({
-        title: `Updated ${result.updated} product${result.updated === 1 ? '' : 's'}`,
+        title:
+          action === 'delete'
+            ? `Deleted ${noun(result.updated)}`
+            : action === 'publish'
+              ? `Published ${noun(result.updated)}`
+              : `Updated ${noun(result.updated)}`,
+        description:
+          action === 'publish' && result.skipped > 0
+            ? `${noun(result.skipped)} could not be published: each needs a price above $0 and a category. Open them to fix.`
+            : undefined,
+        variant: action === 'publish' && result.skipped > 0 ? 'destructive' : undefined,
       });
       setSelectedIds(new Set());
       loadProducts();
@@ -178,10 +324,7 @@ export default function AdminProductsPage() {
     setDuplicating(id);
     try {
       const result = await duplicateProductAction(id);
-      toast({
-        title: 'Product duplicated',
-        description: 'A draft copy was created.',
-      });
+      toast({ title: 'Product duplicated', description: 'Opened the draft copy.' });
       router.push(`/admin/products/${result.id}`);
     } catch (e: any) {
       toast({
@@ -197,13 +340,7 @@ export default function AdminProductsPage() {
   async function handleExport() {
     try {
       const csv = await exportProductsCsv();
-      const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `products-${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadText(csv, `products-${new Date().toISOString().slice(0, 10)}.csv`);
     } catch (e: any) {
       toast({
         title: 'Export failed',
@@ -213,40 +350,20 @@ export default function AdminProductsPage() {
     }
   }
 
-  function downloadTemplate() {
-    const blob = new Blob(['\uFEFF' + csvTemplate()], { type: 'text/csv;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'product-import-template.csv';
-    a.click();
-    URL.revokeObjectURL(url);
-  }
-
   async function handleImportFile(file: File) {
     setImporting(true);
     setImportResults(null);
     setImportRows(null);
     try {
-      const text = await file.text();
-      const rows = parseCsv(text);
-      if (rows.length === 0) {
-        toast({ title: 'Import failed', description: 'The file is empty.', variant: 'destructive' });
+      const rows = parseCsv(await file.text());
+      if (rows.length < 2) {
+        toast({ title: 'Import failed', description: 'The file has no product rows.', variant: 'destructive' });
         return;
       }
-      // Dry-run first: preview row-level errors before writing anything.
+      // Always a dry-run first: nothing is written until the admin confirms.
       const preview = await importProductsAction({ rows, dryRun: true });
-      if (preview.results.some((r) => !r.ok)) {
-        setImportResults(preview.results);
-        setImportRows(rows);
-        return;
-      }
-      const result = await importProductsAction({ rows, dryRun: false });
-      toast({
-        title: `Imported ${result.created} product${result.created === 1 ? '' : 's'}`,
-        description: 'Rows with errors were skipped.',
-      });
-      loadProducts();
+      setImportResults(preview.results);
+      setImportRows(rows);
     } catch (e: any) {
       toast({
         title: 'Import failed',
@@ -259,19 +376,50 @@ export default function AdminProductsPage() {
     }
   }
 
+  async function confirmImport() {
+    if (!importRows) return;
+    setImporting(true);
+    try {
+      const result = await importProductsAction({ rows: importRows, dryRun: false });
+      const failed = result.results.filter((r) => !r.ok).length;
+      toast({
+        title: `Imported ${result.created} product${result.created === 1 ? '' : 's'} as listed in the file`,
+        description: failed > 0 ? `${failed} product(s) with errors were skipped.` : undefined,
+      });
+      setImportResults(failed > 0 ? result.results.filter((r) => !r.ok) : null);
+      setImportRows(null);
+      loadProducts();
+    } catch (e: any) {
+      toast({
+        title: 'Import failed',
+        description: e?.message || 'Something went wrong.',
+        variant: 'destructive',
+      });
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  const validImports = importResults?.filter((r) => r.ok).length ?? 0;
+  const invalidImports = importResults?.filter((r) => !r.ok).length ?? 0;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="font-heading text-3xl mb-2">My Products</h1>
-          <p className="text-muted-foreground">{totalItems} products found</p>
+          <h1 className="font-heading text-3xl mb-2">Products</h1>
+          <p className="text-muted-foreground">
+            {loading && products.length === 0
+              ? 'Loading…'
+              : `${totalItems} product${totalItems === 1 ? '' : 's'}${filtersActive ? ' match the filters' : ''}`}
+          </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={downloadTemplate}>
-            <Download className="mr-2 h-4 w-4" /> Template
+          <Button variant="outline" size="sm" onClick={() => downloadText(csvTemplate(), 'product-import-template.csv')}>
+            <Download className="mr-2 h-4 w-4" /> CSV template
           </Button>
           <Button variant="outline" size="sm" onClick={handleExport}>
-            <Download className="mr-2 h-4 w-4" /> Export
+            <Download className="mr-2 h-4 w-4" /> Export all
           </Button>
           <Button
             variant="outline"
@@ -299,7 +447,7 @@ export default function AdminProductsPage() {
           <Button asChild>
             <Link href="/admin/products/new">
               <Plus className="mr-2 h-4 w-4" />
-              Add New Product
+              Add product
             </Link>
           </Button>
         </div>
@@ -310,24 +458,73 @@ export default function AdminProductsPage() {
           <Search className="h-4 w-4 text-muted-foreground" />
           <input
             className="flex-1 bg-transparent border-none outline-none text-sm placeholder:text-muted-foreground"
-            placeholder="Search by name or SKU…"
+            placeholder="Search name, SKU or variant SKU…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             aria-label="Search products"
           />
+          {search && (
+            <button type="button" aria-label="Clear search" onClick={() => setSearch('')}>
+              <X className="h-4 w-4 text-muted-foreground" />
+            </button>
+          )}
         </div>
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
-          <SelectTrigger className="w-[160px]">
+          <SelectTrigger className="w-[150px]" aria-label="Filter by status">
             <SelectValue placeholder="Status" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="published">Published</SelectItem>
             <SelectItem value="draft">Draft</SelectItem>
-            <SelectItem value="pending">Pending</SelectItem>
+            <SelectItem value="pending">Pending review</SelectItem>
             <SelectItem value="scheduled">Scheduled</SelectItem>
           </SelectContent>
         </Select>
+        <Select
+          value={stockFilter}
+          onValueChange={(v) => { setStockFilter(v as 'all' | AdminStockFilter); setPage(1); }}
+        >
+          <SelectTrigger className="w-[140px]" aria-label="Filter by stock">
+            <SelectValue placeholder="Stock" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All stock</SelectItem>
+            <SelectItem value="in">In stock</SelectItem>
+            <SelectItem value="low">Low stock</SelectItem>
+            <SelectItem value="out">Out of stock</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={categoryFilter} onValueChange={(v) => { setCategoryFilter(v); setPage(1); }}>
+          <SelectTrigger className="w-[180px]" aria-label="Filter by category">
+            <SelectValue placeholder="Category" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            {categoryOptions.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={sort} onValueChange={(v) => { setSort(v as AdminProductSort); setPage(1); }}>
+          <SelectTrigger className="w-[170px]" aria-label="Sort products">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SORTS.map((s) => (
+              <SelectItem key={s.value} value={s.value}>
+                {s.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {filtersActive && (
+          <Button variant="ghost" size="sm" onClick={resetFilters}>
+            Clear filters
+          </Button>
+        )}
       </div>
 
       {/* Bulk action bar */}
@@ -346,29 +543,42 @@ export default function AdminProductsPage() {
           <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => handleBulk('unfeature')}>
             Unfeature
           </Button>
-          <Button size="sm" variant="destructive" disabled={bulkBusy} onClick={() => handleBulk('delete')}>
+          <Button size="sm" variant="destructive" disabled={bulkBusy} onClick={() => setConfirmBulkDelete(true)}>
             Delete
           </Button>
+          <Button size="sm" variant="ghost" disabled={bulkBusy} onClick={() => setSelectedIds(new Set())}>
+            Clear selection
+          </Button>
+          {bulkBusy && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
         </div>
       )}
 
       {importResults && (
         <div className="border rounded-lg p-4 bg-background">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="font-medium">Import preview</h2>
-            <Button variant="ghost" size="sm" onClick={() => setImportResults(null)}>
+            <h2 className="font-medium">{importRows ? 'Import preview' : 'Import errors'}</h2>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setImportResults(null);
+                setImportRows(null);
+              }}
+            >
               Dismiss
             </Button>
           </div>
-          <p className="text-sm text-muted-foreground mb-2">
-            {importResults.filter((r) => r.ok).length} rows valid ·{' '}
-            {importResults.filter((r) => !r.ok).length} rows with errors — nothing was
-            imported yet.
-          </p>
+          {importRows && (
+            <p className="text-sm text-muted-foreground mb-2">
+              {validImports} product{validImports === 1 ? '' : 's'} ready
+              {invalidImports > 0 && ` · ${invalidImports} with errors (they will be skipped)`} — nothing
+              has been imported yet. Variable products are counted once, however many variant rows they have.
+            </p>
+          )}
           <div className="max-h-64 overflow-y-auto border rounded-md divide-y">
             {importResults.map((r) => (
               <div key={r.row} className="px-3 py-2 text-sm flex gap-2">
-                <span className="text-muted-foreground w-12 shrink-0">Row {r.row}</span>
+                <span className="text-muted-foreground w-16 shrink-0">Row {r.row}</span>
                 {r.ok ? (
                   <span className="text-green-600">OK — {r.name}</span>
                 ) : (
@@ -377,43 +587,14 @@ export default function AdminProductsPage() {
               </div>
             ))}
           </div>
-          <div className="flex gap-2 mt-3">
-            <Button
-              size="sm"
-              disabled={importing || !importRows}
-              onClick={async () => {
-                if (!importRows) return;
-                setImporting(true);
-                try {
-                  const result = await importProductsAction({
-                    rows: importRows,
-                    dryRun: false,
-                  });
-                  toast({
-                    title: `Imported ${result.created} product${result.created === 1 ? '' : 's'}`,
-                    description:
-                      result.results.filter((r) => !r.ok).length > 0
-                        ? 'Rows with errors were skipped.'
-                        : undefined,
-                  });
-                  setImportResults(null);
-                  setImportRows(null);
-                  loadProducts();
-                } catch (e: any) {
-                  toast({
-                    title: 'Import failed',
-                    description: e?.message || 'Something went wrong.',
-                    variant: 'destructive',
-                  });
-                } finally {
-                  setImporting(false);
-                }
-              }}
-            >
-              {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Confirm import (skip bad rows)
-            </Button>
-          </div>
+          {importRows && (
+            <div className="flex gap-2 mt-3">
+              <Button size="sm" disabled={importing || validImports === 0} onClick={confirmImport}>
+                {importing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Import {validImports} product{validImports === 1 ? '' : 's'}
+              </Button>
+            </div>
+          )}
         </div>
       )}
 
@@ -423,12 +604,12 @@ export default function AdminProductsPage() {
             <TableRow>
               <TableHead className="w-10">
                 <Checkbox
-                  checked={products.length > 0 && selectedIds.size === products.length}
+                  checked={allSelected}
                   onCheckedChange={toggleSelectAll}
                   aria-label="Select all products on this page"
                 />
               </TableHead>
-              <TableHead className="w-[80px]">Image</TableHead>
+              <TableHead className="w-[64px]">Image</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Price</TableHead>
@@ -438,7 +619,7 @@ export default function AdminProductsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
+            {loading && products.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center py-8">
                   <Loader2 className="h-6 w-6 animate-spin mx-auto text-muted-foreground" />
@@ -446,19 +627,40 @@ export default function AdminProductsPage() {
               </TableRow>
             ) : error ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-destructive">
-                  Error: {error}
+                <TableCell colSpan={8} className="text-center py-8">
+                  <p className="text-destructive mb-2">Could not load products: {error}</p>
+                  <Button variant="outline" size="sm" onClick={loadProducts}>
+                    Try again
+                  </Button>
                 </TableCell>
               </TableRow>
             ) : products.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                  No products found. Start by adding one!
+                  {filtersActive ? (
+                    <>
+                      No products match these filters.{' '}
+                      <button type="button" className="underline" onClick={resetFilters}>
+                        Clear filters
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      No products yet.{' '}
+                      <Link href="/admin/products/new" className="underline">
+                        Add your first product
+                      </Link>
+                    </>
+                  )}
                 </TableCell>
               </TableRow>
             ) : (
               products.map((product) => (
-                <TableRow key={product.id} data-state={selectedIds.has(product.id) ? 'selected' : undefined}>
+                <TableRow
+                  key={product.id}
+                  data-state={selectedIds.has(product.id) ? 'selected' : undefined}
+                  className={cn(loading && 'opacity-60')}
+                >
                   <TableCell>
                     <Checkbox
                       checked={selectedIds.has(product.id)}
@@ -479,23 +681,68 @@ export default function AdminProductsPage() {
                       )}
                     </div>
                   </TableCell>
-                  <TableCell className="font-medium">{product.name}</TableCell>
-                  <TableCell>{product.category?.name ?? '—'}</TableCell>
-                  <TableCell>{formatPrice(product.price)}</TableCell>
-                  <TableCell>{product.stockQuantity || 0}</TableCell>
                   <TableCell>
-                    <Badge className={cn(STATUS_COLORS[product.status] || 'bg-muted')}>
-                      {product.status}
-                    </Badge>
+                    <Link href={`/admin/products/${product.id}`} className="font-medium hover:underline">
+                      {product.name}
+                    </Link>
+                    {product.featured && (
+                      <Star
+                        className="inline ml-1.5 h-3.5 w-3.5 fill-gold-200 text-gold-200 align-[-2px]"
+                        aria-label="Featured"
+                      />
+                    )}
+                    <span className="block text-xs text-muted-foreground">
+                      {product.sku || 'No SKU'}
+                      {product.productType === 'variable' && ' · Variable'}
+                    </span>
                   </TableCell>
-                  <TableCell className="text-right space-x-1">
-                    <Button variant="ghost" size="icon" asChild>
-                      <Link href={`/product/${product.slug}`} target="_blank">
+                  <TableCell>
+                    {product.category ? (
+                      product.category.path.map((c) => c.name).join(' › ')
+                    ) : (
+                      <span className="text-destructive text-sm">None</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <PriceCell product={product} />
+                  </TableCell>
+                  <TableCell>
+                    <StockCell product={product} />
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={cn(STATUS_STYLES[product.status] || 'bg-muted')}>
+                      {STATUS_LABELS[product.status] ?? product.status}
+                    </Badge>
+                    {product.status === 'scheduled' && product.publishedAt && (
+                      <span className="block text-xs text-muted-foreground mt-1">
+                        {new Date(product.publishedAt).toLocaleString()}
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right space-x-1 whitespace-nowrap">
+                    {isLive(product) ? (
+                      <Button variant="ghost" size="icon" asChild>
+                        <Link
+                          href={`/product/${product.slug}`}
+                          target="_blank"
+                          aria-label={`View ${product.name} on the store`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Link>
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        disabled
+                        title="Not on the store until published"
+                        aria-label="Not on the store until published"
+                      >
                         <Eye className="h-4 w-4" />
-                      </Link>
-                    </Button>
+                      </Button>
+                    )}
                     <Button variant="ghost" size="icon" asChild>
-                      <Link href={`/admin/products/${product.id}`}>
+                      <Link href={`/admin/products/${product.id}`} aria-label={`Edit ${product.name}`}>
                         <Edit className="h-4 w-4" />
                       </Link>
                     </Button>
@@ -505,6 +752,7 @@ export default function AdminProductsPage() {
                       disabled={duplicating === product.id}
                       onClick={() => handleDuplicate(product.id)}
                       aria-label={`Duplicate ${product.name}`}
+                      title="Duplicate as a draft"
                     >
                       {duplicating === product.id ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
@@ -569,8 +817,8 @@ export default function AdminProductsPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete {pendingDelete?.name}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes the product and its variants. This cannot be
-              undone.
+              This permanently removes the product, its variants and options. Past orders keep
+              their line items. This cannot be undone — to just hide it, move it to Draft instead.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -579,12 +827,12 @@ export default function AdminProductsPage() {
               className="bg-destructive text-white hover:bg-destructive/90"
               onClick={async () => {
                 if (!pendingDelete) return;
-                setDeleting(pendingDelete.id);
+                const target = pendingDelete;
+                setDeleting(target.id);
                 try {
-                  await deleteProductAction(pendingDelete.id);
-                  setProducts((prev) => prev.filter((p) => p.id !== pendingDelete.id));
-                  setTotalItems((t) => t - 1);
-                  toast({ title: 'Product deleted' });
+                  const ok = await deleteProductAction(target.id);
+                  toast({ title: ok ? 'Product deleted' : 'Product was already deleted' });
+                  loadProducts();
                 } catch (e: any) {
                   toast({
                     title: 'Failed to delete',
@@ -595,6 +843,32 @@ export default function AdminProductsPage() {
                   setDeleting(null);
                   setPendingDelete(null);
                 }
+              }}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={confirmBulkDelete} onOpenChange={setConfirmBulkDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete {selectedIds.size} product{selectedIds.size === 1 ? '' : 's'}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently removes the selected products with their variants and options.
+              It cannot be undone — to just hide them, use “Move to draft”.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-white hover:bg-destructive/90"
+              onClick={() => {
+                setConfirmBulkDelete(false);
+                handleBulk('delete');
               }}
             >
               Delete

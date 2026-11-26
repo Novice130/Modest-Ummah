@@ -3,7 +3,7 @@ import Link from 'next/link';
 
 export const metadata: Metadata = {
   title: 'Returns & Exchanges',
-  description: 'The Modest Ummah 30-day return and exchange policy.',
+  description: 'The Modest Ummah 30-day return policy.',
 };
 
 const steps = [
@@ -30,7 +30,7 @@ export default function ReturnsPage() {
     <div className="container-custom py-16 max-w-3xl">
       <h1 className="font-heading text-3xl md:text-4xl mb-4">Returns & Exchanges</h1>
       <p className="text-muted-foreground mb-8">
-        We want you to love your order. If something is not right, here is how returns work.
+        We want you to love your order. If something is not right, here is how returns work. Returns are handled by email.
       </p>
 
       <div className="space-y-4 mb-10">
@@ -47,7 +47,7 @@ export default function ReturnsPage() {
           <h2 className="font-heading text-xl mb-3">Non-returnable items</h2>
           <p className="text-muted-foreground">
             For hygiene reasons, opened personal-care items (miswak, attar) and worn garments
-            cannot be returned. Items marked final sale are also non-returnable.
+            cannot be returned.
           </p>
         </section>
         <section>
@@ -55,6 +55,13 @@ export default function ReturnsPage() {
           <p className="text-muted-foreground">
             If your order arrived damaged or wrong, we cover the return shipping and will
             ship a replacement or issue a full refund — your choice.
+          </p>
+        </section>
+        <section>
+          <h2 className="font-heading text-xl mb-3">Exchanges</h2>
+          <p className="text-muted-foreground">
+            We do not have a separate exchange process. To change a size, return the item
+            and place a new order for the size you want.
           </p>
         </section>
         <section>

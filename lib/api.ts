@@ -9,6 +9,10 @@ import {
   adminSignInAction,
 } from '@/lib/actions/auth.actions';
 
-export async function adminSignIn(email: string, password: string): Promise<{ id: string; email: string; name: string } | { error: string }> {
+export async function adminSignIn(email: string, password: string): Promise<
+  | { id: string; email: string; name: string }
+  | { twoFactor: 'verify' | 'enroll' }
+  | { error: string }
+> {
   return adminSignInAction(email, password);
 }

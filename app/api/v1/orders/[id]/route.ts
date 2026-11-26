@@ -45,6 +45,7 @@ export async function GET(
       shipmentId: undefined,
       paymentIntentId: undefined,
       wooId: undefined,
+      notes: undefined,
     });
   } catch (error: any) {
     console.error('GET /api/v1/orders/[id]', error);

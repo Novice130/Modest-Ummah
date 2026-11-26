@@ -19,19 +19,19 @@ const faqCategories = [
     questions: [
       {
         question: 'How long does shipping take?',
-        answer: 'Standard shipping takes 5-10 business days within the US. Express shipping is available for 2-4 business days. International shipping varies by destination, typically 7-21 business days.',
+        answer: 'Delivery estimates for each shipping service are shown at checkout once you enter your address. They are estimates, not guarantees.',
       },
       {
         question: 'Do you ship internationally?',
-        answer: 'Yes! We ship to over 50 countries including USA, Canada, UK, UAE, Saudi Arabia, Pakistan, Malaysia, and many more. Shipping costs and delivery times vary by location.',
+        answer: 'The countries we currently ship to are listed in the country menu at checkout. Shipping costs and delivery estimates vary by location and are shown at checkout.',
       },
       {
         question: 'How can I track my order?',
-        answer: 'Once your order ships, you\'ll receive an email with a tracking number. You can also track your order by logging into your account and viewing your order history.',
+        answer: 'Once your order ships, you\'ll receive an email with a tracking number. You can also see your order status by logging into your account and viewing your order history.',
       },
       {
         question: 'Is there free shipping?',
-        answer: 'Yes! We offer free standard shipping on all orders over $75 within the US. International orders may have different thresholds.',
+        answer: 'Yes. Orders of $75 or more after discounts ship free within the US.',
       },
     ],
   },
@@ -40,19 +40,19 @@ const faqCategories = [
     questions: [
       {
         question: 'What is your return policy?',
-        answer: 'We offer a 30-day return policy for unworn items in original condition with tags attached. Items must be returned in their original packaging. Some items like intimate wear and personalized products cannot be returned.',
+        answer: 'We offer a 30-day return policy for unworn, unwashed items in original condition with tags attached. Opened personal-care items (miswak, attar) and worn garments cannot be returned. See our returns page for details.',
       },
       {
         question: 'How do I initiate a return?',
-        answer: 'Log into your account, go to Order History, select the order, and click "Request Return." Follow the prompts to generate a return label. You can also contact our support team for assistance.',
+        answer: 'Returns are handled by email. Send your order number and the item(s) you would like to return to support@modestummah.com, and we will reply with a return address.',
       },
       {
         question: 'How long do refunds take?',
-        answer: 'Once we receive your return, refunds are processed within 5-7 business days. The time for the refund to appear in your account depends on your payment method and bank.',
+        answer: 'Refunds are issued to your original payment method within 5-10 business days of receiving your return. The time for the refund to appear in your account depends on your payment method and bank.',
       },
       {
         question: 'Can I exchange for a different size?',
-        answer: 'Yes! You can exchange items for a different size within 30 days. Simply initiate a return and place a new order for the correct size. We\'ll expedite the exchange process.',
+        answer: 'We do not have a separate exchange process. To change a size, return the item within 30 days and place a new order for the size you want.',
       },
     ],
   },
@@ -61,19 +61,15 @@ const faqCategories = [
     questions: [
       {
         question: 'How do I find my size?',
-        answer: 'Each product page includes a detailed size guide. We recommend measuring yourself and comparing to our charts. If you\'re between sizes, we generally recommend sizing up for a comfortable modest fit.',
+        answer: 'Available sizes are listed on each product page. If you are not sure which size to choose, email support@modestummah.com before ordering.',
       },
       {
         question: 'What materials do you use?',
-        answer: 'We use premium materials including cotton, cotton blends, jersey, chiffon, and sustainable fabrics. Each product description lists the specific materials used.',
-      },
-      {
-        question: 'Are your products ethically made?',
-        answer: 'Yes, we partner with manufacturers who follow ethical labor practices. We regularly audit our supply chain and prioritize sustainable and fair-trade production.',
+        answer: 'Materials vary by product. Check the product description, or email support@modestummah.com if the material is not listed.',
       },
       {
         question: 'How do I care for my garments?',
-        answer: 'Care instructions are included on each product tag and in the product description. Generally, we recommend cold water washing and air drying for most items to maintain quality.',
+        answer: 'Check the garment tag or the product description for care instructions, or email support@modestummah.com if you need more guidance.',
       },
     ],
   },
@@ -82,7 +78,7 @@ const faqCategories = [
     questions: [
       {
         question: 'What payment methods do you accept?',
-        answer: 'We accept all major credit cards (Visa, Mastercard, American Express), PayPal, Apple Pay, and Google Pay. All payments are processed securely through Stripe.',
+        answer: 'We accept major credit and debit cards, including Visa, Mastercard, and American Express. Other payment options may appear at checkout depending on your device and location. All payments are processed through Stripe.',
       },
       {
         question: 'Is my payment information secure?',
@@ -90,7 +86,7 @@ const faqCategories = [
       },
       {
         question: 'Do you offer payment plans?',
-        answer: 'Currently, we don\'t offer payment plans directly. However, some payment methods like PayPal and certain credit cards offer their own installment options.',
+        answer: 'Currently, we don\'t offer payment plans directly. Some credit cards offer their own installment options.',
       },
     ],
   },
@@ -99,7 +95,7 @@ const faqCategories = [
     questions: [
       {
         question: 'How do I create an account?',
-        answer: 'Click "Sign In" in the top navigation and then "Create Account." You can register with your email address.',
+        answer: 'Open the sign-in page from the top navigation and choose "Sign up." You can register with your email address, or with Google or Apple where those options are shown.',
       },
       {
         question: 'I forgot my password. What do I do?',
@@ -107,7 +103,7 @@ const faqCategories = [
       },
       {
         question: 'How can I contact customer support?',
-        answer: 'You can reach us at support@modestummah.com or call +1 (234) 567-890 Monday-Friday, 9am-6pm EST. We typically respond to emails within 24 hours.',
+        answer: 'You can reach us at support@modestummah.com or through our contact page.',
       },
     ],
   },

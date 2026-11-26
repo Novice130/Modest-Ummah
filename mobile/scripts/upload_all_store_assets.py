@@ -1,13 +1,22 @@
 #!/usr/bin/env python3
 import os
+import sys
 import time
 import hashlib
 import jwt
 import requests
 
-KEY_ID = "ZA4U66BMCU"
-ISSUER_ID = "07ba3ed9-33fb-4952-8cb5-aca4d1f5a7d6"
-KEY_FILE = "/Users/abdulhannan/.appstoreconnect/private_keys/AuthKey_ZA4U66BMCU.p8"
+def _require_env(name):
+    value = os.environ.get(name)
+    if not value:
+        sys.exit(f"Error: environment variable {name} is not set "
+                 "(need ASC_KEY_ID, ASC_ISSUER_ID, ASC_KEY_PATH).")
+    return value
+
+
+KEY_ID = _require_env("ASC_KEY_ID")
+ISSUER_ID = _require_env("ASC_ISSUER_ID")
+KEY_FILE = os.path.expanduser(_require_env("ASC_KEY_PATH"))
 
 with open(KEY_FILE, "r") as f:
     PRIVATE_KEY = f.read()

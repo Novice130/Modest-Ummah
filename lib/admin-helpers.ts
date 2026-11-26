@@ -1,23 +1,72 @@
 import { getDb } from './db';
-import { orders, products, users } from './schema';
-import { sql, eq, desc, count, sum, and, gte, lt } from 'drizzle-orm';
+import { orders, products, productVariants, users } from './schema';
+import { sql, eq, ne, desc, count, and, gte, lt, inArray, type SQL } from 'drizzle-orm';
 import type { OrderItem, ShippingAddressDB } from './schema';
+
+// ─── Order classification ───────────────────────────────
+//
+// Every checkout attempt inserts an order row (status pending_payment) before
+// the customer pays, so "all rows in orders" includes abandoned checkouts and
+// failed cards. Admin metrics use these two predicates instead, so the
+// dashboard, the customer list and the customer detail agree on one number.
+
+/**
+ * Orders the customer actually paid for at some point: paid, partially
+ * refunded, or refunded afterwards. Abandoned checkouts (pending) and failed
+ * payments are excluded. Use for order counts and status breakdowns.
+ */
+export function placedOrderCondition(): SQL {
+  return inArray(orders.paymentStatus, ['paid', 'partial', 'refunded']);
+}
+
+/**
+ * Orders that count towards revenue / lifetime spend: payment captured and not
+ * fully refunded, and the order not cancelled. A partial refund keeps the
+ * order in (the schema has no refunded-amount column, so the gross total is
+ * counted).
+ */
+export function revenueOrderCondition(): SQL {
+  return and(
+    inArray(orders.paymentStatus, ['paid', 'partial']),
+    ne(orders.status, 'cancelled')
+  ) as SQL;
+}
 
 // ─── Dashboard Stats ────────────────────────────────────
 
 export interface DashboardStats {
+  /** All-time revenue (paid, not cancelled/refunded). */
   totalRevenue: number;
+  /** All-time placed (paid at some point) orders. */
   totalOrders: number;
+  /** All registered customer accounts. */
   totalCustomers: number;
+  /** All products, any status. */
   totalProducts: number;
-  revenueChange: number;
-  ordersChange: number;
-  customersChange: number;
+  /** Revenue, last 30 days. */
+  revenue30: number;
+  /** Placed orders, last 30 days. */
+  orders30: number;
+  /** Accounts created, last 30 days. */
+  newCustomers30: number;
+  /** revenue30 / revenue orders in the last 30 days. */
+  averageOrderValue30: number;
+  /** % change of the 30-day figure vs the 30 days before it (null = no prior data). */
+  revenueChange: number | null;
+  ordersChange: number | null;
+  customersChange: number | null;
+  averageOrderValueChange: number | null;
+  /** Paid orders still waiting to ship (pending/processing). */
+  ordersToFulfil: number;
+  /** Checkouts started in the last 30 days that never got paid. */
+  abandonedCheckouts30: number;
   recentOrders: RecentOrder[];
   mostSoldItems: MostSoldItem[];
   ordersByStatus: StatusCount[];
   revenueByMonth: MonthlyRevenue[];
   lowStock: LowStockItem[];
+  /** Total low-stock rows (lowStock holds at most 10). */
+  lowStockCount: number;
 }
 
 export interface RecentOrder {
@@ -27,6 +76,7 @@ export interface RecentOrder {
   customerName: string;
   total: number;
   status: string;
+  paymentStatus: string;
   createdAt: Date;
 }
 
@@ -42,7 +92,10 @@ export interface StatusCount {
 }
 
 export interface MonthlyRevenue {
+  /** Short month label, e.g. "Oct". */
   month: string;
+  /** YYYY-MM (UTC). */
+  key: string;
   revenue: number;
   orders: number;
 }
@@ -50,273 +103,260 @@ export interface MonthlyRevenue {
 export interface LowStockItem {
   id: string;
   name: string;
+  /** Variant attributes ("Size: M, Color: Black") when the row is a variant. */
+  variant: string | null;
   sku: string;
   stockQuantity: number;
   lowStockThreshold: number;
 }
 
+const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function pctChange(current: number, previous: number): number | null {
+  if (previous <= 0) return null;
+  return ((current - previous) / previous) * 100;
+}
+
+function num(value: unknown): number {
+  const n = typeof value === 'number' ? value : parseFloat(String(value ?? '0'));
+  return Number.isFinite(n) ? n : 0;
+}
+
 export async function getDashboardStats(): Promise<DashboardStats> {
   const db = getDb();
 
-  // Current period (last 30 days)
+  // Rolling windows: [now-30d, now) vs [now-60d, now-30d). Timestamps are
+  // stored in UTC, and month buckets below are UTC months.
   const now = new Date();
-  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-  const sixtyDaysAgo = new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000);
+  const d30 = new Date(now.getTime() - 30 * DAY_MS);
+  const d60 = new Date(now.getTime() - 60 * DAY_MS);
+  const chartStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 5, 1));
 
-  // All independent queries fire in parallel instead of sequentially.
+  const placed = placedOrderCondition();
+  const revenue = revenueOrderCondition();
+  const cur = gte(orders.createdAt, d30);
+  const prev = and(gte(orders.createdAt, d60), lt(orders.createdAt, d30));
+
+  // One scan of orders with FILTERed aggregates
+  // instead of a query per number (each query is one HTTP round trip on the
+  // Neon driver).
+  const lowStockThreshold = sql<number>`COALESCE(${products.lowStockThreshold}, 5)`;
+
   const [
-    revenueRow,
-    revenueCurrent,
-    revenuePrev,
-    ordersRow,
-    ordersCurrent,
-    ordersPrev,
-    customersRow,
-    custCurrent,
-    custPrev,
-    productsRow,
+    [orderAgg],
+    [customerAgg],
+    [productAgg],
     recentOrdersData,
     statusCounts,
     monthlyData,
-    lowStockRows,
+    mostSoldRows,
+    lowSimple,
+    lowVariants,
   ] = await Promise.all([
     db
-      .select({ total: sum(orders.total) })
-      .from(orders)
-      .where(eq(orders.paymentStatus, 'paid')),
+      .select({
+        revenueAll: sql<string>`COALESCE(SUM(${orders.total}) FILTER (WHERE ${revenue}), 0)`,
+        revenueCur: sql<string>`COALESCE(SUM(${orders.total}) FILTER (WHERE ${revenue} AND ${cur}), 0)`,
+        revenuePrev: sql<string>`COALESCE(SUM(${orders.total}) FILTER (WHERE ${revenue} AND ${prev}), 0)`,
+        revenueOrdersCur: sql<number>`(COUNT(*) FILTER (WHERE ${revenue} AND ${cur}))::int`,
+        revenueOrdersPrev: sql<number>`(COUNT(*) FILTER (WHERE ${revenue} AND ${prev}))::int`,
+        placedAll: sql<number>`(COUNT(*) FILTER (WHERE ${placed}))::int`,
+        placedCur: sql<number>`(COUNT(*) FILTER (WHERE ${placed} AND ${cur}))::int`,
+        placedPrev: sql<number>`(COUNT(*) FILTER (WHERE ${placed} AND ${prev}))::int`,
+        toFulfil: sql<number>`(COUNT(*) FILTER (WHERE ${revenue} AND ${inArray(orders.status, ['pending', 'processing'])}))::int`,
+        // Unpaid checkouts, still open or already cancelled (expired after an
+        // hour by lib/order-expiry.ts, or by the admin).
+        abandonedCur: sql<number>`(COUNT(*) FILTER (WHERE ${eq(orders.paymentStatus, 'pending')} AND ${inArray(orders.status, ['pending_payment', 'cancelled'])} AND ${cur}))::int`,
+      })
+      .from(orders),
     db
-      .select({ total: sum(orders.total) })
-      .from(orders)
-      .where(and(eq(orders.paymentStatus, 'paid'), gte(orders.createdAt, thirtyDaysAgo))),
+      .select({
+        total: sql<number>`COUNT(*)::int`,
+        cur: sql<number>`(COUNT(*) FILTER (WHERE ${gte(users.createdAt, d30)}))::int`,
+        prev: sql<number>`(COUNT(*) FILTER (WHERE ${and(gte(users.createdAt, d60), lt(users.createdAt, d30))}))::int`,
+      })
+      .from(users),
+    db.select({ total: count() }).from(products),
     db
-      .select({ total: sum(orders.total) })
+      .select({
+        id: orders.id,
+        orderId: orders.orderId,
+        email: orders.email,
+        shippingAddress: orders.shippingAddress,
+        total: orders.total,
+        status: orders.status,
+        paymentStatus: orders.paymentStatus,
+        createdAt: orders.createdAt,
+      })
       .from(orders)
-      .where(
-        and(
-          eq(orders.paymentStatus, 'paid'),
-          gte(orders.createdAt, sixtyDaysAgo),
-          lt(orders.createdAt, thirtyDaysAgo)
-        )
-      ),
-    db.select({ count: count() }).from(orders),
-    db.select({ count: count() }).from(orders).where(gte(orders.createdAt, thirtyDaysAgo)),
-    db
-      .select({ count: count() })
-      .from(orders)
-      .where(and(gte(orders.createdAt, sixtyDaysAgo), lt(orders.createdAt, thirtyDaysAgo))),
-    db.select({ count: count() }).from(users),
-    db.select({ count: count() }).from(users).where(gte(users.createdAt, thirtyDaysAgo)),
-    db
-      .select({ count: count() })
-      .from(users)
-      .where(and(gte(users.createdAt, sixtyDaysAgo), lt(users.createdAt, thirtyDaysAgo))),
-    db.select({ count: count() }).from(products),
-    db.select().from(orders).orderBy(desc(orders.createdAt)).limit(10),
+      .where(placed)
+      .orderBy(desc(orders.createdAt))
+      .limit(5),
     db
       .select({ status: orders.status, count: count() })
       .from(orders)
+      .where(placed)
       .groupBy(orders.status),
     db
       .select({
         month: sql<string>`to_char(${orders.createdAt}, 'YYYY-MM')`,
-        revenue: sum(orders.total),
+        revenue: sql<string>`COALESCE(SUM(${orders.total}), 0)`,
         orders: count(),
       })
       .from(orders)
-      .where(
-        and(eq(orders.paymentStatus, 'paid'), gte(orders.createdAt, new Date(now.getFullYear(), now.getMonth() - 5, 1)))
+      .where(and(revenue, gte(orders.createdAt, chartStart)))
+      .groupBy(sql`to_char(${orders.createdAt}, 'YYYY-MM')`),
+    // Unnest the items jsonb of revenue orders and aggregate in Postgres.
+    db
+      .select({
+        name: sql<string>`item->>'name'`,
+        totalQuantity: sql<number>`COALESCE(SUM((item->>'quantity')::int), 0)::int`,
+        totalRevenue: sql<number>`COALESCE(SUM((item->>'quantity')::int * (item->>'price')::numeric), 0)::float`,
+      })
+      .from(
+        sql`(SELECT jsonb_array_elements(${orders.items}) AS item FROM ${orders} WHERE ${revenue}) AS t`
       )
-      .groupBy(sql`to_char(${orders.createdAt}, 'YYYY-MM')`)
-      .orderBy(sql`to_char(${orders.createdAt}, 'YYYY-MM')`),
+      .groupBy(sql`item->>'name'`)
+      .orderBy(desc(sql`COALESCE(SUM((item->>'quantity')::int), 0)::int`))
+      .limit(5),
+    // Simple products track stock on the product row.
     db
       .select({
         id: products.id,
         name: products.name,
         sku: products.sku,
         stockQuantity: products.stockQuantity,
-        lowStockThreshold: products.lowStockThreshold,
+        lowStockThreshold,
       })
       .from(products)
       .where(
         and(
           eq(products.status, 'published'),
-          eq(products.manageStock, true)
+          eq(products.manageStock, true),
+          eq(products.productType, 'simple'),
+          sql`COALESCE(${products.stockQuantity}, 0) <= ${lowStockThreshold}`
         )
-      ),
+      )
+      .orderBy(sql`COALESCE(${products.stockQuantity}, 0)`),
+    // Variable products track stock per variant; the parent's own
+    // stock_quantity is not what the storefront sells from.
+    db
+      .select({
+        id: products.id,
+        name: products.name,
+        attributes: productVariants.attributes,
+        sku: productVariants.sku,
+        stockQuantity: productVariants.stockQuantity,
+        lowStockThreshold,
+      })
+      .from(productVariants)
+      .innerJoin(products, eq(productVariants.productId, products.id))
+      .where(
+        and(
+          eq(products.status, 'published'),
+          eq(products.manageStock, true),
+          eq(products.productType, 'variable'),
+          sql`COALESCE(${productVariants.stockQuantity}, 0) <= ${lowStockThreshold}`
+        )
+      )
+      .orderBy(sql`COALESCE(${productVariants.stockQuantity}, 0)`),
   ]);
 
-  const totalRevenue = parseFloat(revenueRow[0]?.total || '0');
-  const revCurrent = parseFloat(revenueCurrent[0]?.total || '0');
-  const revPrev = parseFloat(revenuePrev[0]?.total || '0');
-  const revenueChange = revPrev > 0 ? ((revCurrent - revPrev) / revPrev) * 100 : 0;
-
-  const totalOrders = ordersRow[0]?.count || 0;
-  const ordCurrent = ordersCurrent[0]?.count || 0;
-  const ordPrev = ordersPrev[0]?.count || 0;
-  const ordersChange = ordPrev > 0 ? ((ordCurrent - ordPrev) / ordPrev) * 100 : 0;
-
-  const totalCustomers = customersRow[0]?.count || 0;
-  const cCurrent = custCurrent[0]?.count || 0;
-  const cPrev = custPrev[0]?.count || 0;
-  const customersChange = cPrev > 0 ? ((cCurrent - cPrev) / cPrev) * 100 : 0;
-
-  const totalProducts = productsRow[0]?.count || 0;
+  const revenueCur = num(orderAgg?.revenueCur);
+  const revenuePrev = num(orderAgg?.revenuePrev);
+  const revOrdersCur = num(orderAgg?.revenueOrdersCur);
+  const revOrdersPrev = num(orderAgg?.revenueOrdersPrev);
+  const aovCur = revOrdersCur > 0 ? revenueCur / revOrdersCur : 0;
+  const aovPrev = revOrdersPrev > 0 ? revenuePrev / revOrdersPrev : 0;
+  const placedCur = num(orderAgg?.placedCur);
+  const placedPrev = num(orderAgg?.placedPrev);
+  const custCur = num(customerAgg?.cur);
+  const custPrev = num(customerAgg?.prev);
 
   const recentOrders: RecentOrder[] = recentOrdersData.map((o) => {
-    const addr = o.shippingAddress as ShippingAddressDB;
+    const addr = o.shippingAddress as ShippingAddressDB | null;
+    const name = addr ? `${addr.firstName || ''} ${addr.lastName || ''}`.trim() : '';
     return {
       id: o.id,
       orderId: o.orderId,
       email: o.email,
-      customerName: addr ? `${addr.firstName || ''} ${addr.lastName || ''}`.trim() : o.email,
-      total: parseFloat(o.total as string),
+      customerName: name || o.email,
+      total: num(o.total),
       status: o.status,
+      paymentStatus: o.paymentStatus,
       createdAt: o.createdAt,
     };
   });
 
-  // Most-sold aggregation in SQL: unnest the items jsonb of paid orders.
-  // The old implementation loaded every paid order into JS; this pushes the
-  // aggregation into Postgres.
-  const mostSoldRows = await db
-    .select({
-      name: sql<string>`item->>'name'`,
-      totalQuantity: sql<number>`COALESCE(SUM((item->>'quantity')::int), 0)::int`,
-      totalRevenue: sql<number>`COALESCE(SUM((item->>'quantity')::int * (item->>'price')::numeric), 0)::float`,
-    })
-    .from(
-      sql`(SELECT jsonb_array_elements(${orders.items}) AS item FROM ${orders} WHERE ${orders.paymentStatus} = 'paid') AS t`
-    )
-    .groupBy(sql`item->>'name'`)
-    .orderBy(desc(sql`COALESCE(SUM((item->>'quantity')::int), 0)::int`))
-    .limit(10);
-
   const mostSoldItems: MostSoldItem[] = mostSoldRows.map((m) => ({
     name: m.name || 'Unknown',
-    totalQuantity: Number(m.totalQuantity || 0),
-    totalRevenue: Number(m.totalRevenue || 0),
+    totalQuantity: num(m.totalQuantity),
+    totalRevenue: num(m.totalRevenue),
   }));
 
-  const ordersByStatus: StatusCount[] = statusCounts.map((s) => ({
-    status: s.status,
-    count: s.count,
-  }));
+  const ordersByStatus: StatusCount[] = statusCounts
+    .map((s) => ({ status: s.status, count: s.count }))
+    .sort((a, b) => b.count - a.count);
 
-  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const revenueByMonth: MonthlyRevenue[] = monthlyData.map((m) => {
-    const [, monthNum] = (m.month || '').split('-');
-    const monthIdx = parseInt(monthNum, 10) - 1;
-    return {
-      month: monthNames[monthIdx] || m.month,
-      revenue: parseFloat(m.revenue || '0'),
-      orders: m.orders,
-    };
-  });
+  // Fill every month in the window, including months with no sales, so the
+  // chart's x-axis is continuous.
+  const byMonth = new Map(monthlyData.map((m) => [m.month, m]));
+  const revenueByMonth: MonthlyRevenue[] = [];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(Date.UTC(chartStart.getUTCFullYear(), chartStart.getUTCMonth() + i, 1));
+    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    const row = byMonth.get(key);
+    revenueByMonth.push({
+      month: MONTH_NAMES[d.getUTCMonth()],
+      key,
+      revenue: num(row?.revenue),
+      orders: row?.orders ?? 0,
+    });
+  }
 
-  const lowStock: LowStockItem[] = lowStockRows
-    .filter((p) => (p.stockQuantity || 0) <= (p.lowStockThreshold ?? 5))
-    .map((p) => ({
+  const allLow: LowStockItem[] = [
+    ...lowSimple.map((p) => ({
       id: p.id,
       name: p.name,
+      variant: null,
       sku: p.sku,
-      stockQuantity: p.stockQuantity || 0,
-      lowStockThreshold: p.lowStockThreshold ?? 5,
-    }))
-    .slice(0, 10);
+      stockQuantity: p.stockQuantity ?? 0,
+      lowStockThreshold: num(p.lowStockThreshold),
+    })),
+    ...lowVariants.map((v) => ({
+      id: v.id,
+      name: v.name,
+      variant:
+        Object.entries(v.attributes || {})
+          .map(([k, val]) => `${k}: ${val}`)
+          .join(', ') || null,
+      sku: v.sku,
+      stockQuantity: v.stockQuantity ?? 0,
+      lowStockThreshold: num(v.lowStockThreshold),
+    })),
+  ].sort((a, b) => a.stockQuantity - b.stockQuantity);
 
   return {
-    totalRevenue,
-    totalOrders,
-    totalCustomers,
-    totalProducts,
-    revenueChange,
-    ordersChange,
-    customersChange,
+    totalRevenue: num(orderAgg?.revenueAll),
+    totalOrders: num(orderAgg?.placedAll),
+    totalCustomers: num(customerAgg?.total),
+    totalProducts: productAgg?.total ?? 0,
+    revenue30: revenueCur,
+    orders30: placedCur,
+    newCustomers30: custCur,
+    averageOrderValue30: aovCur,
+    revenueChange: pctChange(revenueCur, revenuePrev),
+    ordersChange: pctChange(placedCur, placedPrev),
+    customersChange: pctChange(custCur, custPrev),
+    averageOrderValueChange: pctChange(aovCur, aovPrev),
+    ordersToFulfil: num(orderAgg?.toFulfil),
+    abandonedCheckouts30: num(orderAgg?.abandonedCur),
     recentOrders,
     mostSoldItems,
     ordersByStatus,
     revenueByMonth,
-    lowStock,
+    lowStock: allLow.slice(0, 10),
+    lowStockCount: allLow.length,
   };
-}
-
-// ─── Pirate Ship CSV Export ─────────────────────────────
-
-/**
- * Generate Pirate Ship-compatible CSV from orders.
- * Matches the exact header format from the sample:
- * Name,Company,Email,Phone,Address Line 1,Address Line 2,City,State,Zip,Country,Weight (oz),Length (in),Width (in),Height (in),Order ID
- */
-export function generatePirateShipCSV(
-  orderData: Array<{
-    orderId: string;
-    email: string;
-    shippingAddress: ShippingAddressDB;
-    items: OrderItem[];
-    total: number;
-  }>
-): string {
-  // Exact Pirate Ship header format
-  const headers = [
-    'Name',
-    'Company',
-    'Email',
-    'Phone',
-    'Address Line 1',
-    'Address Line 2',
-    'City',
-    'State',
-    'Zip',
-    'Country',
-    'Weight (oz)',
-    'Length (in)',
-    'Width (in)',
-    'Height (in)',
-    'Order ID',
-  ];
-
-  const rows = orderData.map((order) => {
-    const addr = order.shippingAddress || {} as ShippingAddressDB;
-    const fullName = `${addr.firstName || ''} ${addr.lastName || ''}`.trim();
-
-    // Calculate total weight from items (default 8 oz per item if no weight data)
-    const estimatedWeight = order.items.reduce((sum, item) => {
-      return sum + (item.quantity * 8); // Default 8 oz per item
-    }, 0);
-
-    // US standard small parcel dimensions (USPS-friendly defaults)
-    const length = 12; // inches
-    const width = 9;   // inches
-    const height = 4;  // inches
-
-    return [
-      fullName,
-      'Modest Ummah',
-      order.email,
-      addr.phone || '',
-      addr.address1 || '',
-      addr.address2 || '',
-      addr.city || '',
-      addr.state || '',
-      addr.postalCode || '',
-      addr.country || 'US',
-      String(estimatedWeight || 16),
-      String(length),
-      String(width),
-      String(height),
-      order.orderId,
-    ]
-      // RFC 4180: quote any field containing a comma, quote, or newline,
-      // and double embedded quotes.
-      .map((field) => {
-        const value = String(field);
-        if (/[",\n\r]/.test(value)) {
-          return `"${value.replace(/"/g, '""')}"`;
-        }
-        return value;
-      })
-      .join(',');
-  });
-
-  return [headers.join(','), ...rows].join('\n');
 }

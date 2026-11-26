@@ -28,12 +28,34 @@ const _initialRoute = String.fromEnvironment(
   defaultValue: '/shop',
 );
 
+/// Paths the router will open. Deep links (`modestummah://...`) reach the same
+/// router as in-app navigation, so anything not listed here, including a
+/// malformed product slug, is sent to the shop instead of an error page.
+const _allowedPaths = {
+  '/shop',
+  '/search',
+  '/saved',
+  '/bag',
+  '/account',
+  '/checkout',
+  '/auth',
+  '/orders',
+};
+final _productPath = RegExp(r'^/product/[A-Za-z0-9_-]{1,200}$');
+
+String? _allowListRedirect(BuildContext _, GoRouterState state) {
+  final path = state.uri.path;
+  if (_allowedPaths.contains(path) || _productPath.hasMatch(path)) return null;
+  return '/shop';
+}
+
 /// Browsing works fully signed out — only checkout and the account tab need an
 /// identity. A login wall on launch is a common App Store rejection and costs
 /// conversions regardless.
 final appRouter = GoRouter(
   navigatorKey: _rootKey,
   initialLocation: _initialRoute,
+  redirect: _allowListRedirect,
   routes: [
     ShellRoute(
       navigatorKey: _shellKey,
@@ -67,7 +89,8 @@ final appRouter = GoRouter(
     GoRoute(
       path: '/orders',
       parentNavigatorKey: _rootKey,
-      builder: (_, __) => const OrdersScreen(),
+      builder: (_, state) =>
+          OrdersScreen(paymentJustCompleted: state.extra == true),
     ),
   ],
 );

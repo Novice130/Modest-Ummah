@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { CartItem, User } from '@/types';
 import { saveCartAction, fetchUserCart } from '@/lib/actions/cart.actions';
+import { trackAddToCart } from '@/lib/analytics';
 
 interface CartState {
   items: CartItem[];
@@ -11,6 +12,11 @@ interface CartState {
   removeItem: (productId: string, color?: string, size?: string) => void;
   updateQuantity: (productId: string, quantity: number, color?: string, size?: string) => void;
   clearCart: () => void;
+  /** Last payment the cart was emptied for, so a reload cannot empty a new cart. */
+  lastPurchaseRef: string | null;
+  /** The server copy may still hold purchased items, so it must not be merged. */
+  pendingServerClear: boolean;
+  completePurchase: (paymentRef: string) => void;
   toggleCart: () => void;
   openCart: () => void;
   closeCart: () => void;
@@ -20,14 +26,20 @@ interface CartState {
   getSubtotal: () => number;
 }
 
+// Bumped by completePurchase so a server cart fetch already in flight is dropped.
+let purchaseEpoch = 0;
+
 export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       items: [],
       isOpen: false,
       isSyncing: false,
+      lastPurchaseRef: null,
+      pendingServerClear: false,
 
       addItem: (item) => {
+        trackAddToCart(item.productId, item.price, item.quantity);
         set((state) => {
           const existingIndex = state.items.findIndex(
             (i) =>
@@ -108,6 +120,20 @@ export const useCartStore = create<CartState>()(
         set({ items: [] });
       },
 
+      // Not clearCart: the signed-in user may not be known yet on the page
+      // Stripe redirects back to, and login then merges the server cart back in.
+      // The save is attempted regardless; for a guest it simply fails.
+      completePurchase: (paymentRef) => {
+        if (get().lastPurchaseRef === paymentRef) return;
+        purchaseEpoch += 1;
+        set({ items: [], lastPurchaseRef: paymentRef, pendingServerClear: true });
+        saveCartAction([])
+          .then(() => set({ pendingServerClear: false }))
+          .catch(() => {
+            // Stays pending: the next loadFromServer overwrites the server copy.
+          });
+      },
+
       toggleCart: () => set((state) => ({ isOpen: !state.isOpen })),
       openCart: () => set({ isOpen: true }),
       closeCart: () => set({ isOpen: false }),
@@ -129,7 +155,17 @@ export const useCartStore = create<CartState>()(
       loadFromServer: async (userId) => {
         set({ isSyncing: true });
         try {
+          const epoch = purchaseEpoch;
           const cart = await fetchUserCart();
+
+          // Whatever the server returned predates the purchase. Keep the local
+          // cart and replace the server copy with it.
+          if (epoch !== purchaseEpoch || get().pendingServerClear) {
+            await saveCartAction(get().items);
+            set({ pendingServerClear: false });
+            return;
+          }
+
           if (cart && cart.items) {
             const items = typeof cart.items === 'string' 
               ? JSON.parse(cart.items) 
@@ -179,7 +215,11 @@ export const useCartStore = create<CartState>()(
     {
       name: 'modest-ummah-cart',
       storage: createJSONStorage(() => localStorage),
-      partialize: (state) => ({ items: state.items }),
+      partialize: (state) => ({
+        items: state.items,
+        lastPurchaseRef: state.lastPurchaseRef,
+        pendingServerClear: state.pendingServerClear,
+      }),
     }
   )
 );
