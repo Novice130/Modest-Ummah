@@ -454,7 +454,9 @@ export default function AdminOrdersPage() {
         <p className="text-sm text-muted-foreground">
           Checkouts that reached the payment step but were never paid. They are
           not shown under All and are never exported to Pirate Ship. Stripe moves
-          them to Processing automatically if the payment completes.
+          them to Processing automatically if the payment completes. After an
+          hour unpaid they are cancelled and their coupon use is given back; a
+          late payment still reopens them.
         </p>
       )}
 

@@ -5,10 +5,10 @@ import { verifyWebhookSignature } from '@/lib/stripe';
 import { sendNewOrderAlert, sendOrderConfirmation } from '@/lib/email';
 import Stripe from 'stripe';
 import { getDb } from '@/lib/db';
-import { orders, orderNotes, carts, coupons, settings } from '@/lib/schema';
-import { and, eq, inArray, ne, notInArray, sql } from 'drizzle-orm';
+import { orders, orderNotes, carts, settings } from '@/lib/schema';
+import { and, eq, inArray, ne, notInArray } from 'drizzle-orm';
 import { decrementStock, restock } from '@/lib/inventory';
-import { normalizeCouponCode, recordCouponUsage } from '@/lib/coupons';
+import { holdCouponUse, releaseCouponUse } from '@/lib/coupons';
 import {
   isEventHandled,
   isStepDone,
@@ -99,9 +99,11 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
     return;
   }
 
-  // An order cancelled while unpaid can still be paid afterwards (the
-  // PaymentIntent stays open). The money is taken, so it reopens for
-  // fulfilment; the timeline says why.
+  // An order cancelled while unpaid (by the admin, or by lib/order-expiry.ts
+  // after an hour) can still be paid afterwards: the PaymentIntent stays open.
+  // The money is taken, so it reopens for fulfilment; the timeline says why.
+  // Stock was never held for it and drops below like any sale (an oversell is
+  // logged); its coupon use was given back and is taken again below.
   if (existingOrder.status === 'cancelled') {
     await runOnce(`${paymentIntent.id}:reopen-note`, async () => {
       await db.insert(orderNotes).values({
@@ -134,14 +136,15 @@ async function handlePaymentSucceeded(paymentIntent: Stripe.PaymentIntent) {
     await runOnce(`${paymentIntent.id}:stock:${index}`, () => decrementStock([item]));
   }
 
-  // Coupon usage counts on payment success. The step ledger prevents
-  // retries from double-counting, and the limit check guards concurrent
-  // checkouts that started before the last use completed.
+  // The coupon use was taken when the order was created and is normally still
+  // held, so this counts nothing. It takes the use only for an order that gave
+  // it back (expired or cancelled before this late payment) or that predates
+  // reservations; holdCouponUse is a no-op for an order already holding one.
   const couponCode = existingOrder.couponCode;
   if (couponCode) {
     await runOnce(`${paymentIntent.id}:coupon`, async () => {
-      const counted = await recordCouponUsage(couponCode);
-      if (!counted) {
+      const held = await holdCouponUse(couponCode, existingOrder.orderId);
+      if (!held) {
         await db.insert(orderNotes).values({
           orderId: existingOrder.id,
           note: `Coupon ${couponCode} was already at its usage limit when this order was paid. The discount was honoured; the use was not counted.`,
@@ -242,15 +245,14 @@ async function handleChargeRefunded(eventId: string, charge: Stripe.Charge) {
   // A shipped or delivered order keeps its status (a return); an unshipped one
   // is cancelled by a full refund.
   const shipped = existingOrder.status === 'shipped' || existingOrder.status === 'delivered';
-  const [flipped] = await db
+  await db
     .update(orders)
     .set({
       paymentStatus: refundStatus,
       status: charge.refunded && !shipped ? 'cancelled' : existingOrder.status,
       updatedAt: new Date(),
     })
-    .where(and(eq(orders.id, existingOrder.id), ne(orders.paymentStatus, 'refunded')))
-    .returning({ id: orders.id });
+    .where(and(eq(orders.id, existingOrder.id), ne(orders.paymentStatus, 'refunded')));
 
   await runOnce(`${eventId}:note`, async () => {
     await db.insert(orderNotes).values({
@@ -260,26 +262,14 @@ async function handleChargeRefunded(eventId: string, charge: Stripe.Charge) {
     });
   });
 
-  // A full refund gives the coupon use back. Only the first move into
-  // "refunded" counts: an admin refund (refundOrderAction) that got there first
-  // has already released it. A retry sees no flip, so a failure here cannot be
-  // retried; it is reported rather than holding up the restock below.
-  // Only give back a use the payment webhook actually counted: a dashboard
-  // refund can land before payment handling ever succeeded.
-  if (
-    charge.refunded &&
-    flipped &&
-    existingOrder.couponCode &&
-    (await isStepDone(`${paymentIntentId}:coupon`))
-  ) {
+  // A full refund gives the coupon use back. The hold marker makes this
+  // exactly once whoever gets there first (this webhook, a retry of it, or an
+  // admin refund through refundOrderAction), and it releases nothing for an
+  // order that no longer holds a use. A failure is reported rather than
+  // holding up the restock below.
+  if (charge.refunded && existingOrder.couponCode) {
     try {
-      await db
-        .update(coupons)
-        .set({
-          usageCount: sql`GREATEST(${coupons.usageCount} - 1, 0)`,
-          updatedAt: new Date(),
-        })
-        .where(sql`upper(${coupons.code}) = ${normalizeCouponCode(existingOrder.couponCode)}`);
+      await releaseCouponUse(existingOrder.couponCode, existingOrder.orderId);
     } catch (error) {
       console.error('Coupon use not released after a refund; adjust it by hand');
       Sentry.captureException(error, { tags: { webhook: 'stripe', step: 'coupon-release' } });

@@ -1,17 +1,35 @@
-import { getTableName } from 'drizzle-orm';
-export { predicates } from './fake-predicates';
+import { getTableName, isSQLWrapper } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
+export { predicates, comparisonPredicates } from './fake-predicates';
 
 /**
  * In-memory stand-in for the small part of drizzle the shop code uses. Nothing
  * here opens a connection. Predicates come from fake-predicates (which has no
  * drizzle-orm dependency, avoiding vi.mock circular imports); raw `sql`
- * conditions cannot be evaluated, so they match every row.
+ * conditions cannot be evaluated, so they match every row. Raw `sql` in an
+ * update's SET is evaluated only for the counter forms the shop uses,
+ * `<col> + n` and `GREATEST(<col> - n, 0)`; anything else is stored as is.
  */
 type Row = Record<string, any>;
 type Op = 'select' | 'insert' | 'update' | 'delete';
 
 function matches(p: any, r: Row) {
   return typeof p === 'function' ? p(r) : true;
+}
+
+function applySet(row: Row, s: Row) {
+  for (const [key, value] of Object.entries(s)) {
+    if (!isSQLWrapper(value)) {
+      row[key] = value;
+      continue;
+    }
+    const text = new PgDialect().sqlToQuery(value.getSQL()).sql;
+    const plus = /^"[\w]+"\."[\w]+" \+ (\d+)$/.exec(text);
+    const minus = /^GREATEST\("[\w]+"\."[\w]+" - (\d+), 0\)$/.exec(text);
+    if (plus) row[key] = (row[key] ?? 0) + Number(plus[1]);
+    else if (minus) row[key] = Math.max((row[key] ?? 0) - Number(minus[1]), 0);
+    else row[key] = value; // not evaluated: stored as the SQL object, as before
+  }
 }
 
 export function createFakeDb() {
@@ -79,17 +97,22 @@ export function createFakeDb() {
           check(table, 'update');
           log.push({ table: getTableName(table), op: 'update', values: s });
           const hit = rowsOf(table).filter((r) => matches(where, r));
-          hit.forEach((r) => Object.assign(r, s));
+          hit.forEach((r) => applySet(r, s));
           return hit;
         });
       },
     }),
     delete: (table: any) => ({
-      where: (p: any) =>
-        thenable({}, () => {
+      where: (p: any) => {
+        const b: any = { returning: () => b };
+        return thenable(b, () => {
           check(table, 'delete');
+          log.push({ table: getTableName(table), op: 'delete' });
+          const removed = rowsOf(table).filter((r) => matches(p, r));
           tables[getTableName(table)] = rowsOf(table).filter((r) => !matches(p, r));
-        }),
+          return removed;
+        });
+      },
     }),
   };
 

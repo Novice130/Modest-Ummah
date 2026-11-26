@@ -4,8 +4,8 @@ const h = vi.hoisted(() => ({ fake: null as any, event: null as any }));
 
 vi.mock('drizzle-orm', async (orig) => {
   const actual = await orig<typeof import('drizzle-orm')>();
-  const { predicates } = await import('./helpers/fake-predicates');
-  return { ...actual, ...predicates };
+  const { predicates, comparisonPredicates } = await import('./helpers/fake-predicates');
+  return { ...actual, ...predicates, ...comparisonPredicates };
 });
 vi.mock('@/lib/db', () => ({ getDb: () => h.fake.db }));
 vi.mock('next/headers', () => ({
@@ -17,18 +17,14 @@ vi.mock('@/lib/email', () => ({
   sendNewOrderAlert: vi.fn(),
 }));
 vi.mock('@/lib/inventory', () => ({ decrementStock: vi.fn(), restock: vi.fn() }));
-vi.mock('@/lib/coupons', () => ({
-  normalizeCouponCode: (c: string) => c.toUpperCase(),
-  recordCouponUsage: vi.fn(),
-}));
 vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi.fn() }));
 
 import * as Sentry from '@sentry/nextjs';
 import { POST } from '@/app/api/webhooks/stripe/route';
 import { sendNewOrderAlert, sendOrderConfirmation } from '@/lib/email';
 import { decrementStock, restock } from '@/lib/inventory';
-import { recordCouponUsage } from '@/lib/coupons';
-import { orders, orderNotes, settings, stripeEvents } from '@/lib/schema';
+import { couponHoldKey } from '@/lib/coupons';
+import { coupons, orders, orderNotes, settings, stripeEvents } from '@/lib/schema';
 import { createFakeDb } from './helpers/fake-db';
 
 const items = [
@@ -36,7 +32,23 @@ const items = [
   { productId: 'p2', name: 'B', price: 20, quantity: 2 },
 ];
 
-function seedOrder(over: Record<string, any> = {}) {
+/**
+ * The order as checkout leaves it: holding one use of SAVE (count 1 and the
+ * hold marker). `held: false` is an order that gave its use back (expired or
+ * cancelled) or predates reservations.
+ */
+function seedOrder(
+  over: Record<string, any> = {},
+  opts: { held?: boolean; usageLimit?: number | null; usageCount?: number } = {}
+) {
+  const { held = true, usageLimit = null } = opts;
+  const usageCount = opts.usageCount ?? (held ? 1 : 0);
+  h.fake.seed(coupons, [{ id: 'c1', code: 'SAVE', usageCount, usageLimit }]);
+  if (held) {
+    h.fake.seed(stripeEvents, [
+      { eventId: couponHoldKey('MU-1'), type: 'coupon:held', processedAt: new Date() },
+    ]);
+  }
   const order = {
     id: 'o1',
     orderId: 'MU-1',
@@ -83,6 +95,8 @@ const deliver = (event: any) => {
 };
 const isMarked = (id: string) =>
   h.fake.rows(stripeEvents).some((r: any) => r.eventId === id);
+const couponUses = () => h.fake.rows(coupons)[0].usageCount;
+const holdsCoupon = () => isMarked(couponHoldKey('MU-1'));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -91,7 +105,6 @@ beforeEach(() => {
   vi.mocked(sendNewOrderAlert).mockResolvedValue({ success: true });
   vi.mocked(decrementStock).mockResolvedValue(undefined);
   vi.mocked(restock).mockResolvedValue(undefined);
-  vi.mocked(recordCouponUsage).mockResolvedValue(true);
   vi.spyOn(console, 'log').mockImplementation(() => {});
   vi.spyOn(console, 'error').mockImplementation(() => {});
   vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -105,7 +118,9 @@ describe('payment_intent.succeeded', () => {
     expect(order.paymentStatus).toBe('paid');
     expect(order.status).toBe('processing');
     expect(decrementStock).toHaveBeenCalledTimes(2);
-    expect(recordCouponUsage).toHaveBeenCalledTimes(1);
+    // The use was taken at checkout: payment does not count it again.
+    expect(couponUses()).toBe(1);
+    expect(holdsCoupon()).toBe(true);
     expect(sendOrderConfirmation).toHaveBeenCalledTimes(1);
     expect(isMarked('evt_1')).toBe(true);
   });
@@ -130,13 +145,13 @@ describe('payment_intent.succeeded', () => {
       .mockResolvedValueOnce(undefined)
       .mockRejectedValueOnce(new Error('stock write failed'));
     expect((await deliver(succeeded())).status).toBe(500);
-    expect(recordCouponUsage).not.toHaveBeenCalled();
+    expect(isMarked('pi_1:coupon')).toBe(false);
     expect(sendOrderConfirmation).not.toHaveBeenCalled();
 
     expect((await deliver(succeeded())).status).toBe(200);
     const lines = vi.mocked(decrementStock).mock.calls.map((c) => c[0][0].productId);
     expect(lines).toEqual(['p1', 'p2', 'p2']);
-    expect(recordCouponUsage).toHaveBeenCalledTimes(1);
+    expect(couponUses()).toBe(1);
     expect(sendOrderConfirmation).toHaveBeenCalledTimes(1);
   });
 
@@ -161,7 +176,7 @@ describe('payment_intent.succeeded', () => {
     expect((await deliver(succeeded())).status).toBe(500);
     expect((await deliver(succeeded())).status).toBe(200);
     expect(decrementStock).toHaveBeenCalledTimes(2);
-    expect(recordCouponUsage).toHaveBeenCalledTimes(1);
+    expect(couponUses()).toBe(1);
     expect(sendOrderConfirmation).toHaveBeenCalledTimes(1);
   });
 
@@ -180,7 +195,7 @@ describe('payment_intent.succeeded', () => {
     await deliver(succeeded('evt_1'));
     await deliver(succeeded('evt_2'));
     expect(decrementStock).toHaveBeenCalledTimes(2);
-    expect(recordCouponUsage).toHaveBeenCalledTimes(1);
+    expect(couponUses()).toBe(1);
     expect(sendOrderConfirmation).toHaveBeenCalledTimes(1);
   });
 
@@ -280,10 +295,31 @@ describe('payment_intent.succeeded', () => {
   });
 
   it('adds a timeline note if coupon usage limit was already reached', async () => {
-    seedOrder();
-    vi.mocked(recordCouponUsage).mockResolvedValueOnce(false);
+    // The order gave its use back and someone else took the last one.
+    seedOrder({}, { held: false, usageLimit: 1, usageCount: 1 });
     expect((await deliver(succeeded())).status).toBe(200);
     expect(h.fake.rows(orderNotes)).toHaveLength(1);
+    expect(couponUses()).toBe(1);
+    expect(holdsCoupon()).toBe(false);
+  });
+
+  it('a late payment for an expired order reopens it and takes the coupon use again', async () => {
+    const order = seedOrder({ status: 'cancelled' }, { held: false, usageLimit: 1 });
+    expect((await deliver(succeeded())).status).toBe(200);
+    expect(order.status).toBe('processing');
+    expect(order.paymentStatus).toBe('paid');
+    expect(couponUses()).toBe(1);
+    expect(holdsCoupon()).toBe(true);
+    expect(decrementStock).toHaveBeenCalledTimes(2);
+    // One note: reopened. The coupon was available, so no limit note.
+    expect(h.fake.rows(orderNotes)).toHaveLength(1);
+  });
+
+  it('an order from before reservations is counted once on payment', async () => {
+    seedOrder({}, { held: false });
+    await deliver(succeeded('evt_1'));
+    await deliver(succeeded('evt_2'));
+    expect(couponUses()).toBe(1);
   });
 });
 
@@ -326,37 +362,46 @@ describe('charge.refunded', () => {
     expect(h.fake.rows(orderNotes)).toHaveLength(1);
   });
 
-  it('releases the coupon only on the first move into refunded', async () => {
+  it('releases the coupon use exactly once across repeated refund events', async () => {
     seedOrder({ paymentStatus: 'paid' });
     seedPaidSteps();
     await deliver(refunded('evt_a'));
     await deliver(refunded('evt_b'));
     const couponUpdates = h.fake.log.filter((l: any) => l.table === 'coupons');
     expect(couponUpdates).toHaveLength(1);
+    expect(couponUses()).toBe(0);
+    expect(holdsCoupon()).toBe(false);
     expect(restock).toHaveBeenCalledTimes(2);
   });
 
   it('an admin refund that got there first still restocks, without a coupon release', async () => {
-    seedOrder({ paymentStatus: 'refunded', status: 'cancelled' });
+    // refundOrderAction already gave the use back (marker gone, count 0).
+    seedOrder({ paymentStatus: 'refunded', status: 'cancelled' }, { held: false });
     seedPaidSteps();
     await deliver(refunded());
     expect(h.fake.log.filter((l: any) => l.table === 'coupons')).toHaveLength(0);
+    expect(couponUses()).toBe(0);
     expect(restock).toHaveBeenCalledTimes(2);
   });
 
-  it('a refund before the payment webhook succeeded restocks nothing and keeps the coupon count', async () => {
+  it('a refund before the payment webhook succeeded restocks only taken lines and gives back the held use', async () => {
     const order = seedOrder({ paymentStatus: 'pending', status: 'pending_payment' });
     seedPaidSteps(['pi_1:stock:0']);
     expect((await deliver(refunded())).status).toBe(200);
     expect(vi.mocked(restock).mock.calls.map((c) => c[0][0].productId)).toEqual(['p1']);
-    expect(h.fake.log.filter((l: any) => l.table === 'coupons')).toHaveLength(0);
+    expect(couponUses()).toBe(0);
     expect(order.paymentStatus).toBe('refunded');
+    // A replayed success cannot reopen it or take the use again.
+    await deliver(succeeded('evt_late'));
+    expect(order.paymentStatus).toBe('refunded');
+    expect(couponUses()).toBe(0);
   });
 
-  it('a partial refund leaves stock alone', async () => {
+  it('a partial refund leaves stock and the coupon use alone', async () => {
     const order = seedOrder({ paymentStatus: 'paid', status: 'processing' });
     await deliver(refunded('evt_p', false));
     expect(order.paymentStatus).toBe('partial');
     expect(restock).not.toHaveBeenCalled();
+    expect(couponUses()).toBe(1);
   });
 });

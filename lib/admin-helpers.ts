@@ -165,7 +165,9 @@ export async function getDashboardStats(): Promise<DashboardStats> {
         placedCur: sql<number>`(COUNT(*) FILTER (WHERE ${placed} AND ${cur}))::int`,
         placedPrev: sql<number>`(COUNT(*) FILTER (WHERE ${placed} AND ${prev}))::int`,
         toFulfil: sql<number>`(COUNT(*) FILTER (WHERE ${revenue} AND ${inArray(orders.status, ['pending', 'processing'])}))::int`,
-        abandonedCur: sql<number>`(COUNT(*) FILTER (WHERE ${eq(orders.paymentStatus, 'pending')} AND ${eq(orders.status, 'pending_payment')} AND ${cur}))::int`,
+        // Unpaid checkouts, still open or already cancelled (expired after an
+        // hour by lib/order-expiry.ts, or by the admin).
+        abandonedCur: sql<number>`(COUNT(*) FILTER (WHERE ${eq(orders.paymentStatus, 'pending')} AND ${inArray(orders.status, ['pending_payment', 'cancelled'])} AND ${cur}))::int`,
       })
       .from(orders),
     db

@@ -20,7 +20,7 @@ import {
   sql,
 } from 'drizzle-orm';
 import { normalizeCouponCode } from '@/lib/coupons';
-import { getSession } from './auth.actions';
+import { getSession } from '@/lib/session';
 
 /**
  * Coupon CRUD for the admin panel. All actions require an admin session.

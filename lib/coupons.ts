@@ -1,6 +1,7 @@
+import * as Sentry from '@sentry/nextjs';
 import { getDb } from '@/lib/db';
-import { categories, coupons } from '@/lib/schema';
-import { and, isNull, lt, or, sql } from 'drizzle-orm';
+import { categories, coupons, stripeEvents } from '@/lib/schema';
+import { and, eq, isNull, lt, or, sql } from 'drizzle-orm';
 
 /**
  * Coupon evaluation. The single source of truth for discounts — nothing
@@ -166,10 +167,10 @@ export async function evaluateCoupon(
 }
 
 /**
- * Increment usage on payment success. Called from the idempotent webhook.
- * The limit is re-checked in the same statement: two checkouts can both pass
- * evaluateCoupon before either is paid. Returns false when the coupon was
- * already at its limit (or no longer exists), so nothing was counted.
+ * Take one use, if the coupon is under its limit. The limit is checked in the
+ * same statement, so two checkouts racing for the last use cannot both get
+ * it. Returns false when the coupon was already at its limit (or no longer
+ * exists), so nothing was counted. Callers go through holdCouponUse.
  */
 export async function recordCouponUsage(code: string | null | undefined): Promise<boolean> {
   if (!code) return true;
@@ -185,4 +186,86 @@ export async function recordCouponUsage(code: string | null | undefined): Promis
     )
     .returning({ id: coupons.id });
   return updated.length > 0;
+}
+
+/**
+ * Coupon reservations. A use is taken when the order is created, not when it
+ * is paid, so concurrent checkouts cannot overrun a limited coupon. Which
+ * orders hold a use is a marker row in the stripe_events ledger (no schema
+ * change), keyed by order number: the marker exists exactly while the order
+ * holds one use. Taking and giving back a use each claim the marker atomically
+ * first (insert ... on conflict do nothing / delete ... returning), so a second
+ * release, a retried webhook or a release racing a re-take moves the count
+ * once. A crash between the marker and the count leaves it one off, and that is
+ * reported, never repeated.
+ */
+const HOLD_TYPE = 'coupon:held';
+
+export function couponHoldKey(orderId: string): string {
+  return `coupon-hold:${orderId}`;
+}
+
+/**
+ * Make order `orderId` hold one use of `code`. True when it holds one (now or
+ * already); false when the coupon is at its limit, in which case no marker is
+ * left behind.
+ */
+export async function holdCouponUse(
+  code: string | null | undefined,
+  orderId: string
+): Promise<boolean> {
+  if (!code) return true;
+  const db = getDb();
+  const key = couponHoldKey(orderId);
+  const [claimed] = await db
+    .insert(stripeEvents)
+    .values({ eventId: key, type: HOLD_TYPE })
+    .onConflictDoNothing()
+    .returning();
+  if (!claimed) return true;
+
+  let counted: boolean;
+  try {
+    counted = await recordCouponUsage(code);
+  } catch (error) {
+    await dropMarker(key);
+    throw error;
+  }
+  if (!counted) await dropMarker(key);
+  return counted;
+}
+
+async function dropMarker(key: string) {
+  try {
+    await getDb().delete(stripeEvents).where(eq(stripeEvents.eventId, key));
+  } catch (error) {
+    // Left behind, a later release would give back a use that was never taken.
+    console.error('Coupon hold marker not removed; check the coupon use count');
+    Sentry.captureException(error, { tags: { step: 'coupon-hold' } });
+    throw error;
+  }
+}
+
+/**
+ * Give back the use order `orderId` holds, if it holds one. Safe to call from
+ * every path that ends an order (expiry, cancel, full refund, failed
+ * checkout): only the caller that removes the marker decrements. Returns true
+ * when a use was released.
+ */
+export async function releaseCouponUse(
+  code: string | null | undefined,
+  orderId: string
+): Promise<boolean> {
+  if (!code) return false;
+  const db = getDb();
+  const removed = await db
+    .delete(stripeEvents)
+    .where(eq(stripeEvents.eventId, couponHoldKey(orderId)))
+    .returning({ eventId: stripeEvents.eventId });
+  if (removed.length === 0) return false;
+  await db
+    .update(coupons)
+    .set({ usageCount: sql`GREATEST(${coupons.usageCount} - 1, 0)`, updatedAt: new Date() })
+    .where(codeEquals(code));
+  return true;
 }

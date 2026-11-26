@@ -1,12 +1,12 @@
 'use server';
 
 import { getDb } from '@/lib/db';
-import { orders, orderNotes, coupons, type OrderSelect, type OrderItem, type ShippingAddressDB } from '@/lib/schema';
-import { eq, ne, desc, asc, and, or, count, sql } from 'drizzle-orm';
-import { normalizeCouponCode } from '@/lib/coupons';
+import { orders, orderNotes, type OrderSelect, type OrderItem, type ShippingAddressDB } from '@/lib/schema';
+import { eq, ne, desc, asc, and, or, count } from 'drizzle-orm';
+import { releaseCouponUse } from '@/lib/coupons';
 import { buildOrderFilter } from '@/lib/order-filters';
 import type { Order } from '@/types';
-import { getSession } from './auth.actions';
+import { getSession } from '@/lib/session';
 import {
   ORDER_STATUSES,
   canTransition,
@@ -610,17 +610,11 @@ export async function refundOrderAction(orderId: string) {
     .where(and(eq(orders.id, order.id), ne(orders.paymentStatus, 'refunded')))
     .returning({ id: orders.id });
 
-  // The coupon use was recorded on payment success (Stripe webhook); a fully
-  // refunded order gives it back. Exact, case-insensitive match as in
-  // lib/coupons.ts, floored at zero.
+  // A fully refunded order gives its coupon use back. releaseCouponUse is
+  // exactly once across this action, a retried click and the charge.refunded
+  // webhook (lib/coupons.ts hold marker).
   if (flipped && order.couponCode) {
-    await db
-      .update(coupons)
-      .set({
-        usageCount: sql`GREATEST(${coupons.usageCount} - 1, 0)`,
-        updatedAt: new Date(),
-      })
-      .where(sql`upper(${coupons.code}) = ${normalizeCouponCode(order.couponCode)}`);
+    await releaseCouponUse(order.couponCode, order.orderId);
   }
 
   // Recorded on the timeline instead of overwriting the order's notes field.
@@ -645,6 +639,9 @@ export async function cancelOrderAction(orderId: string) {
   }
 
   const updated = await guardedUpdate(order, { status: 'cancelled' });
+  // An unpaid order holds its coupon use from checkout; cancelling it gives
+  // the use back (once: a late payment that reopens the order takes it again).
+  if (order.couponCode) await releaseCouponUse(order.couponCode, order.orderId);
   await addTimelineEntry(
     order.id,
     `Order cancelled (was ${formatOrderStatus(order.status)}).`,
