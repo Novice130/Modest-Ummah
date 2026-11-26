@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useAuthStore, useCartStore } from '@/lib/store';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -15,7 +14,6 @@ declare global {
 }
 
 export default function SocialAuth() {
-  const router = useRouter();
   const { toast } = useToast();
   const { setUser } = useAuthStore();
   const { syncWithServer } = useCartStore();
@@ -50,8 +48,9 @@ export default function SocialAuth() {
         description: 'Successfully signed in with Google.',
       });
 
-      router.refresh();
-      router.push('/account');
+      // Full load: the session cookie was just set, and a client push
+      // races the refresh Next runs for it.
+      window.location.assign('/account');
     } catch (err: any) {
       toast({
         title: 'Sign in failed',
@@ -102,8 +101,9 @@ export default function SocialAuth() {
         description: 'Successfully signed in with Apple.',
       });
 
-      router.refresh();
-      router.push('/account');
+      // Full load: the session cookie was just set, and a client push
+      // races the refresh Next runs for it.
+      window.location.assign('/account');
     } catch (err: any) {
       if (err.error !== 'popup_closed_by_user') {
         toast({

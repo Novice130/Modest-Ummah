@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { adminSignIn } from '@/lib/api';
 import { TotpEnrollForm, TotpVerifyForm } from '@/components/admin/two-factor';
 import { Button } from '@/components/ui/button';
@@ -21,8 +21,18 @@ function safeRedirect(value: string | null): string {
   return value;
 }
 
+/**
+ * Full page load after sign-in, not router.push. Setting the session cookie in
+ * the sign-in Server Action makes Next re-render the current page (the login
+ * form) in the same round trip; a client push started at the same time races
+ * that refresh and can leave the router in the error boundary. A full load
+ * also drops router cache entries rendered while signed out.
+ */
+function goTo(path: string) {
+  window.location.assign(path);
+}
+
 function AdminLoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const redirectTo = safeRedirect(searchParams.get('redirect'));
   const [email, setEmail] = useState('');
@@ -53,14 +63,12 @@ function AdminLoginForm() {
         return;
       }
 
-      router.push(redirectTo);
+      // Keep the spinner until the new page loads.
+      goTo(redirectTo);
     } catch (err) {
       console.error(err);
       setError('Something went wrong. Please try again.');
-    } finally {
-      if (window.location.pathname === '/admin/login') {
-         setLoading(false);
-      }
+      setLoading(false);
     }
   };
 
@@ -82,14 +90,14 @@ function AdminLoginForm() {
             onVerified={(usedRecoveryCode) =>
               // A used recovery code usually means a lost phone: go straight to
               // the page that replaces the authenticator.
-              router.push(usedRecoveryCode ? '/admin/settings/security' : redirectTo)
+              goTo(usedRecoveryCode ? '/admin/settings/security' : redirectTo)
             }
             onCancel={() => setTwoFactor(null)}
           />
         ) : twoFactor === 'enroll' ? (
           <TotpEnrollForm
             required
-            onDone={() => router.push(redirectTo)}
+            onDone={() => goTo(redirectTo)}
             onCancel={() => setTwoFactor(null)}
           />
         ) : (
@@ -99,7 +107,7 @@ function AdminLoginForm() {
             <Input
               id="email"
               type="email"
-              placeholder="admin@modestummah.com"
+              placeholder="you@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoCapitalize="none"
