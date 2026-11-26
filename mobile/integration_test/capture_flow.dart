@@ -9,8 +9,18 @@ import 'package:modest_ummah/features/checkout/checkout_screen.dart';
 import 'package:modest_ummah/features/product/product_screen.dart';
 import 'package:modest_ummah/main.dart' as app;
 
+import '../test/support/live_test_guard.dart';
+
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+
+  // This flow talks to a real server and adds items to a real cart.
+  final refusal = liveTestRefusal();
+  if (refusal != null) {
+    testWidgets('App Store Screenshot and Preview Flow', (_) async {}, skip: true);
+    debugPrint(refusal);
+    return;
+  }
 
   testWidgets('App Store Screenshot and Preview Flow', (tester) async {
     // 1. Launch App
